@@ -103,6 +103,7 @@ name = "gugen"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "mikiwame",
  "serde",
  "serde_json",
  "thiserror",
@@ -131,6 +132,15 @@ name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
+
+[[package]]
+name = "mikiwame"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a9db5f487310a2fe9dae21ef42e41591e251c0046591893684a184e6bbf09a6a"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "once_cell_polyfill"

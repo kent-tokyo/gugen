@@ -7,11 +7,13 @@
 （evidence）・仮定（assumption）・未確定条件（unresolved）を明示したまま、
 機械可読な形で返します。実験の成功を保証するものではありません。
 
-> **ステータス：開発初期、v0.1 開発中。** 全9フェーズ中フェーズ0〜5が完了
+> **ステータス：開発初期、v0.1 開発中。** 全9フェーズ中フェーズ0〜6が完了
 > （アーキテクチャ設計、基盤型定義、厳密な反応式バランス、bounded前駆体探索、
-> 固相合成プロセステンプレート、plan scoring・confidence）。これらを一気通貫
-> で統括する`Planner`型、CLIの大部分はまだ存在しません。未公開・`main`未マージ・
-> 利用不可な状態です。フェーズごとの詳細は
+> 固相合成プロセステンプレート、plan scoring・confidence、これらを一気通貫で
+> 統括する`Planner`）。オプションの`mikiwame`機能で構造診断結果を取り込めます
+> が、`chematic-crystal`アダプタは同クレート未公開のため保留中です。CLIはまだ
+> 存在しません。未公開・`main`未マージ・利用不可な状態です。フェーズごとの
+> 詳細は
 > [`tasks/todo.md`](tasks/todo.md) を、レビュー中の内容は
 > [draft PR](https://github.com/kent-tokyo/gugen/pull/1) を参照してください。
 
@@ -139,9 +141,12 @@ CLIのビルドは `cargo build --features serde,clap --bin gugen`。現時点�
 ```
 
 gugenは`chematic-crystal`が公開され次第、周期構造の型をそこに依存する予定
-です（2026-08-13時点で未公開。詳細は [`docs/integration.md`](docs/integration.md)）。
-それまでは最小限のtrait境界を独自に持って動作します。`mikiwame`連携は
-optionalでデフォルト無効です。gugenは`renkin`（分子逆合成）に依存せず、その
+です（2026-08-14時点で未公開。詳細は [`docs/integration.md`](docs/integration.md)）。
+それまでは最小限のtrait境界を独自に持って動作します。`mikiwame`は公開済みで、
+optionalな`mikiwame`機能（`cargo build --features mikiwame`、デフォルト無効）
+として構造診断結果をgugen側の警告・confidenceに変換できますが、`Planner::plan`
+には未接続です（gugenの`TargetStructure`がまだ実構造データを持たないため）。
+gugenは`renkin`（分子逆合成）に依存せず、その
 アルゴリズムも流用しません。gugenはrenkinの移植版ではなく、材料領域における
 姉妹プロジェクトです。
 

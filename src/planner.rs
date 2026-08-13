@@ -287,6 +287,9 @@ fn enabled_features() -> Vec<String> {
     if cfg!(feature = "clap") {
         features.push("clap".to_string());
     }
+    if cfg!(feature = "mikiwame") {
+        features.push("mikiwame".to_string());
+    }
     features
 }
 

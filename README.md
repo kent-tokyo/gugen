@@ -8,12 +8,13 @@ solid-state process plans — each with its evidence, assumptions, and
 unresolved conditions kept explicit and machine-readable. It does not
 predict experimental success.
 
-> **Status: early development, v0.1 in progress.** Phases 0-5 of 9 are
+> **Status: early development, v0.1 in progress.** Phases 0-6 of 9 are
 > done (architecture, foundation types, exact reaction balancing, bounded
 > precursor-set search, solid-state process templates, plan scoring and
-> confidence). The `Planner` type that orchestrates all of this end-to-end,
-> and most of the CLI, don't exist yet. Not published, not merged to
-> `main`, not ready for use. See
+> confidence, and the end-to-end `Planner`). An optional `mikiwame`
+> feature adapts structural diagnostics; the `chematic-crystal` adapter
+> remains blocked on that crate's publication. The CLI doesn't exist yet.
+> Not published, not merged to `main`, not ready for use. See
 > [`tasks/todo.md`](tasks/todo.md) for exact phase-by-phase status and
 > [the draft PR](https://github.com/kent-tokyo/gugen/pull/1) for what's
 > under review.
@@ -146,12 +147,16 @@ Build the CLI with `cargo build --features serde,clap --bin gugen`. Only
 ```
 
 gugen depends on `chematic-crystal` for periodic structure types once
-that crate is published (not yet, as of 2026-08-13 — see
+that crate is published (not yet, as of 2026-08-14 — see
 [`docs/integration.md`](docs/integration.md)); until then it builds
-against a minimal trait boundary it owns itself. `mikiwame` integration is
-optional and off by default. gugen never depends on `renkin`
-(molecular retrosynthesis) and does not reuse its algorithms — gugen is a
-materials-domain sibling, not a port.
+against a minimal trait boundary it owns itself. `mikiwame` is published
+and integrated as an optional, off-by-default `mikiwame` feature
+(`cargo build --features mikiwame`) that maps its structural diagnostics
+onto gugen's own warnings/confidence — not yet wired into `Planner::plan`,
+since that still needs `chematic-crystal`-shaped structure data gugen
+doesn't have. gugen never depends on `renkin` (molecular retrosynthesis)
+and does not reuse its algorithms — gugen is a materials-domain sibling,
+not a port.
 
 ## Development
 

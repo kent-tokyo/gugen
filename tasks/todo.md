@@ -446,7 +446,7 @@ wasm32-unknown-unknown`, cargo audit (0 vulnerabilities).
 
 **No stop-and-report condition was triggered.**
 
-## Phase 6 — Integration — IN PROGRESS (Planner done, mikiwame adapter next)
+## Phase 6 — Integration — DONE (chematic-crystal adapter blocked — unpublished)
 
 **Mid-phase discovery:** `mikiwame` is now published on crates.io (v0.1.0,
 owner `kent-tokyo`, published 2026-08-14, after the Phase 0 check that
@@ -514,36 +514,81 @@ with, so it's called out explicitly rather than folded in silently.
 - [x] `PlanningConfig` gained `ranking_weights: RankingWeights` -- anticipated
       in its own Phase 1 doc comment ("grows... once Phase 5 lands
       ranking") but not actually added until now.
-- [ ] mikiwame adapter (next commit): optional dependency, maps
-      `mikiwame::MaterialDiagnosticReport` to gugen warnings/rejections per
-      `docs/integration.md`. Not auto-wired into `Planner::plan` --
-      `TargetStructure` still can't produce a `mikiwame::PeriodicStructureView`
-      (needs real lattice/site data that only `chematic-crystal` would
-      supply, and it still doesn't exist). Callers with their own
-      structure data can call the adapter directly.
+- [x] mikiwame adapter (`src/mikiwame_adapter.rs`, feature-gated):
+      optional dependency (`mikiwame = { version = "0.1.0",
+      default-features = false, optional = true }`), `structural_effects()`
+      maps a real `mikiwame::MaterialDiagnosticReport` (from actual
+      `mikiwame::analyze()` calls in tests, not a hand-rolled fixture) to
+      `StructuralDiagnosticEffects { abstain_reason, warnings,
+      confidence_penalty }` per `docs/integration.md`'s mapping. Not
+      auto-wired into `Planner::plan` -- `TargetStructure` still can't
+      produce a `mikiwame::PeriodicStructureView` (needs real lattice/site
+      data that only `chematic-crystal` would supply, and it still doesn't
+      exist). Callers with their own structure data call the adapter
+      directly and apply the result to a `SynthesisPlan` themselves (module
+      doc now spells out the order: check `abstain_reason` first, then fold
+      `warnings` in, then use `confidence_penalty` to lower
+      `ConfidenceAssessment` -- all target fields are public).
+      `mikiwame::Verdict::StrongAnomalyDetected`/`InvalidInput` -> abstain;
+      `Severity::High`/`Critical` -> `Severe` warning; low
+      `ApplicabilityLevel` -> `confidence_penalty`, no hard reject; any
+      other non-`Info` finding -> a `PlanningWarning`.
+      `confidence_penalty` is `verdict_penalty.max(applicability_penalty)`,
+      not a sum or average -- both signals can name the same underlying
+      structural problem, so summing would double-penalize and averaging
+      would let a mild applicability reading water down a severe verdict.
+      Oxidation-state ambiguity is unreachable, not a no-op: mikiwame v0.1
+      has no `FindingCode` for it yet.
+      Bugs found and fixed before committing:
+      - `E0689` ambiguous numeric type on `verdict_penalty.max(...)` --
+        the match producing it had no type annotation; fixed with an
+        explicit `(Option<String>, f64)` binding.
+      - A defensive wildcard was added to the `Verdict` match assuming it
+        was `#[non_exhaustive]` like mikiwame's other enums; it isn't
+        (verified by reading mikiwame's actual `model.rs`), so rustc/clippy
+        flagged the arm as unreachable. Removed it -- `Severity`,
+        `ApplicabilityLevel`, and `FindingCode` are `#[non_exhaustive]` and
+        do get defensive wildcards that degrade toward caution, `Verdict`
+        is the one exception with an exhaustive match.
+      - A test fixture meant to exercise "`Info`-only findings produce no
+        warnings" used two elements at full occupancy on the same site,
+        which also tripped `DisorderOccupancySumExceedsOne` (High
+        severity, 1.0+1.0 > 1.0) -- an unplanned second finding that
+        changed the verdict and failed the test. Fixed the fixture
+        (0.5+0.5, sums to exactly 1.0) to actually test what it claimed,
+        and kept the accidental discovery as its own dedicated test
+        (`a_high_severity_finding_maps_to_a_severe_warning`) instead of
+        just avoiding it.
 - [ ] chematic-crystal adapter: not applicable yet, still unpublished.
       `TargetMaterialView` continues absorbing this per docs/integration.md.
-- [ ] Composition/structure handoff: `Planner` reads `target.composition`/
+      Revisit once it publishes -- this is the one Phase 6 deliverable that
+      stays open for an external reason, not an internal gap.
+- [x] Composition/structure handoff: `Planner` reads `target.composition`/
       `target.structure` directly rather than through `TargetMaterialView`
       accessor methods, since it also needs `constraints`/`desired_phase`,
       which aren't part of that trait. Revisit if `TargetMaterialView`
       grows to cover the full `TargetSpecification` surface.
-- [ ] Feature-gated builds: `--no-default-features` and `--features
-      mikiwame` both need to build cleanly once the mikiwame dependency
-      lands (next commit).
+- [x] Feature-gated builds: `--no-default-features` (mikiwame module
+      absent from the compiled crate) and `--no-default-features --features
+      mikiwame` (isolated) both verified green, alongside `--all-features`.
 
-**Locally verified, all green (Planner half):** fmt, clippy -D warnings
-(workspace, all features), test under `--all-features` (54 lib tests + 4
-integration) and `--no-default-features` (54 lib tests), doc -D warnings,
-`cargo run --example balance_batio3` (unchanged output), `cargo build
---features serde,clap --bin gugen`, `cargo check --target
-wasm32-unknown-unknown`, cargo audit (0 vulnerabilities).
+**Locally verified, all green (full phase, including mikiwame):** fmt,
+clippy -D warnings (workspace, all features), test under `--all-features`
+(59 lib tests + 4 integration), `--no-default-features` (54 lib tests), and
+`--no-default-features --features mikiwame` (59 lib tests, isolated), doc
+-D warnings, `cargo run --example balance_batio3` (unchanged output),
+`cargo build --features serde,clap --bin gugen`, `cargo check --target
+wasm32-unknown-unknown` (with and without `mikiwame`), cargo audit (0
+vulnerabilities, 32 crates).
 
-**No stop-and-report condition was triggered** by anything in this commit.
+**No stop-and-report condition was triggered** by anything in this phase.
 mikiwame's publication is a material plan change, flagged to the user, not
 a stop-and-report trigger in AGENTS.md §28's sense (no name collision, no
 license problem, no divergent API forcing tight coupling -- the opposite:
 a previously-unavailable optional dependency became available).
+`chematic-crystal` remaining unpublished is the exact contingency AGENTS.md
+§5 anticipated, absorbed by the `TargetMaterialView` boundary already in
+place since Phase 1 -- not a new blocker.
 
 ## Phase 7–9
 

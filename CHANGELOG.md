@@ -11,6 +11,27 @@ each entry.
 
 ### Added
 
+- **Phase 6 — integration.** `Planner` (`new`/`offline_minimal`/`plan`)
+  orchestrates catalog → `search_precursor_sets` →
+  `conventional_solid_state_template` → `score_plan` into a ranked
+  `SynthesisPlanningReport`, truncated to `SearchBudget.max_plans_returned`
+  *after* ranking (overflow becomes an explained `RejectedCandidate`, not a
+  silent drop of arbitrary combinations). `execution_timestamp` is a
+  required caller-supplied argument, not read from the system clock. A
+  self-contradictory target (an element both required and forbidden)
+  abstains early with empty plans; an empty catalog result is a warning,
+  not an applicability downgrade. `ThermodynamicProvider`/
+  `ProcessEvidenceProvider` failures degrade to a per-plan `Info` warning
+  rather than failing the whole report (§21.5); a `PrecursorCatalog`
+  failure still propagates. `plan_id` is content-derived (precursor set +
+  reaction), stable under catalog reordering. Optional `mikiwame` adapter
+  (`src/mikiwame_adapter.rs`, feature-gated, off by default): maps a real
+  `mikiwame::MaterialDiagnosticReport` to `abstain_reason`/`warnings`/
+  `confidence_penalty`, not auto-wired into `Planner::plan` since gugen's
+  `TargetStructure` can't yet supply the lattice/site data
+  `mikiwame::analyze` needs (blocked on unpublished `chematic-crystal`) —
+  exposed as a standalone function for callers with their own structure
+  data.
 - **Phase 5 — ranking and explanation.** `Score01` (validated `[0, 1]`
   newtype), `PlanScoreBreakdown`/`RankingWeights` (verbatim, AGENTS.md §13,
   equal-weight default with documented rationale), `ConfidenceAssessment`
@@ -101,3 +122,15 @@ each entry.
   high-temperature, redox atmosphere warnings — AGENTS.md §15) is not
   modeled anywhere yet. `manual_review_required` and the accompanying
   `Severe` warning are the only safety-related output that exists so far.
+- `chematic-crystal` remains unpublished, so the `mikiwame` adapter is not
+  connected to `Planner::plan`, and `assess_applicability` can never return
+  `InDomain` — only `PartiallyInDomain` or `OutOfDomain` are reachable,
+  since there is no structural classifier behind `TargetStructure`'s free
+  text.
+- The mikiwame adapter's oxidation-state-ambiguity integration point
+  (docs/integration.md) is unreachable: mikiwame v0.1 has no `FindingCode`
+  for it yet.
+- mikiwame's ordinal penalty values (e.g. `ReviewRecommended` → 0.3,
+  `OutOfDomain` → 0.5) are placeholder severities, not calibrated against
+  any outcome data — the same caveat `RankingWeights::default()` already
+  states for its own equal weights.

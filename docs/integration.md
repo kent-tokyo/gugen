@@ -1,6 +1,6 @@
 # Integration Boundary: chematic-crystal and mikiwame (Phase 0)
 
-## Status, verified 2026-08-13
+## Status, verified 2026-08-13; mikiwame re-verified 2026-08-14
 
 - **chematic-crystal**: not published to crates.io, no matching GitHub repo
   found (search covered both crates.io's search API and GitHub's repository
@@ -10,13 +10,14 @@
   periodic/crystal structures. `chematic-crystal` is therefore genuinely
   unavailable right now, consistent with AGENTS.md §5's "並行開発中である
   可能性" framing, not a naming mistake on gugen's side.
-- **mikiwame**: not published to crates.io, no matching repo under
-  `kent-tokyo`. One unrelated same-named GitHub repo exists elsewhere with
-  no description or affiliation — not a collision, just noted for later
-  re-checking before any publish.
+- **mikiwame**: published to crates.io as of 2026-08-14 (`mikiwame`
+  v0.1.0, `kent-tokyo`). Phase 6 consumes it as an optional feature-gated
+  adapter (`src/mikiwame_adapter.rs`) — see below for the implemented
+  mapping and its scope.
 
-Neither blocks gugen development. AGENTS.md §5 states exactly this
-contingency and prescribes the trait-boundary path below.
+chematic-crystal's unavailability doesn't block gugen development.
+AGENTS.md §5 states exactly this contingency and prescribes the
+trait-boundary path below.
 
 ## `TargetMaterialView`: the boundary while chematic-crystal is unavailable
 
@@ -58,26 +59,31 @@ agreed before code exists):
 mikiwame = ["dep:mikiwame"]
 ```
 
-- Off by default. With the feature disabled, gugen must build, run, and
-  produce full reports with zero references to mikiwame types anywhere in
-  the compiled core.
-- Integration points (AGENTS.md §5), all *consuming* mikiwame's diagnostic
-  output, never reimplementing its diagnostic logic:
-  - `InvalidInput` finding → stop planning for that target, return a
-    rejection/abstention rather than a low-confidence plan.
-  - Severe site overlap → stop planning.
-  - Oxidation-state ambiguity → propagate into plan branching (multiple
-    candidate oxidation-state assumptions become multiple plans/assumptions,
-    not a silently resolved single guess).
-  - Low applicability (from mikiwame) → lower `ConfidenceAssessment`, do not
-    hard-reject by itself.
-  - Structural anomaly → carried through as a `PlanningWarning`.
-- Because mikiwame doesn't exist yet either, the adapter
-  (`src/adapters/mikiwame.rs`) is written against the same kind of minimal
-  trait boundary pattern once mikiwame's diagnostic-output shape is known
-  well enough to define one — tracked in `tasks/todo.md` as a Phase 6 item,
-  not designed further in Phase 0 since guessing at an unpublished crate's
-  API shape now would likely just be thrown away.
+- Off by default. With the feature disabled, gugen builds, runs, and
+  produces full reports with zero references to mikiwame types anywhere in
+  the compiled core (verified: `--no-default-features` test run has no
+  `mikiwame_adapter` module).
+- Implemented in `src/mikiwame_adapter.rs` (Phase 6), mapping
+  `mikiwame::MaterialDiagnosticReport` to gugen-native effects
+  (AGENTS.md §5):
+  - `InvalidInput` / `StrongAnomalyDetected` verdict → `abstain_reason`
+    (`Some`), for the caller to stop planning for that target rather than
+    return a low-confidence plan.
+  - `Severity::High`/`Critical` finding → a `Severe` `PlanningWarning`.
+  - Low `ApplicabilityLevel` → contributes to `confidence_penalty`
+    (`Score01`), never a hard reject by itself.
+  - Any non-`Info` finding → a `PlanningWarning` (severity mapped from
+    mikiwame's `Severity`).
+  - Oxidation-state ambiguity → mikiwame v0.1 has no `FindingCode` for
+    this yet, so this integration point is unreachable, not implemented
+    as a no-op. Revisit once mikiwame exposes it.
+- **Not wired into `Planner::plan`.** `mikiwame::analyze` needs a real
+  `mikiwame::PeriodicStructureView` (lattice + sites); gugen's own
+  `TargetStructure` is still free text, and building one depends on
+  `chematic-crystal`, which remains unpublished. `structural_effects()` is
+  exposed as a standalone function for a caller with its own structure
+  data to call directly and apply the result (e.g. to a `SynthesisPlan`'s
+  `confidence`/`warnings`) themselves.
 
 ## What Phase 0 is *not* deciding
 
