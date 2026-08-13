@@ -7,6 +7,7 @@ description = "Explainable materials synthesis and process planning"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
+clap = { version = "4.6.6", features = ["derive"], optional = true }
 serde = { version = "1.0.229", features = ["derive"], optional = true }
 serde_json = { version = "1.0.151", optional = true }
 thiserror = "2.0.20"
@@ -14,8 +15,14 @@ thiserror = "2.0.20"
 [features]
 default = []
 serde = ["dep:serde", "dep:serde_json"]
+clap = ["dep:clap"]
 
 [[test]]
 name = "json_roundtrip"
 path = "tests/json_roundtrip.rs"
 required-features = ["serde"]
+
+[[bin]]
+name = "gugen"
+path = "src/bin/gugen.rs"
+required-features = ["serde", "clap"]

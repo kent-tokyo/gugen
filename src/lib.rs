@@ -7,17 +7,19 @@
 //! success. See `AGENTS.md` for the full specification and
 //! `docs/scientific_scope.md` for what is and is not in scope.
 //!
-//! This is Phase 1 (foundation) of the roadmap in `AGENTS.md` §26: typed
+//! This implements Phases 1-2 of the roadmap in `AGENTS.md` §26: typed
 //! errors, validated numeric types, composition, target specification, the
-//! public report schema, provenance, and provider trait boundaries. Search,
-//! reaction balancing, process templating, and ranking land in later
-//! phases (see `tasks/todo.md`).
+//! public report schema, provenance, provider trait boundaries, and exact
+//! reaction balancing. Precursor search, process templating, and ranking
+//! land in later phases (see `tasks/todo.md`).
 
 #![forbid(unsafe_code)]
 
+mod balance;
 mod composition;
 mod config;
 mod error;
+mod frac;
 mod precursor;
 mod process;
 mod provenance;
@@ -27,6 +29,7 @@ mod rejection;
 mod report;
 mod target;
 
+pub use balance::{balance, curated_byproducts};
 pub use composition::{Composition, ELEMENT_SYMBOLS, Element};
 pub use config::{PlanningConfig, SearchBudget};
 pub use error::{GugenError, ProviderError, Result};

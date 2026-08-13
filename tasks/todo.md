@@ -131,26 +131,84 @@ incompatible or unclear, that becomes a real stop-and-report at that point
   compile against this crate yet) — that's Phase 6 (planner orchestrates
   all subsystems, which don't all exist yet).
 
-## Phase 2 — Reaction Balancing — NOT STARTED
+## Phase 2 — Reaction Balancing — DONE (2026-08-13)
 
-- [ ] exact composition representation (builds on `Composition`,
-      `BalancedReaction`/`ReactionSpecies` from Phase 1)
-- [ ] integer/rational balancing solver (exact-rational null-space per
-      `docs/architecture.md`'s Phase 0 decision — finalize the
-      rational-arithmetic dependency choice here)
-- [ ] byproduct model (curated allow-list: CO₂, H₂O, O₂ to start,
-      AGENTS.md §10)
-- [ ] multiple solutions (preserve ambiguity when the null space has
-      dimension > 1, don't silently pick one)
-- [ ] normalization (gcd reduction, zero-coefficient removal)
-- [ ] exhaustive tests (AGENTS.md §21.1: 1:1 reactions, carbonate→oxide+CO₂,
-      O₂ as byproduct/reactant, multi-precursor, no-solution, multi-solution,
-      gcd normalization, element conservation, permutation invariance, large
-      coefficients, overflow)
-- [ ] `gugen balance` CLI subcommand
-- [ ] independent commit, per AGENTS.md §26 ("ここを独立commitにしてください")
+- [x] **Amendment to Phase 1, landed first as its own commit** (not itself
+      a Phase 2 checklist item, but required before Phase 2 could be exact
+      rather than float-approximate): `Composition` now stores amounts as
+      exact rationals (`Frac`, `src/frac.rs`), rationalized once at
+      construction via continued-fraction convergents, not re-approximated
+      on every downstream read. Public `f64` constructor/accessor
+      signatures are unchanged.
+- [x] exact composition representation — `Frac`-backed, see above
+- [x] integer/rational balancing solver (`src/balance.rs`) — exact-rational
+      Gauss-Jordan elimination to RREF over the element x species matrix
+      (reactants positive, products negated), null-space basis vectors
+      constructed from free columns, each checked for sign-validity
+      (all-non-negative or all-non-positive, else skipped) and scaled to
+      minimal integers via LCM/gcd. Dependency decision: no external
+      rational-arithmetic crate — `Frac` is ~180 lines of checked-`i128`
+      arithmetic, simpler than wrapping a crate's unchecked operators in
+      overflow checks at every call site.
+- [x] byproduct model — `curated_byproducts()` returns CO₂/H₂O/O₂ as real
+      `Composition`s (AGENTS.md §10's curated set, not open-ended)
+- [x] multiple solutions — verified against the classic Fe + O₂ ->
+      {FeO, Fe₂O₃, Fe₃O₄} case: the solver independently returns all three
+      as separate `BalancedReaction`s, not one arbitrary pick
+- [x] normalization — gcd-reduced integer coefficients (tested: 4/2/4
+      H₂/O₂/H₂O collapses to 2/1/2, not left as a common multiple),
+      zero-coefficient species dropped from the output
+- [x] exhaustive tests (`src/balance.rs`, 13 tests) — all of AGENTS.md
+      §21.1's list: 1:1 reaction, carbonate→oxide+CO₂, O₂ as byproduct,
+      O₂ as reactant, multi-precursor, no-solution (disjoint elements),
+      multi-solution (iron oxide family), gcd normalization, element
+      conservation (independently re-checked, not just trusting the
+      solver), permutation invariance, large coefficients, and overflow
+      (isolated at the `Frac`/scaling level with two near-`i128::MAX`
+      denominators, since the public API's `Composition` bounds make
+      overflow through realistic input essentially unreachable)
+- [x] `gugen balance` CLI subcommand (`src/bin/gugen.rs`, clap-based,
+      `required-features = ["serde", "clap"]`) — manually run end-to-end
+      against real fixture files: single solution, 3-way multi-solution,
+      no-solution (exit 0, empty array + stderr note — absence of a
+      balance isn't a program error), missing file and malformed JSON
+      (both exit 1 with a message, no panic)
+- [x] independent commits, per AGENTS.md §26: the Composition/Frac
+      amendment landed separately from the solver itself
 
-## Phase 3–9
+**Locally verified, all green:** fmt, clippy -D warnings (workspace, all
+targets, all features), test under `--all-features`, `--no-default-features`,
+and `--features serde` (serde without clap, confirming the bin target is
+correctly excluded rather than failing to build), doc -D warnings, cargo
+audit (0 vulnerabilities, 31 crate dependencies — up from 14 after adding
+clap's tree), wasm32-unknown-unknown check (library only, `--lib`; the CLI
+binary is not expected to target wasm).
+
+**No stop-and-report condition was triggered.**
+
+**Known limitation, deliberate (see the `ponytail:` comment in
+`src/balance.rs`):** only individual null-space basis vectors are checked
+for sign-validity; a valid reaction requiring a *combination* of two or
+more basis vectors is not searched for. This covers every §21.1 test case
+and every realistic small-species-count solid-state reaction. Revisit with
+a bounded combination search only if a real fixture surfaces a case that
+needs one — don't build it speculatively.
+
+## Phase 3 — Precursor Enumeration — NOT STARTED
+
+- [ ] in-memory precursor catalog (implements `PrecursorCatalog` from
+      `provider.rs`)
+- [ ] candidate generation from target elements
+- [ ] the rest of AGENTS.md §9's constraint filters (only
+      `forbidden_elements` exists on `PlanningConstraints` today)
+- [ ] bounded search respecting `SearchBudget`
+- [ ] rejection reasons (`RejectionCode` already exists from Phase 1;
+      this phase is what actually assigns them during search)
+- [ ] deterministic ordering
+- [ ] budget-exhaustion diagnostics (must not be conflated with "no
+      candidates found" — AGENTS.md §9)
+
+## Phase 4–9
 
 Not started. Will be filled in with the same DONE/NOT STARTED tracking
 style as each phase begins; see AGENTS.md §26 for phase content and §29 for

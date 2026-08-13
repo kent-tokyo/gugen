@@ -1,5 +1,14 @@
 use crate::error::{GugenError, Result, require_finite};
+use crate::frac::Frac;
 use std::collections::BTreeMap;
+
+/// Bounds for rationalizing a composition amount's `f64` into an exact
+/// [`Frac`] (AGENTS.md §10: reaction balancing must be exact, not
+/// float-approximate). `1e-9` is far tighter than any realistic formula
+/// precision; `1_000_000` comfortably covers ordinary decimal subscripts
+/// (e.g. `0.67`, `0.333`) without risking overflow in later arithmetic.
+const MAX_RATIONAL_DENOMINATOR: i128 = 1_000_000;
+const RATIONAL_TOLERANCE: f64 = 1e-9;
 
 /// The 118 IUPAC element symbols, used to validate that a symbol supplied by
 /// a caller is a real element rather than a typo. This is chemical-notation
@@ -71,9 +80,14 @@ impl<'de> serde::Deserialize<'de> for Element {
 /// contain at least one element. Iteration order is always by element
 /// symbol (via `BTreeMap`), so results built from a `Composition` are
 /// invariant to the order elements were supplied in (AGENTS.md §21.4).
+///
+/// Amounts are stored as exact rationals internally, rationalized once at
+/// construction from the `f64` a caller supplies — not re-approximated on
+/// every downstream use. `balance.rs` reads the exact form directly rather
+/// than round-tripping back through floats (AGENTS.md §10).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Composition {
-    amounts: BTreeMap<Element, f64>,
+    amounts: BTreeMap<Element, Frac>,
 }
 
 impl Composition {
@@ -87,7 +101,12 @@ impl Composition {
                     amount,
                 });
             }
-            if map.insert(element, amount).is_some() {
+            let exact = Frac::from_f64(amount, MAX_RATIONAL_DENOMINATOR, RATIONAL_TOLERANCE)
+                .ok_or_else(|| GugenError::AmountNotRational {
+                    element: element.to_string(),
+                    value: amount,
+                })?;
+            if map.insert(element, exact).is_some() {
                 return Err(GugenError::DuplicateElement {
                     element: element.to_string(),
                 });
@@ -100,7 +119,7 @@ impl Composition {
     }
 
     pub fn amount_of(&self, element: Element) -> Option<f64> {
-        self.amounts.get(&element).copied()
+        self.amounts.get(&element).map(|f| f.to_f64())
     }
 
     pub fn elements(&self) -> impl Iterator<Item = Element> + '_ {
@@ -108,7 +127,7 @@ impl Composition {
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (Element, f64)> + '_ {
-        self.amounts.iter().map(|(&e, &a)| (e, a))
+        self.amounts.iter().map(|(&e, &a)| (e, a.to_f64()))
     }
 
     pub fn len(&self) -> usize {
@@ -117,6 +136,13 @@ impl Composition {
 
     pub fn is_empty(&self) -> bool {
         self.amounts.is_empty()
+    }
+
+    /// Exact-rational accessor for `balance.rs`. Not public: callers outside
+    /// the crate only ever see `f64` amounts (AGENTS.md §6 doesn't expose an
+    /// exact-rational type in the public schema).
+    pub(crate) fn amount_frac_of(&self, element: Element) -> Option<Frac> {
+        self.amounts.get(&element).copied()
     }
 }
 
@@ -173,6 +199,22 @@ mod tests {
     #[test]
     fn rejects_unknown_symbol() {
         assert!(Element::new("Xx").is_err());
+    }
+
+    #[test]
+    fn ordinary_decimal_amounts_round_trip_exactly() {
+        // 0.1 is not exactly representable in binary floating point, so
+        // this exercises Frac::from_f64's continued-fraction rationalization
+        // rather than a trivial power-of-two case.
+        let la = Element::new("La").unwrap();
+        let sr = Element::new("Sr").unwrap();
+        let a = Composition::new([(la, 0.67), (sr, 0.1)]).unwrap();
+        assert_eq!(a.amount_of(la), Some(0.67));
+        assert_eq!(a.amount_of(sr), Some(0.1));
+        // Reconstructing from the same f64 inputs must produce an equal
+        // Composition -- exact-rational equality, not float comparison.
+        let b = Composition::new([(sr, 0.1), (la, 0.67)]).unwrap();
+        assert_eq!(a, b);
     }
 
     #[test]

@@ -19,10 +19,16 @@ pub enum GugenError {
     NonPositiveAmount { element: String, amount: f64 },
     #[error("element {element} was supplied more than once in the same composition")]
     DuplicateElement { element: String },
+    #[error(
+        "amount {value} for element {element} is not a simple rational number gugen can balance exactly (need a denominator <= 1_000_000 within tolerance 1e-9)"
+    )]
+    AmountNotRational { element: String, value: f64 },
     #[error("reaction species coefficients must be > 0")]
     ZeroCoefficient,
     #[error("a reaction needs at least one reactant and one product")]
     EmptyReaction,
+    #[error("exact arithmetic overflowed while balancing a reaction")]
+    ArithmeticOverflow,
 }
 
 pub type Result<T> = std::result::Result<T, GugenError>;
