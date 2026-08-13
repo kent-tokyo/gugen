@@ -142,11 +142,15 @@ pub struct PrecursorSearchOutcome {
 /// `accepted` by score first and truncate after, explaining what didn't
 /// make the cut.
 ///
-/// `PRECURSOR_COUNT_EXCEEDED` and `DUPLICATE_PLAN` are unreachable by
-/// construction in Phase 3: combinations never exceed
-/// `max_precursors_per_plan` in the first place, and are generated as
-/// unique index subsets so no duplicate combination is ever evaluated
-/// twice. `ATMOSPHERE_CONFLICT`, `HAZARD_POLICY_BLOCKED`,
+/// `PRECURSOR_COUNT_EXCEEDED` is unreachable by construction:
+/// combinations never exceed `max_precursors_per_plan` in the first place.
+/// `DUPLICATE_PLAN`, despite combos themselves being generated as unique
+/// index subsets, *is* reachable: a larger combination can balance with one
+/// precursor's solved coefficient at zero (dropped by `balance()`),
+/// collapsing to the same effective precursors + reaction a smaller
+/// combination already produced. That case is detected and rejected as
+/// `DuplicatePlan` rather than silently double-counted (see the loop below
+/// and its regression test). `ATMOSPHERE_CONFLICT`, `HAZARD_POLICY_BLOCKED`,
 /// `THERMODYNAMIC_DATA_UNAVAILABLE`, and `USER_CONSTRAINT_VIOLATION`
 /// belong to later phases (atmosphere/process modeling, safety, ranking,
 /// and richer `PlanningConstraints` respectively) and are not emitted
@@ -271,10 +275,36 @@ pub fn search_precursor_sets(
                         )
                 })
                 .collect();
-            accepted.push(AcceptedPrecursorSet {
+            let candidate_set = AcceptedPrecursorSet {
                 precursors: matched_ids,
                 reaction,
-            });
+            };
+
+            // A larger combination can balance with one of its precursors'
+            // coefficient solved to zero (`balance()` then drops it), which
+            // collapses to the exact same precursors + reaction a smaller
+            // combination already produced -- e.g. {BaCO3, BaO, TiO2} with
+            // BaCO3 zeroed out equals {BaO, TiO2} outright. This is a real
+            // `DuplicatePlan`, not a new candidate: recording it twice would
+            // let one route silently double up in `Planner`'s ranked output
+            // and consume two slots of `max_plans_returned` for what is
+            // really one plan. `.contains()` is O(n) per check (O(n^2)
+            // overall) -- accepted counts stay small at this crate's
+            // catalog/budget scale, so this is simpler than adding Hash/Ord
+            // to `BalancedReaction` just to use a set.
+            if accepted.contains(&candidate_set) {
+                rejected.push(RejectedCandidate {
+                    precursors: candidate_set.precursors,
+                    reason_codes: vec![RejectionCode::DuplicatePlan],
+                    explanation: "this precursor set and balanced reaction were already \
+                        found via a different combination of candidates (a larger \
+                        combination's extra precursor solved to a zero coefficient, \
+                        collapsing to the same effective reactants)"
+                        .to_string(),
+                });
+                continue;
+            }
+            accepted.push(candidate_set);
         }
     }
 
@@ -582,6 +612,57 @@ mod tests {
         assert!(
             !outcome.accepted.is_empty(),
             "fixture must actually exercise the search, not vacuously pass"
+        );
+    }
+
+    /// A redundant Ba source (BaCO3 and BaO both supply Ba) means the
+    /// 3-candidate combination {BaCO3, BaO, TiO2} can balance with BaCO3's
+    /// coefficient solved to zero -- collapsing to the exact same
+    /// precursors and reaction the 2-candidate combination {BaO, TiO2}
+    /// already produced. That must surface once in `accepted` and once
+    /// (not silently) as a `DuplicatePlan` rejection, never twice in
+    /// `accepted` -- a real bug caught by `gugen plan`'s CLI output on this
+    /// exact fixture, not a hypothetical case.
+    #[test]
+    fn a_redundant_larger_combination_is_rejected_as_a_duplicate_not_double_accepted() {
+        let target = composition(&[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)]);
+        let catalog = vec![
+            candidate("BaCO3", &[("Ba", 1.0), ("C", 1.0), ("O", 3.0)]),
+            candidate("TiO2", &[("Ti", 1.0), ("O", 2.0)]),
+            candidate("BaO", &[("Ba", 1.0), ("O", 1.0)]),
+        ];
+        let outcome = search_precursor_sets(
+            &target,
+            &catalog,
+            &PlanningConstraints::default(),
+            &generous_budget(),
+        )
+        .unwrap();
+
+        let expected_ids = BTreeSet::from([
+            PrecursorId("BaO".to_string()),
+            PrecursorId("TiO2".to_string()),
+        ]);
+        let occurrences = outcome
+            .accepted
+            .iter()
+            .filter(|a| a.precursors.iter().cloned().collect::<BTreeSet<_>>() == expected_ids)
+            .count();
+        assert_eq!(
+            occurrences, 1,
+            "the {{BaO, TiO2}} precursor set must be accepted exactly once: {:?}",
+            outcome.accepted
+        );
+
+        assert!(
+            outcome.rejected.iter().any(|r| {
+                r.reason_codes == vec![RejectionCode::DuplicatePlan]
+                    && r.precursors.contains(&PrecursorId("BaO".to_string()))
+                    && r.precursors.contains(&PrecursorId("TiO2".to_string()))
+            }),
+            "the redundant 3-candidate collapse must be explained as DuplicatePlan, not \
+            silently dropped or silently double-accepted: {:?}",
+            outcome.rejected
         );
     }
 

@@ -8,13 +8,13 @@ solid-state process plans — each with its evidence, assumptions, and
 unresolved conditions kept explicit and machine-readable. It does not
 predict experimental success.
 
-> **Status: early development, v0.1 in progress.** Phases 0-6 of 9 are
+> **Status: early development, v0.1 in progress.** Phases 0-7 of 9 are
 > done (architecture, foundation types, exact reaction balancing, bounded
 > precursor-set search, solid-state process templates, plan scoring and
-> confidence, and the end-to-end `Planner`). An optional `mikiwame`
+> confidence, the end-to-end `Planner`, and a CLI). An optional `mikiwame`
 > feature adapts structural diagnostics; the `chematic-crystal` adapter
-> remains blocked on that crate's publication. The CLI doesn't exist yet.
-> Not published, not merged to `main`, not ready for use. See
+> remains blocked on that crate's publication. Not published, not merged
+> to `main`, not ready for use. See
 > [`tasks/todo.md`](tasks/todo.md) for exact phase-by-phase status and
 > [the draft PR](https://github.com/kent-tokyo/gugen/pull/1) for what's
 > under review.
@@ -130,9 +130,23 @@ Output:
 ]
 ```
 
-Build the CLI with `cargo build --features serde,clap --bin gugen`. Only
-`gugen balance` exists so far; `plan`, `explain`, `validate-target`,
-`doctor`, and `batch` are Phase 7 work.
+Build the CLI with `cargo build --features serde,clap --bin gugen`.
+Subcommands (AGENTS.md §19):
+
+```
+gugen balance reaction.json
+gugen plan target.json --catalog precursors.json [--output report.json] [--format json|markdown]
+gugen explain report.json --plan plan-001
+gugen validate-target target.json
+gugen doctor
+gugen batch input.json --catalog precursors.json [--output out.json]
+```
+
+`target.json`/`precursors.json`/`input.json` reuse gugen's own public JSON
+shapes (`TargetSpecification`, a JSON array of `PrecursorCandidate`, and a
+JSON array of `TargetSpecification` respectively) rather than a separate
+CLI-specific format. `gugen batch` plans every target independently — one
+target's failure doesn't abort the rest.
 
 ## Ecosystem
 

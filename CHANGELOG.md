@@ -11,6 +11,23 @@ each entry.
 
 ### Added
 
+- **Phase 7 — CLI and batch.** `gugen plan target.json --catalog
+  precursors.json [--output report.json] [--format json|markdown]`,
+  `gugen explain report.json --plan plan-001`, `gugen validate-target
+  target.json`, `gugen doctor`, and `gugen batch input.json --catalog
+  precursors.json [--output out.json]` (AGENTS.md §19), alongside the
+  existing `gugen balance`. Target/catalog/batch-input files reuse the
+  existing public `TargetSpecification`/`PrecursorCandidate` JSON shapes
+  rather than inventing wrapper formats. `batch` plans each target
+  independently against one shared `Planner`; one target's failure becomes
+  a per-entry error, not an aborted run (AGENTS.md §26). The CLI binary is
+  the one place in the crate allowed to read the system clock (for
+  `execution_timestamp`), via a small public-domain days-from-civil
+  conversion rather than a new date/time dependency. Markdown rendering
+  shows `Composition` as explicit `element:amount` pairs rather than a
+  concatenated pseudo-formula, since `Composition` iterates alphabetically
+  and would otherwise print something that looks like a real formula but
+  isn't one.
 - **Phase 6 — integration.** `Planner` (`new`/`offline_minimal`/`plan`)
   orchestrates catalog → `search_precursor_sets` →
   `conventional_solid_state_template` → `score_plan` into a ranked
@@ -91,15 +108,31 @@ each entry.
   `mikiwame` are not yet published; `renkin` exists and is excluded as a
   dependency.
 
+### Fixed
+
+- `search_precursor_sets` could silently double-accept a precursor set: a
+  redundant element source (e.g. a catalog with both BaCO3 and BaO) lets a
+  larger combination balance with the redundant precursor's coefficient
+  solved to zero, collapsing to the exact same precursors and reaction a
+  smaller combination already produced. Both were being accepted, so
+  `Planner` could rank and return the *same plan twice*. Found via Phase
+  7's `gugen plan` CLI output — the first place anyone looked at a full
+  multi-candidate report end to end — not by a targeted test. Now detected
+  and rejected as `RejectionCode::DuplicatePlan`; a doc comment that
+  wrongly called this code "unreachable by construction" is corrected.
+
 ### Known limitations
 
 - `balance()` only checks individual null-space basis vectors for sign
   validity; a valid reaction requiring a combination of two or more basis
   vectors is not found. Not hit by any case in the AGENTS.md §21.1 test
   list or by realistic small-species-count solid-state reactions so far.
-- `PRECURSOR_COUNT_EXCEEDED` and `DUPLICATE_PLAN` rejection codes are
-  unreachable by construction in the current search (combinations never
-  exceed the configured max size or repeat).
+- `PRECURSOR_COUNT_EXCEEDED` is unreachable by construction in the current
+  search (combinations never exceed the configured max size).
+  `DUPLICATE_PLAN` is reachable (see Fixed, above) but only via the one
+  known mechanism (a redundant precursor collapsing a larger combination
+  onto a smaller one's result) — not a general duplicate detector across
+  every possible cause.
 - `PlanningConstraints` only has `forbidden_elements`; the rest of AGENTS.md
   §9's filter list (redox/atmosphere compatibility, hazard metadata) lands
   in later phases.
@@ -134,3 +167,16 @@ each entry.
   `OutOfDomain` → 0.5) are placeholder severities, not calibrated against
   any outcome data — the same caveat `RankingWeights::default()` already
   states for its own equal weights.
+- `gugen batch`'s isolation is per-target *planning* failure only: if the
+  input file itself isn't a well-formed JSON array of
+  `TargetSpecification`, the whole command fails before any target is
+  attempted — batch isolation doesn't extend to malformed batch input.
+- `gugen validate-target` exits non-zero on a self-contradictory target
+  (lint-style semantics for scripting) — an exit-code contract AGENTS.md
+  §19 doesn't specify, so treat it as this CLI's own convention, not a
+  cross-tool guarantee.
+- CLI markdown output (`--format markdown`, `gugen explain`) renders
+  `PlanScoreBreakdown`/`ConfidenceAssessment` via `{:#?}` (Rust's pretty
+  `Debug`) rather than a hand-formatted table — informative and exact, but
+  not meant as a stable, parseable text format; use `--format json` (or
+  `gugen plan`'s default) for anything that reads the output back.

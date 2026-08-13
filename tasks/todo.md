@@ -590,7 +590,109 @@ a previously-unavailable optional dependency became available).
 §5 anticipated, absorbed by the `TargetMaterialView` boundary already in
 place since Phase 1 -- not a new blocker.
 
-## Phase 7–9
+## Phase 7 — CLI and Batch — DONE
+
+- [x] `gugen plan target.json --catalog precursors.json [--output report.json]
+      [--format json|markdown]` (AGENTS.md §19): loads a `TargetSpecification`
+      and a JSON array of `PrecursorCandidate` (reusing existing public types
+      as the file formats rather than inventing wrapper schemas), builds a
+      `Planner::offline_minimal` (no thermodynamic/process-evidence provider
+      -- not shown in §19's CLI examples, so not added), and writes the
+      report as pretty JSON or a rendered markdown document.
+- [x] `gugen balance reaction.json` -- unchanged from Phase 2.
+- [x] `gugen explain report.json --plan plan-001`: finds one plan by id in a
+      previously generated report and prints its full detail (steps, score
+      breakdown, confidence, evidence, warnings, assumptions, unresolved);
+      errors listing the available ids if the given one isn't present.
+- [x] `gugen validate-target target.json`: deserializes (which already
+      validates via every type's custom `Deserialize`, e.g. duplicate
+      elements, non-finite/negative amounts, invalid element symbols) and
+      additionally checks for the same self-contradiction
+      `Planner::plan` abstains on (an element both required by the
+      composition and forbidden by constraints). Exits non-zero on a
+      self-contradictory target -- a deliberate lint-style exit-code
+      contract AGENTS.md §19 doesn't state explicitly, noted here as a
+      decision rather than an accident.
+- [x] `gugen doctor` (AGENTS.md §19's full field list): gugen version,
+      schema version, chematic-crystal version (not integrated),
+      mikiwame integration status (reads the compiled-in feature flag),
+      enabled route families, precursor catalog version, thermodynamic/
+      process evidence provider, ranking config digest, deterministic
+      mode, supported domain, known limitations. No input file needed --
+      static build/configuration diagnostics only.
+- [x] `gugen batch input.json --catalog precursors.json [--output out.json]`:
+      a JSON array of `TargetSpecification`, planned independently against
+      one shared `Planner`. One target's `GugenError` becomes a `BatchEntry
+      { index, report: None, error: Some(..) }` rather than aborting the
+      rest (AGENTS.md §26's explicit "batchでは一件の失敗で全体を失敗させない"
+      requirement) -- tested with a custom `PrecursorCatalog` that fails
+      only for Sr-containing targets, since `InMemoryPrecursorCatalog`
+      itself never errors and so can't exercise this path alone.
+      `BatchEntry` has no separate `ok` flag -- `error.is_none()` already
+      says that; a redundant field on public JSON output isn't worth it.
+- [x] `execution_timestamp`: the CLI binary (`src/bin/gugen.rs`) is the one
+      place in the crate allowed to read the system clock
+      (`now_rfc3339`), per the contract `PlanningProvenance
+      .execution_timestamp` was documented with since Phase 1. Implemented
+      via Howard Hinnant's public-domain days-from-civil algorithm rather
+      than a new date/time dependency -- one well-known ~15-line
+      conversion, tested against fixed epoch-day values, not the live
+      clock.
+- [x] Markdown rendering (`render_report_markdown`/`render_plan_detail`,
+      shared by `plan --format markdown` and `explain`) renders
+      `Composition` as explicit `element:amount` pairs
+      (`format_composition`), not a concatenated pseudo-formula --
+      `Composition` iterates in alphabetical `BTreeMap` order, so
+      concatenating symbols directly would print `BaO3Ti` for BaTiO3 and
+      `O2Ti` for TiO2: chemically wrong-looking output from a tool whose
+      whole premise is not fabricating things that look authoritative.
+      Caught by actually reading the CLI's own real output during manual
+      testing, not by a spec requirement.
+- [x] Real bug found and fixed via advisor review before committing (a
+      Phase 3 correctness bug, not a Phase 7 one -- surfaced only now
+      because `gugen plan`'s CLI output is the first place anyone actually
+      looked at a full multi-candidate report end to end):
+      `search_precursor_sets` could silently **double-accept** a precursor
+      set. A redundant Ba source (e.g. catalog has both BaCO3 and BaO)
+      means a larger combination ({BaCO3, BaO, TiO2}) can balance with the
+      redundant precursor's coefficient solved to zero -- `balance()` then
+      drops it, collapsing the result to the exact same precursors and
+      reaction a smaller combination ({BaO, TiO2}) already produced
+      separately. Both were being pushed into `accepted`, so `Planner`
+      would rank and return the *same plan twice* (identical `plan_id`,
+      since `plan_id` is content-derived). Fixed at the root
+      (`search_precursor_sets`, not downstream in `Planner`, so every
+      caller benefits): the newly-found `AcceptedPrecursorSet` is compared
+      against everything already in `accepted`, and an equal one is
+      rejected as `RejectionCode::DuplicatePlan` (a code that already
+      existed in the closed AGENTS.md §14 set but whose doc comment
+      wrongly claimed it was "unreachable by construction in Phase 3" --
+      corrected). Regression test:
+      `a_redundant_larger_combination_is_rejected_as_a_duplicate_not_double_accepted`
+      in `precursor.rs`, built on the exact BaCO3/BaO/TiO2 fixture that
+      exposed it. Also added a `plan_id`-uniqueness assertion to an
+      existing `Planner` test (`offline_minimal_produces_ranked_plans_...`)
+      -- the check that would have caught this automatically instead of by
+      eyeballing CLI output.
+
+**Locally verified, all green:** fmt, clippy -D warnings (workspace, all
+features), test under `--all-features` (60 lib tests + 8 bin tests + 4
+integration), `--no-default-features` (55 lib tests), and
+`--no-default-features --features mikiwame` (60 lib tests, isolated), doc
+-D warnings, `cargo run --example balance_batio3` (unchanged output),
+`cargo build --features serde,clap --bin gugen`, `cargo check --target
+wasm32-unknown-unknown` (with and without `mikiwame`), cargo audit (0
+vulnerabilities, 32 crates, no new dependencies this phase). Additionally
+manually exercised every subcommand (`doctor`, `validate-target`, `plan`
+json/markdown, `explain`, `batch`) against real fixture files, not just
+the automated test suite -- this is what surfaced the duplicate-plan bug
+above.
+
+**No stop-and-report condition was triggered.** The duplicate-plan bug is
+a real correctness fix, not a scope change: no new package name, no new
+license, no new external dependency, no unresolved API divergence.
+
+## Phase 8–9
 
 Not started. Will be filled in with the same DONE/NOT STARTED tracking
 style as each phase begins; see AGENTS.md §26 for phase content and §29 for

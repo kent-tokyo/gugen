@@ -470,6 +470,23 @@ mod tests {
                     >= window[1].score.total_ranking_score.value()
             );
         }
+        // plan_id must uniquely identify a plan within a report -- this is
+        // the assertion that would have caught the search_precursor_sets
+        // duplicate-acceptance bug automatically instead of by manually
+        // inspecting `gugen plan` CLI output (see precursor.rs's
+        // `a_redundant_larger_combination_is_rejected_as_a_duplicate_not_double_accepted`).
+        let ids: std::collections::BTreeSet<&str> =
+            report.plans.iter().map(|p| p.plan_id.0.as_str()).collect();
+        assert_eq!(
+            ids.len(),
+            report.plans.len(),
+            "plan_id must be unique across the report's plans: {:?}",
+            report
+                .plans
+                .iter()
+                .map(|p| &p.plan_id.0)
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]

@@ -7,12 +7,12 @@
 （evidence）・仮定（assumption）・未確定条件（unresolved）を明示したまま、
 機械可読な形で返します。実験の成功を保証するものではありません。
 
-> **ステータス：開発初期、v0.1 開発中。** 全9フェーズ中フェーズ0〜6が完了
+> **ステータス：開発初期、v0.1 開発中。** 全9フェーズ中フェーズ0〜7が完了
 > （アーキテクチャ設計、基盤型定義、厳密な反応式バランス、bounded前駆体探索、
 > 固相合成プロセステンプレート、plan scoring・confidence、これらを一気通貫で
-> 統括する`Planner`）。オプションの`mikiwame`機能で構造診断結果を取り込めます
-> が、`chematic-crystal`アダプタは同クレート未公開のため保留中です。CLIはまだ
-> 存在しません。未公開・`main`未マージ・利用不可な状態です。フェーズごとの
+> 統括する`Planner`、およびCLI）。オプションの`mikiwame`機能で構造診断結果を
+> 取り込めますが、`chematic-crystal`アダプタは同クレート未公開のため保留中
+> です。未公開・`main`未マージ・利用不可な状態です。フェーズごとの
 > 詳細は
 > [`tasks/todo.md`](tasks/todo.md) を、レビュー中の内容は
 > [draft PR](https://github.com/kent-tokyo/gugen/pull/1) を参照してください。
@@ -124,9 +124,23 @@ $ gugen balance reaction.json
 ]
 ```
 
-CLIのビルドは `cargo build --features serde,clap --bin gugen`。現時点では
-`gugen balance` のみ実装済みで、`plan`・`explain`・`validate-target`・
-`doctor`・`batch` はPhase 7で実装予定です。
+CLIのビルドは `cargo build --features serde,clap --bin gugen`。サブコマンド
+（AGENTS.md §19）：
+
+```
+gugen balance reaction.json
+gugen plan target.json --catalog precursors.json [--output report.json] [--format json|markdown]
+gugen explain report.json --plan plan-001
+gugen validate-target target.json
+gugen doctor
+gugen batch input.json --catalog precursors.json [--output out.json]
+```
+
+`target.json`・`precursors.json`・`input.json` は、CLI専用の形式を新設せず
+gugen自身の公開JSON形式（`TargetSpecification`、`PrecursorCandidate`の
+JSON配列、`TargetSpecification`のJSON配列）をそのまま再利用しています。
+`gugen batch` は各targetを独立に計画し、一件の失敗が残りを止めることは
+ありません。
 
 ## エコシステム上の位置づけ
 
