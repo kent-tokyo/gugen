@@ -31,6 +31,12 @@ pub enum GugenError {
     EmptyReaction,
     #[error("exact arithmetic overflowed while balancing a reaction")]
     ArithmeticOverflow,
+    /// From the required `PrecursorCatalog` only -- `Planner::plan` cannot
+    /// proceed at all without a catalog, unlike the optional
+    /// `ThermodynamicProvider`/`ProcessEvidenceProvider`, whose failures are
+    /// caught and degraded to a warning instead (AGENTS.md §21.5).
+    #[error("precursor catalog failed: {0}")]
+    Catalog(#[from] ProviderError),
 }
 
 pub type Result<T> = std::result::Result<T, GugenError>;

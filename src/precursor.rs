@@ -135,6 +135,13 @@ pub struct PrecursorSearchOutcome {
 /// a valid answer into a *combination* of null-space basis vectors that
 /// `balance()`'s single-basis-vector check won't find).
 ///
+/// `budget.max_plans_returned` is deliberately **not** applied here: with
+/// no ranking in this module, truncating `accepted` here would keep
+/// whichever combinations happened to be generated first, not the best
+/// ones. Callers that want a bounded final count (`Planner`, Phase 6) rank
+/// `accepted` by score first and truncate after, explaining what didn't
+/// make the cut.
+///
 /// `PRECURSOR_COUNT_EXCEEDED` and `DUPLICATE_PLAN` are unreachable by
 /// construction in Phase 3: combinations never exceed
 /// `max_precursors_per_plan` in the first place, and are generated as
@@ -281,8 +288,6 @@ pub fn search_precursor_sets(
             ),
         });
     }
-
-    accepted.truncate(budget.max_plans_returned);
 
     Ok(PrecursorSearchOutcome { accepted, rejected })
 }

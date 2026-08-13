@@ -7,13 +7,14 @@
 //! success. See `AGENTS.md` for the full specification and
 //! `docs/scientific_scope.md` for what is and is not in scope.
 //!
-//! This implements Phases 1-5 of the roadmap in `AGENTS.md` §26: typed
-//! errors, validated numeric types, composition, target specification, the
-//! public report schema, provenance, provider trait boundaries, exact
-//! reaction balancing, bounded precursor-set search, a solid-state process
-//! template, and plan scoring/confidence. The `Planner` type that
-//! orchestrates all of this end-to-end lands in Phase 6 (see
-//! `tasks/todo.md`).
+//! This implements Phases 1-5 of the roadmap in `AGENTS.md` §26, plus the
+//! `Planner` type from Phase 6: typed errors, validated numeric types,
+//! composition, target specification, the public report schema, provenance,
+//! provider trait boundaries, exact reaction balancing, bounded
+//! precursor-set search, a solid-state process template, plan
+//! scoring/confidence, and end-to-end orchestration. Phase 6's
+//! `chematic-crystal`/`mikiwame` adapters and Phase 7's CLI are still in
+//! progress (see `tasks/todo.md`).
 
 #![forbid(unsafe_code)]
 
@@ -23,6 +24,7 @@ mod config;
 mod error;
 mod evidence;
 mod frac;
+mod planner;
 mod precursor;
 mod process;
 mod provenance;
@@ -38,6 +40,7 @@ pub use composition::{Composition, ELEMENT_SYMBOLS, Element};
 pub use config::{PlanningConfig, SearchBudget};
 pub use error::{GugenError, ProviderError, Result};
 pub use evidence::{EvidenceKind, EvidenceScope, EvidenceStrength, PlanningEvidence};
+pub use planner::Planner;
 pub use precursor::{
     AcceptedPrecursorSet, AvailabilityMetadata, InMemoryPrecursorCatalog, PrecursorCandidate,
     PrecursorId, PrecursorSearchOutcome, PrecursorSelection, search_precursor_sets,

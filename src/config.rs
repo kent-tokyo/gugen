@@ -22,11 +22,11 @@ impl Default for SearchBudget {
     }
 }
 
-/// Top-level planner configuration (AGENTS.md §18). Grows in later phases
-/// (e.g. `RankingWeights` is added once Phase 5 lands ranking).
+/// Top-level planner configuration (AGENTS.md §18).
 #[derive(Debug, Clone, PartialEq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PlanningConfig {
     pub search_budget: SearchBudget,
+    pub ranking_weights: crate::score::RankingWeights,
     pub deterministic_seed: u64,
 }

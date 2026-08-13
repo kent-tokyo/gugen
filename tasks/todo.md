@@ -446,7 +446,106 @@ wasm32-unknown-unknown`, cargo audit (0 vulnerabilities).
 
 **No stop-and-report condition was triggered.**
 
-## Phase 6–9
+## Phase 6 — Integration — IN PROGRESS (Planner done, mikiwame adapter next)
+
+**Mid-phase discovery:** `mikiwame` is now published on crates.io (v0.1.0,
+owner `kent-tokyo`, published 2026-08-14, after the Phase 0 check that
+found it unpublished). `chematic-crystal` is still unpublished (re-checked
+the same day). This is a material change to the plan the phase started
+with, so it's called out explicitly rather than folded in silently.
+
+- [x] `Planner` (AGENTS.md §18): `new(catalog, process_evidence_provider,
+      thermodynamic_provider, config)` and `offline_minimal(catalog,
+      config)`. `plan(&target, execution_timestamp)` orchestrates catalog
+      → `search_precursor_sets` → `conventional_solid_state_template` →
+      `score_plan` → assembled `SynthesisPlanningReport`. One deliberate
+      deviation from §18's illustrative single-argument `plan(&target)`:
+      `execution_timestamp` is a required parameter, not read from the
+      system clock (`PlanningProvenance.execution_timestamp` was already
+      documented in Phase 1 as caller-supplied specifically so the
+      deterministic core never touches wall-clock time; a Phase 7 CLI is
+      what will supply a real one).
+- [x] Real design/implementation gaps found and fixed via advisor review
+      before committing:
+      - `search_precursor_sets` used to truncate `accepted` to
+        `max_plans_returned` in raw generation order, before any ranking
+        existed. Moved that truncation into `Planner`, after sorting by
+        `total_ranking_score` -- so the plans kept are actually the best
+        ones, not whichever combination happened to be generated first.
+        Overflow now produces an explained `RejectedCandidate`
+        (`SearchBudgetExhausted`, reused rather than adding a 12th
+        `RejectionCode` since `max_plans_returned` is itself a
+        `SearchBudget` field).
+      - `plan_id` is derived from precursor-set + reaction content (a
+        `DefaultHasher` digest), not position, so it survives catalog
+        reordering and ranking changes. The first version of the test for
+        this didn't actually exercise position-independence (both
+        catalogs it compared were pre-sorted identically by
+        `InMemoryPrecursorCatalog`) -- rewritten to add an unrelated
+        catalog entry instead and check the shared plans' ids didn't move.
+      - `assess_applicability` initially returned `InDomain` whenever a
+        target had *any* structure info, regardless of content. Since
+        `TargetStructure` is free text with no classifier behind it, and
+        AGENTS.md §16 lists both `InDomain` and `OutOfDomain` examples
+        *with* structure present, this was optimistic without
+        justification. Now `PartiallyInDomain` in both the formula-only
+        and the structure-present-but-unclassified case.
+- [x] Invalid-target handling: a target whose composition requires an
+      element `PlanningConstraints.forbidden_elements` also forbids is
+      self-contradictory (no plan could ever satisfy both) and gets an
+      early abstention -- `OutOfDomain` applicability, empty `plans`, one
+      `UnresolvedRequirement` explaining why -- rather than running a
+      search doomed to reject every combination individually. An empty
+      catalog result (no candidates share any element with the target) is
+      a separate, non-domain outcome: a `PlanningWarning`, not an
+      applicability downgrade.
+- [x] §21.5 ("one provider失敗でplanning全体を失敗させない") implemented
+      for the first time: `ThermodynamicProvider`/`ProcessEvidenceProvider`
+      failures are caught per-candidate and degrade to an `Info`
+      `PlanningWarning` on the affected plan; a `PrecursorCatalog` failure
+      still propagates (`GugenError::Catalog`, new `#[from] ProviderError`
+      conversion), since planning cannot proceed without one at all. Both
+      provider failure paths are tested together in one `plan()` call.
+      A working `ThermodynamicProvider` attaches its reaction energy as
+      `EvidenceKind::ThermodynamicData` evidence -- explicitly *not*
+      converted into a favorability score (AGENTS.md §4.3: thermodynamic
+      favorability is not experimental likelihood), avoiding the exact
+      unsourced-heuristic trap `score_plan` already sidestepped in Phase 5.
+- [x] `PlanningConfig` gained `ranking_weights: RankingWeights` -- anticipated
+      in its own Phase 1 doc comment ("grows... once Phase 5 lands
+      ranking") but not actually added until now.
+- [ ] mikiwame adapter (next commit): optional dependency, maps
+      `mikiwame::MaterialDiagnosticReport` to gugen warnings/rejections per
+      `docs/integration.md`. Not auto-wired into `Planner::plan` --
+      `TargetStructure` still can't produce a `mikiwame::PeriodicStructureView`
+      (needs real lattice/site data that only `chematic-crystal` would
+      supply, and it still doesn't exist). Callers with their own
+      structure data can call the adapter directly.
+- [ ] chematic-crystal adapter: not applicable yet, still unpublished.
+      `TargetMaterialView` continues absorbing this per docs/integration.md.
+- [ ] Composition/structure handoff: `Planner` reads `target.composition`/
+      `target.structure` directly rather than through `TargetMaterialView`
+      accessor methods, since it also needs `constraints`/`desired_phase`,
+      which aren't part of that trait. Revisit if `TargetMaterialView`
+      grows to cover the full `TargetSpecification` surface.
+- [ ] Feature-gated builds: `--no-default-features` and `--features
+      mikiwame` both need to build cleanly once the mikiwame dependency
+      lands (next commit).
+
+**Locally verified, all green (Planner half):** fmt, clippy -D warnings
+(workspace, all features), test under `--all-features` (54 lib tests + 4
+integration) and `--no-default-features` (54 lib tests), doc -D warnings,
+`cargo run --example balance_batio3` (unchanged output), `cargo build
+--features serde,clap --bin gugen`, `cargo check --target
+wasm32-unknown-unknown`, cargo audit (0 vulnerabilities).
+
+**No stop-and-report condition was triggered** by anything in this commit.
+mikiwame's publication is a material plan change, flagged to the user, not
+a stop-and-report trigger in AGENTS.md §28's sense (no name collision, no
+license problem, no divergent API forcing tight coupling -- the opposite:
+a previously-unavailable optional dependency became available).
+
+## Phase 7–9
 
 Not started. Will be filled in with the same DONE/NOT STARTED tracking
 style as each phase begins; see AGENTS.md §26 for phase content and §29 for
