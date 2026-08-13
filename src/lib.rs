@@ -7,12 +7,13 @@
 //! success. See `AGENTS.md` for the full specification and
 //! `docs/scientific_scope.md` for what is and is not in scope.
 //!
-//! This implements Phases 1-4 of the roadmap in `AGENTS.md` §26: typed
+//! This implements Phases 1-5 of the roadmap in `AGENTS.md` §26: typed
 //! errors, validated numeric types, composition, target specification, the
 //! public report schema, provenance, provider trait boundaries, exact
-//! reaction balancing, bounded precursor-set search, and a solid-state
-//! process template. Ranking and the `Planner` type land in later phases
-//! (see `tasks/todo.md`).
+//! reaction balancing, bounded precursor-set search, a solid-state process
+//! template, and plan scoring/confidence. The `Planner` type that
+//! orchestrates all of this end-to-end lands in Phase 6 (see
+//! `tasks/todo.md`).
 
 #![forbid(unsafe_code)]
 
@@ -29,6 +30,7 @@ mod provider;
 mod reaction;
 mod rejection;
 mod report;
+mod score;
 mod target;
 
 pub use balance::{balance, curated_byproducts};
@@ -53,6 +55,10 @@ pub use rejection::{RejectedCandidate, RejectionCode};
 pub use report::{
     ApplicabilityAssessment, ApplicabilityLevel, PlanId, PlanningWarning, SCHEMA_VERSION,
     SynthesisPlan, SynthesisPlanningReport, TargetSummary, UnresolvedRequirement, WarningSeverity,
+};
+pub use score::{
+    ConfidenceAssessment, PlanAssessment, PlanScoreBreakdown, PlanningAssumption, RankingWeights,
+    Score01, ranking_weights_digest, score_plan,
 };
 pub use target::{
     PhaseRequirement, PlanningConstraints, TargetMaterialView, TargetSpecification, TargetStructure,

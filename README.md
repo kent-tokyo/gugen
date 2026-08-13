@@ -8,11 +8,12 @@ solid-state process plans — each with its evidence, assumptions, and
 unresolved conditions kept explicit and machine-readable. It does not
 predict experimental success.
 
-> **Status: early development, v0.1 in progress.** Phases 0-4 of 9 are
+> **Status: early development, v0.1 in progress.** Phases 0-5 of 9 are
 > done (architecture, foundation types, exact reaction balancing, bounded
-> precursor-set search, solid-state process templates). The full planning
-> pipeline — ranking, the `Planner` type, and most of the CLI — doesn't
-> exist yet. Not published, not merged to `main`, not ready for use. See
+> precursor-set search, solid-state process templates, plan scoring and
+> confidence). The `Planner` type that orchestrates all of this end-to-end,
+> and most of the CLI, don't exist yet. Not published, not merged to
+> `main`, not ready for use. See
 > [`tasks/todo.md`](tasks/todo.md) for exact phase-by-phase status and
 > [the draft PR](https://github.com/kent-tokyo/gugen/pull/1) for what's
 > under review.
@@ -77,6 +78,20 @@ carbonate route releasing CO₂) gets an extra calcination step that an
 oxide-only route to the same target does not. Temperature, duration, ramp
 rate, and atmosphere are left unresolved (`None`) rather than guessed —
 gugen has no thermodynamic or literature evidence provider wired in yet.
+
+### Plan scoring and confidence
+
+`score_plan` computes a `PlanScoreBreakdown` and a `ConfidenceAssessment`
+per plan — never a single collapsed number. Missing thermodynamic data is
+excluded from the score rather than treated as failure; a plan with no
+evidence scores lower than one with evidence. `total_ranking_score` is an
+ordinal, explainable score for comparing candidates, never a success
+probability — and in v0.1, with one route family and no thermodynamic
+provider, it's honestly driven by only one real signal
+(`process_simplicity`); see [`PlanScoreBreakdown`'s doc
+comment](src/score.rs) for the full breakdown of what's currently constant
+versus load-bearing. Every plan currently sets `manual_review_required:
+true`, since gugen has no hazard/safety data source wired in yet.
 
 ### CLI
 

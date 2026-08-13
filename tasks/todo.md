@@ -355,7 +355,98 @@ wasm32-unknown-unknown`, cargo audit (0 vulnerabilities).
 
 **No stop-and-report condition was triggered.**
 
-## Phase 5–9
+## Phase 5 — Ranking and Explanation — DONE
+
+- [x] `Score01` (validated newtype in `[0, 1]`; AGENTS.md only names the
+      type, doesn't give a shape -- matches every other validated numeric
+      type in this crate: rejects non-finite/out-of-range at construction).
+- [x] `PlanScoreBreakdown` and `RankingWeights` (verbatim, AGENTS.md §13).
+      `RankingWeights::default()` uses equal weight (`1.0`) on every
+      dimension, documented as the only defensible default given §13's
+      explicit "validation corpusを見て恣意的に調整しない" / "holdoutを見て
+      weight変更しない" (no validation corpus exists yet -- that's Phase 8).
+      `ranking_weights_digest()` (std `DefaultHasher`, not cryptographic --
+      only needs to detect "did the config change") for
+      `PlanningProvenance.ranking_config_digest`.
+- [x] `ConfidenceAssessment` (verbatim, AGENTS.md §16) — kept as four
+      independent dimensions rather than collapsed into `overall`, per
+      §16's explicit "条件未確定でも反応式が確実なケースがあります。単一
+      confidenceに潰さないでください."
+- [x] `score_plan()`: computes both breakdowns from a plan's actual
+      ingredients (target, applicability, balanced reaction, steps,
+      evidence, weights). `thermodynamic_support` is always `None` (no
+      `ThermodynamicProvider` wired in) and is excluded from the weighted
+      average entirely, never treated as `0.0` (§13: "missing
+      thermodynamic dataを自動的に失敗扱いしない") — regression test
+      included. `evidence_strength` aggregates per-item `EvidenceStrength`
+      by **minimum** (weakest link), not mean, specifically so one Strong
+      entry can't outweigh several Weak template defaults; `0.0` if no
+      evidence at all (§13: "evidenceなしのplanはconfidenceを下げる") —
+      regression test included.
+- [x] **Honest documented limitation, found via advisor review before
+      push:** in v0.1, `stoichiometric_validity`, `precursor_coverage`,
+      `safety_penalty`, and `uncertainty_penalty` are structurally constant
+      across every plan the crate can currently produce (exact balancing,
+      hard-filtered coverage, no hazard provider, no resolved conditions
+      respectively), and `evidence_strength`'s weakest-link aggregate is
+      also constant (`0.25`) because the generator always attaches at
+      least one `Weak` entry. **`total_ranking_score` currently varies
+      only with `process_simplicity`** — i.e. only with whether the route
+      calcines. Stated explicitly in `PlanScoreBreakdown`'s doc comment
+      rather than left for a reader to discover; this is the exact kind of
+      overstated discrimination the §22/§29 false-confidence audit checks
+      for, so it's flagged now rather than at Phase 8.
+- [x] Real formula bug found by the crate's own tests, fixed before
+      commit: the first draft subtracted a *weighted sum* penalty from a
+      *weighted average* positive score -- different scales, so one maxed
+      penalty (e.g. `uncertainty_penalty=1.0`, true for every v0.1 plan)
+      could zero out a legitimately strong positive average. Fixed by
+      normalizing the penalty side as a weighted average too before
+      subtracting.
+- [x] `manual_review_required: bool` added to `SynthesisPlan`, always
+      `true` in v0.1 (AGENTS.md §15's `pub manual_review_required: bool`,
+      a v0.1 completion criterion per §29 that AGENTS.md §26 doesn't
+      actually assign to any phase). Paired with a mandatory `Severe`
+      `PlanningWarning` stating that `safety_penalty=0.0` reflects "no
+      hazard data source exists," not "assessed safe" (§15: "unknown
+      hazardを安全と扱わない"). This was caught by advisor review, not the
+      original Phase 5 checklist -- §29's other unowned safety criterion,
+      "safety warningがある", is satisfied by this same warning; hazard
+      *metadata on precursors* (toxic gas, volatile component, etc.) is
+      still not modeled anywhere and remains open.
+- [x] `PlanningAssumption` (shape not given verbatim). `score_plan` returns
+      exactly one entry: that per-plan `applicability` is copied from the
+      target-level assessment rather than independently assessed per
+      route family, true only because v0.1 has a single route family.
+      Everything else the generator assumes is already surfaced as
+      `PlanningEvidence.limitations` or a `PlanningWarning`, so isn't
+      duplicated here.
+- [x] Per-plan `unresolved: Vec<UnresolvedRequirement>` populated from
+      every `None` condition field across a plan's steps (temperature,
+      duration, atmosphere, ramp on `Heat`; duration on `Grind`; pressure
+      on `Form`), each with the same "no provider wired in yet" reason.
+- [x] "Alternatives" (§26's Phase 5 checklist item) needs no new type:
+      already satisfied by `plans: Vec<SynthesisPlan>` existing and
+      `score_plan` giving each a comparable `total_ranking_score` --
+      *ranking* multiple plans (Phase 6's `Planner` job) is what turns
+      that into "alternatives," not a new data type.
+      "Rejected candidate explanations" needs no new code either: already
+      satisfied by `RejectedCandidate.explanation` (Phase 1/3); no new
+      rejection path was introduced by scoring.
+- [x] `SynthesisPlan` now carries every field AGENTS.md §6 lists (plus
+      `manual_review_required`, not in §6's snippet but required by §15).
+      JSON round-trip test rebuilt around real `score_plan()` output.
+
+**Locally verified, all green:** fmt, clippy -D warnings (workspace, all
+targets, all features), test under `--all-features` (47 lib tests + 4
+integration) and `--no-default-features` (47 lib tests), doc -D warnings,
+`cargo run --example balance_batio3` (unchanged output), `cargo build
+--features serde,clap --bin gugen`, `cargo check --target
+wasm32-unknown-unknown`, cargo audit (0 vulnerabilities).
+
+**No stop-and-report condition was triggered.**
+
+## Phase 6–9
 
 Not started. Will be filled in with the same DONE/NOT STARTED tracking
 style as each phase begins; see AGENTS.md §26 for phase content and §29 for

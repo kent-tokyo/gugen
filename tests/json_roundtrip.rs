@@ -1,8 +1,8 @@
 use gugen::{
     AcceptedPrecursorSet, ApplicabilityAssessment, ApplicabilityLevel, Composition, Element,
-    PlanId, PlanningProvenance, PrecursorId, PrecursorSelection, SCHEMA_VERSION, SynthesisPlan,
-    SynthesisPlanningReport, TargetSummary, TemperatureRange, balance,
-    conventional_solid_state_template,
+    PlanId, PlanningProvenance, PrecursorId, PrecursorSelection, RankingWeights, SCHEMA_VERSION,
+    SynthesisPlan, SynthesisPlanningReport, TargetSummary, TemperatureRange, balance,
+    conventional_solid_state_template, score_plan,
 };
 
 fn sample_report() -> SynthesisPlanningReport {
@@ -41,6 +41,21 @@ fn sample_report() -> SynthesisPlanningReport {
         })
         .collect();
 
+    let applicability = ApplicabilityAssessment {
+        level: ApplicabilityLevel::InDomain,
+        rationale: vec!["bulk inorganic, formula-only target".to_string()],
+    };
+    let assessment = score_plan(
+        &target,
+        &applicability,
+        Some(&reaction),
+        &template.steps,
+        &template.evidence,
+        &RankingWeights::default(),
+    );
+    let mut warnings = template.warnings;
+    warnings.extend(assessment.warnings);
+
     SynthesisPlanningReport {
         schema_version: SCHEMA_VERSION,
         target: TargetSummary {
@@ -48,18 +63,21 @@ fn sample_report() -> SynthesisPlanningReport {
             structure_present: false,
             desired_phase: None,
         },
-        applicability: ApplicabilityAssessment {
-            level: ApplicabilityLevel::InDomain,
-            rationale: vec!["bulk inorganic, formula-only target".to_string()],
-        },
+        applicability: applicability.clone(),
         plans: vec![SynthesisPlan {
             plan_id: PlanId("plan-0001".to_string()),
             route_family: template.route_family,
             precursors,
             balanced_reaction: Some(reaction),
             steps: template.steps,
+            score: assessment.score,
+            confidence: assessment.confidence,
+            applicability: assessment.applicability,
             evidence: template.evidence,
-            warnings: template.warnings,
+            warnings,
+            assumptions: assessment.assumptions,
+            unresolved: assessment.unresolved,
+            manual_review_required: assessment.manual_review_required,
         }],
         rejected_candidates: vec![],
         unresolved: vec![],

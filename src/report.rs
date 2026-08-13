@@ -5,6 +5,7 @@ use crate::process::{PlannedStep, RouteFamily};
 use crate::provenance::PlanningProvenance;
 use crate::reaction::BalancedReaction;
 use crate::rejection::RejectedCandidate;
+use crate::score::{ConfidenceAssessment, PlanScoreBreakdown, PlanningAssumption};
 
 pub const SCHEMA_VERSION: u32 = 1;
 
@@ -68,12 +69,12 @@ impl std::fmt::Display for PlanId {
     }
 }
 
-/// A candidate synthesis plan (AGENTS.md §6). `score`, `confidence`,
-/// per-plan `applicability`, `assumptions`, and per-plan `unresolved` are
-/// still missing -- they land in Phase 5 once ranking/confidence exist (see
-/// tasks/todo.md). `steps` is `Vec<PlannedStep>` rather than the bare
-/// `Vec<ProcessStep>` AGENTS.md §6 shows, so each step can carry the
-/// `StepRequirement` §11 mandates.
+/// A candidate synthesis plan (AGENTS.md §6). `steps` is `Vec<PlannedStep>`
+/// rather than the bare `Vec<ProcessStep>` AGENTS.md §6 shows, so each step
+/// can carry the `StepRequirement` §11 mandates. `manual_review_required`
+/// isn't in §6's snippet, but §15 requires the v0.1 JSON plan to carry it
+/// (or an equivalent) regardless -- see [`crate::score_plan`] for why it's
+/// always `true` in v0.1.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SynthesisPlan {
@@ -82,8 +83,14 @@ pub struct SynthesisPlan {
     pub precursors: Vec<PrecursorSelection>,
     pub balanced_reaction: Option<BalancedReaction>,
     pub steps: Vec<PlannedStep>,
+    pub score: PlanScoreBreakdown,
+    pub confidence: ConfidenceAssessment,
+    pub applicability: ApplicabilityAssessment,
     pub evidence: Vec<PlanningEvidence>,
     pub warnings: Vec<PlanningWarning>,
+    pub assumptions: Vec<PlanningAssumption>,
+    pub unresolved: Vec<UnresolvedRequirement>,
+    pub manual_review_required: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]

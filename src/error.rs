@@ -25,6 +25,8 @@ pub enum GugenError {
     AmountNotRational { element: String, value: f64 },
     #[error("reaction species coefficients must be > 0")]
     ZeroCoefficient,
+    #[error("Score01 must be finite and within [0, 1], got {value}")]
+    ScoreOutOfRange { value: f64 },
     #[error("a reaction needs at least one reactant and one product")]
     EmptyReaction,
     #[error("exact arithmetic overflowed while balancing a reaction")]

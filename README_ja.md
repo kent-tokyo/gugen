@@ -7,10 +7,11 @@
 （evidence）・仮定（assumption）・未確定条件（unresolved）を明示したまま、
 機械可読な形で返します。実験の成功を保証するものではありません。
 
-> **ステータス：開発初期、v0.1 開発中。** 全9フェーズ中フェーズ0〜4が完了
+> **ステータス：開発初期、v0.1 開発中。** 全9フェーズ中フェーズ0〜5が完了
 > （アーキテクチャ設計、基盤型定義、厳密な反応式バランス、bounded前駆体探索、
-> 固相合成プロセステンプレート）。ranking、`Planner`型、CLIの大部分はまだ
-> 存在しません。未公開・`main`未マージ・利用不可な状態です。フェーズごとの詳細は
+> 固相合成プロセステンプレート、plan scoring・confidence）。これらを一気通貫
+> で統括する`Planner`型、CLIの大部分はまだ存在しません。未公開・`main`未マージ・
+> 利用不可な状態です。フェーズごとの詳細は
 > [`tasks/todo.md`](tasks/todo.md) を、レビュー中の内容は
 > [draft PR](https://github.com/kent-tokyo/gugen/pull/1) を参照してください。
 
@@ -71,6 +72,19 @@ let reactions = balance(&[bao, tio2], &[batio3])?;
 stepが追加されます。温度・時間・昇温速度・雰囲気は、根拠なく推測せず
 `None`（未確定）のままとします。gugenは現時点でthermodynamic/文献evidence
 providerを持たないためです。
+
+### Plan scoring・confidence
+
+`score_plan` はplanごとに`PlanScoreBreakdown`と`ConfidenceAssessment`を
+算出します。単一の数値に潰すことはありません。thermodynamicデータの欠損
+は失敗扱いにせずスコアから除外し、evidenceのないplanはevidenceのある
+planより低いスコアになります。`total_ranking_score`は候補を比較するため
+の序数的・説明可能なスコアであり、成功確率ではありません。v0.1では
+route familyが1つのみでthermodynamic providerも存在しないため、実質的に
+`process_simplicity`という単一の指標だけが結果を左右します（内訳の詳細は
+[`PlanScoreBreakdown`のdocコメント](src/score.rs)を参照）。
+gugenは現時点でhazard/safetyデータsourceを持たないため、すべてのplanで
+`manual_review_required: true`となります。
 
 ### CLI
 

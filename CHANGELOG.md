@@ -11,6 +11,20 @@ each entry.
 
 ### Added
 
+- **Phase 5 — ranking and explanation.** `Score01` (validated `[0, 1]`
+  newtype), `PlanScoreBreakdown`/`RankingWeights` (verbatim, AGENTS.md §13,
+  equal-weight default with documented rationale), `ConfidenceAssessment`
+  (verbatim, §16, four independent dimensions). New `score_plan()`:
+  missing `thermodynamic_support` is excluded from the weighted average
+  rather than treated as failure (§13); `evidence_strength` aggregates by
+  weakest link, not mean. New `manual_review_required: bool` on
+  `SynthesisPlan` (§15), always `true` in v0.1 since no hazard data source
+  exists, paired with a mandatory `Severe` warning that `safety_penalty=0`
+  is not a safety clearance. New `PlanningAssumption`, populated with the
+  one real assumption `score_plan` makes (per-plan applicability mirrors
+  target-level applicability, since v0.1 has one route family). Per-plan
+  `unresolved` now populated from every unresolved condition field.
+  `SynthesisPlan` carries every field AGENTS.md §6 lists.
 - **Phase 4 — solid-state process template.** `RouteFamily`
   (`ConventionalSolidState`), `StepRequirement`, `Atmosphere` (verbatim from
   AGENTS.md), and a minimal, deliberately non-exhaustive set of method
@@ -77,3 +91,13 @@ each entry.
   template default, not selected from target- or precursor-specific
   evidence — v0.1 has exactly one route family and no per-target selection
   logic yet.
+- `total_ranking_score` currently varies only with `process_simplicity`
+  (whether the route calcines): `stoichiometric_validity`,
+  `precursor_coverage`, `safety_penalty`, and `uncertainty_penalty` are
+  structurally constant for every plan the crate can produce today, and
+  `evidence_strength`'s weakest-link aggregate is constant too. Not a
+  seven-dimensional judgment yet — see `PlanScoreBreakdown`'s doc comment.
+- Hazard/safety metadata on precursors (toxic gas, volatile component,
+  high-temperature, redox atmosphere warnings — AGENTS.md §15) is not
+  modeled anywhere yet. `manual_review_required` and the accompanying
+  `Severe` warning are the only safety-related output that exists so far.
