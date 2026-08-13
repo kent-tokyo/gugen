@@ -20,11 +20,14 @@ each entry.
   `conventional_solid_state_template()` generates a
   weigh/mix/grind/form/heat/cool/characterize sequence from an accepted
   precursor set, branching on the actual balanced reaction (a byproduct
-  release adds a calcination step) rather than applying one fixed template
-  to every material. Temperature, duration, ramp rate, and atmosphere are
-  left unresolved rather than guessed. `SynthesisPlan` grew from the Phase 1
-  `{ plan_id }` stub to carry `route_family`, `precursors`,
-  `balanced_reaction`, `steps`, `evidence`, and `warnings`.
+  release adds calcination and regrind steps, per AGENTS.md §11's outline)
+  rather than applying one fixed template to every material. Temperature,
+  duration, ramp rate, and atmosphere are left unresolved rather than
+  guessed. A mismatched `AcceptedPrecursorSet` (precursors/reactants of
+  different lengths) produces an `Unresolved` `Weigh` step with a `Severe`
+  warning rather than a silently truncated materials list. `SynthesisPlan`
+  grew from the Phase 1 `{ plan_id }` stub to carry `route_family`,
+  `precursors`, `balanced_reaction`, `steps`, `evidence`, and `warnings`.
 - **Phase 3 — precursor-set search.** `InMemoryPrecursorCatalog`
   (`PrecursorCatalog` impl, sorted and deduplicated by `PrecursorId`).
   `search_precursor_sets`: deterministic, budget-bounded combination
@@ -65,10 +68,11 @@ each entry.
 - `PlanningConstraints` only has `forbidden_elements`; the rest of AGENTS.md
   §9's filter list (redox/atmosphere compatibility, hazard metadata) lands
   in later phases.
-- `StepRequirement::Unresolved` is defined but never emitted by
-  `conventional_solid_state_template()` yet: the generator always knows
-  enough to include a step (with unknown conditions left as `None` inside
-  it), never a case where it doesn't know whether a step applies at all.
+- `StepRequirement::Unresolved` is only reachable via one case (a
+  precursors/reactants length mismatch on a hand-built
+  `AcceptedPrecursorSet`); it never reflects genuine uncertainty about
+  whether a step applies given real conditions data, since no such data
+  source is wired in yet.
 - The method chosen for each `Mix`/`Grind`/`Form`/`Cool` step is a fixed
   template default, not selected from target- or precursor-specific
   evidence — v0.1 has exactly one route family and no per-target selection

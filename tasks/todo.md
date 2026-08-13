@@ -301,22 +301,23 @@ audit (0 vulnerabilities).
       rationale. `EvidenceScope` (not given verbatim, minimal
       `ExactTarget`/`SimilarMaterial`/`GeneralRule`).
 - [x] `conventional_solid_state_template(target, &AcceptedPrecursorSet)`:
-      weigh → mix → grind → optional form → [calcine, only if the balanced
-      reaction releases a byproduct beyond the target] → sinter → cool →
-      recommended XRD check. Every condition without evidence (temperature,
+      weigh → mix → grind → optional form → [calcine, regrind — only if the
+      balanced reaction releases a byproduct beyond the target] → sinter →
+      cool → recommended XRD check. The regrind step (AGENTS.md §11's
+      numbered step 6, 再粉砕) sits between calcination and final firing,
+      matching the outline. Every condition without evidence (temperature,
       duration, ramp, atmosphere) is left `None` rather than guessed
       (AGENTS.md §4.1), with a `PlanningWarning` stating why.
-      **`StepRequirement::Unresolved` is defined but never emitted yet** —
-      the current generator always knows enough to include a step (with
-      unknown conditions inside it via `None` fields); it never faces a
-      case where it doesn't know *whether* a step applies at all. Revisit
-      once a real per-target evidence source can actually leave that
-      ambiguous.
+      `StepRequirement::Unresolved` is emitted for exactly one case so far:
+      `AcceptedPrecursorSet.precursors`/`reaction.reactants` length
+      mismatch (see below) — a hand-built input the search path can no
+      longer produce, but the generator is a public function over public
+      fields and must not assume its caller went through the search.
 - [x] Regression test (AGENTS.md §11 "すべての材料へ同じtemplateを適用し
       てはいけません"): the carbonate route to BaTiO3 (BaCO3 + TiO2 → BaTiO3
-      + CO2) gets a calcination step; the oxide-only route (BaO + TiO2 →
-      BaTiO3) to the *same target* does not — proves the template branches
-      on real chemistry, not target identity alone.
+      + CO2) gets calcination + regrind steps; the oxide-only route (BaO +
+      TiO2 → BaTiO3) to the *same target* does not — proves the template
+      branches on real chemistry, not target identity alone.
 - [x] Real bug found and fixed while designing the `Weigh` step:
       `AcceptedPrecursorSet.precursors` was built from the unfiltered
       candidate combo and assumed index-alignment with
@@ -325,6 +326,16 @@ audit (0 vulnerabilities).
       silently desync the two lists. Fixed in `search_precursor_sets` by
       matching each reactant back to its precursor id by composition
       instead of assuming index alignment; regression test added.
+- [x] Second bug found on advisor review of the first: even after that
+      fix, `conventional_solid_state_template` itself `zip()`s
+      `accepted.precursors` with `reaction.reactants`, which silently
+      truncates on a length mismatch — reachable by anyone constructing
+      `AcceptedPrecursorSet` by hand (a public struct with public fields),
+      not just via search. Fixed by guarding the lengths: a mismatch now
+      produces an empty `Weigh.materials` with
+      `StepRequirement::Unresolved` and a `Severe` `PlanningWarning`,
+      instead of a truncated materials list that reads as complete.
+      Regression test added.
 - [x] `SynthesisPlan` extended from the Phase 1 `{ plan_id }` stub to
       `{ plan_id, route_family, precursors, balanced_reaction, steps,
       evidence, warnings }` — everything Phases 2-4 now produce. `score`,
@@ -336,8 +347,8 @@ audit (0 vulnerabilities).
       serialize/deserialize.
 
 **Locally verified, all green:** fmt, clippy -D warnings (workspace, all
-targets, all features), test under `--all-features` (38 lib tests + 4
-integration) and `--no-default-features` (38 lib tests), doc -D warnings,
+targets, all features), test under `--all-features` (39 lib tests + 4
+integration) and `--no-default-features` (39 lib tests), doc -D warnings,
 `cargo run --example balance_batio3` (unchanged output), `cargo build
 --features serde,clap --bin gugen`, `cargo check --target
 wasm32-unknown-unknown`, cargo audit (0 vulnerabilities).

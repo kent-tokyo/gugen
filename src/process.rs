@@ -272,20 +272,48 @@ pub fn conventional_solid_state_template(
     let reaction = &accepted.reaction;
     let releases_byproduct = reaction.products.iter().any(|p| &p.composition != target);
 
-    let materials: Vec<MaterialAmount> = accepted
-        .precursors
-        .iter()
-        .zip(&reaction.reactants)
-        .map(|(id, species)| MaterialAmount {
-            precursor: id.clone(),
-            formula_units: species.coefficient,
-            mass_grams: None,
-        })
-        .collect();
+    // `zip` silently truncates to the shorter side. `search_precursor_sets`
+    // now guarantees equal lengths, but this is a public function taking a
+    // public struct with public fields -- a hand-built `AcceptedPrecursorSet`
+    // with mismatched lengths must not produce a `Weigh` step that quietly
+    // omits materials (that reads as a complete list when it isn't).
+    let materials_resolved = accepted.precursors.len() == reaction.reactants.len();
+    let materials: Vec<MaterialAmount> = if materials_resolved {
+        accepted
+            .precursors
+            .iter()
+            .zip(&reaction.reactants)
+            .map(|(id, species)| MaterialAmount {
+                precursor: id.clone(),
+                formula_units: species.coefficient,
+                mass_grams: None,
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    let mut warnings = Vec::new();
+    if !materials_resolved {
+        warnings.push(PlanningWarning {
+            message: format!(
+                "AcceptedPrecursorSet.precursors ({} entries) and \
+                reaction.reactants ({} entries) have different lengths; \
+                the Weigh step's material list could not be determined",
+                accepted.precursors.len(),
+                reaction.reactants.len(),
+            ),
+            severity: WarningSeverity::Severe,
+        });
+    }
 
     let mut steps = vec![
         PlannedStep {
-            requirement: StepRequirement::Required,
+            requirement: if materials_resolved {
+                StepRequirement::Required
+            } else {
+                StepRequirement::Unresolved
+            },
             step: ProcessStep::Weigh { materials },
         },
         PlannedStep {
@@ -352,6 +380,26 @@ pub fn conventional_solid_state_template(
                     .to_string(),
             ],
         });
+        // AGENTS.md §11 step 6, 再粉砕: a regrind between calcination and
+        // final firing, present in the outline specifically for routes
+        // that calcine.
+        steps.push(PlannedStep {
+            requirement: StepRequirement::Recommended,
+            step: ProcessStep::Grind {
+                method: GrindingMethod::MortarAndPestle,
+                duration: None,
+            },
+        });
+        evidence.push(PlanningEvidence {
+            kind: EvidenceKind::ProcessTemplate,
+            source_id: None,
+            statement: "AGENTS.md §11's template outline places a regrind \
+                between calcination and final firing"
+                .to_string(),
+            strength: EvidenceStrength::Weak,
+            applicable_to: EvidenceScope::GeneralRule,
+            limitations: vec![],
+        });
     }
 
     steps.push(PlannedStep {
@@ -378,13 +426,13 @@ pub fn conventional_solid_state_template(
         },
     });
 
-    let warnings = vec![PlanningWarning {
+    warnings.push(PlanningWarning {
         message: "temperature, duration, ramp rate, and atmosphere are \
             unresolved for every heating step: gugen has no thermodynamic \
             or literature evidence provider wired in yet (AGENTS.md §4.1)"
             .to_string(),
         severity: WarningSeverity::Caution,
-    }];
+    });
 
     ProcessTemplateResult {
         route_family: RouteFamily::ConventionalSolidState,
@@ -486,6 +534,60 @@ mod tests {
             carbonate_template.steps.len(),
             oxide_template.steps.len(),
             "the two routes must not produce the same template"
+        );
+    }
+
+    /// AGENTS.md §11: an unresolvable condition is kept as `Unresolved`,
+    /// never silently dropped or truncated. A hand-built
+    /// `AcceptedPrecursorSet` (not routed through `search_precursor_sets`,
+    /// which guarantees alignment) with a `precursors` list shorter than
+    /// `reaction.reactants` must not produce a `Weigh` step that quietly
+    /// omits materials.
+    #[test]
+    fn mismatched_precursor_and_reactant_lengths_produce_unresolved_weigh_not_a_truncated_one() {
+        use crate::composition::Element;
+
+        let ba = Element::new("Ba").unwrap();
+        let ti = Element::new("Ti").unwrap();
+        let o = Element::new("O").unwrap();
+
+        let target = Composition::new([(ba, 1.0), (ti, 1.0), (o, 3.0)]).unwrap();
+        let bao = Composition::new([(ba, 1.0), (o, 1.0)]).unwrap();
+        let tio2 = Composition::new([(ti, 1.0), (o, 2.0)]).unwrap();
+        let reaction = crate::balance::balance(&[bao, tio2], std::slice::from_ref(&target))
+            .unwrap()
+            .into_iter()
+            .next()
+            .expect("BaO + TiO2 -> BaTiO3 must balance");
+
+        let mismatched_set = AcceptedPrecursorSet {
+            precursors: vec![PrecursorId("BaO".to_string())], // only 1, reaction has 2 reactants
+            reaction,
+        };
+
+        let result = conventional_solid_state_template(&target, &mismatched_set);
+
+        let weigh = result
+            .steps
+            .first()
+            .expect("template must still include a Weigh step");
+        match &weigh.step {
+            ProcessStep::Weigh { materials } => {
+                assert!(
+                    materials.is_empty(),
+                    "materials must be empty, not truncated: {materials:?}"
+                );
+            }
+            other => panic!("expected Weigh as the first step, got {other:?}"),
+        }
+        assert_eq!(weigh.requirement, StepRequirement::Unresolved);
+        assert!(
+            result
+                .warnings
+                .iter()
+                .any(|w| w.severity == WarningSeverity::Severe),
+            "a length mismatch must surface a Severe warning: {:?}",
+            result.warnings
         );
     }
 }
