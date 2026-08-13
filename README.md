@@ -8,11 +8,11 @@ solid-state process plans — each with its evidence, assumptions, and
 unresolved conditions kept explicit and machine-readable. It does not
 predict experimental success.
 
-> **Status: early development, v0.1 in progress.** Phases 0-3 of 9 are
+> **Status: early development, v0.1 in progress.** Phases 0-4 of 9 are
 > done (architecture, foundation types, exact reaction balancing, bounded
-> precursor-set search). The full planning pipeline — ranking, process
-> templates, the `Planner` type, and most of the CLI — doesn't exist yet.
-> Not published, not merged to `main`, not ready for use. See
+> precursor-set search, solid-state process templates). The full planning
+> pipeline — ranking, the `Planner` type, and most of the CLI — doesn't
+> exist yet. Not published, not merged to `main`, not ready for use. See
 > [`tasks/todo.md`](tasks/todo.md) for exact phase-by-phase status and
 > [the draft PR](https://github.com/kent-tokyo/gugen/pull/1) for what's
 > under review.
@@ -66,6 +66,17 @@ a precursor catalog, returning both accepted precursor sets (each with
 its balanced reaction) and every rejected candidate with a reason code —
 never just the winners. See [`src/precursor.rs`](src/precursor.rs)'s
 tests for worked examples.
+
+### Solid-state process templates
+
+`conventional_solid_state_template` turns an accepted precursor set into a
+weigh/mix/grind/form/heat/cool/characterize step sequence, each step marked
+`Required`/`Recommended`/`Optional`/`Unresolved`. It does not apply the same
+template to every material: a route that releases a byproduct (e.g. a
+carbonate route releasing CO₂) gets an extra calcination step that an
+oxide-only route to the same target does not. Temperature, duration, ramp
+rate, and atmosphere are left unresolved (`None`) rather than guessed —
+gugen has no thermodynamic or literature evidence provider wired in yet.
 
 ### CLI
 

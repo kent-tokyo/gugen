@@ -267,21 +267,82 @@ audit (0 vulnerabilities).
 
 **No stop-and-report condition was triggered.**
 
-## Phase 4 — Solid-State Process Template — NOT STARTED
+## Phase 4 — Solid-State Process Template — DONE
 
-- [ ] `RouteFamily` (single `ConventionalSolidState` variant, AGENTS.md §13)
-- [ ] `ProcessStep` enum and the method/purpose sub-enums it references
-      (`MixingMethod`, `GrindingMethod`, `FormingMethod`, `HeatingPurpose`,
-      `CoolingMode`, `CharacterizationMethod`) — variants aren't given
-      verbatim in AGENTS.md, so these need deliberate, minimal design
-      rather than transcription
-- [ ] `Atmosphere` (given verbatim in AGENTS.md §12) and `StepRequirement`
-      (given verbatim in AGENTS.md §11)
-- [ ] unresolved-condition handling — a step with unknown conditions is
-      `StepRequirement::Unresolved`, never silently dropped (AGENTS.md §11)
-- [ ] basic evidence attachment — first real use of `EvidenceKind`/
-      `PlanningEvidence` (AGENTS.md §7), not yet introduced in Phases 1-3
-- [ ] warnings
+- [x] `RouteFamily` (single `ConventionalSolidState` variant, AGENTS.md §13)
+- [x] `StepRequirement` (verbatim, AGENTS.md §11) and `Atmosphere` + `InertGas`/
+      `ReducingAgent` (verbatim `Atmosphere`, minimal 2-variant gas enums,
+      AGENTS.md §12)
+- [x] `ProcessStep` (verbatim, AGENTS.md §6) and its method/purpose
+      sub-enums (`MixingMethod`, `GrindingMethod`, `FormingMethod`,
+      `HeatingPurpose`, `CoolingMode`, `CharacterizationMethod`) — not
+      given verbatim, so each is kept to 2-3 standard techniques the §11
+      template outline itself needs (calcination/sintering/annealing map
+      directly onto §11's 仮焼/本焼成; XRD is the only characterization
+      method §11 names). Documented as "add a variant only when a real
+      Phase 8 fixture needs one," not pre-enumerated.
+- [x] `MaterialAmount` (§6's `Weigh` step payload, not given verbatim) —
+      `{ precursor, formula_units, mass_grams: Option<f64> }`.
+      `mass_grams` is always `None`: gugen has no atomic-weight table, and
+      no phase currently owns building one. Flagged as a real, currently
+      unfilled gap rather than silently omitting the field.
+- [x] `PlannedStep { requirement: StepRequirement, step: ProcessStep }` —
+      §6 shows `SynthesisPlan.steps` as a bare `Vec<ProcessStep>`, but §11
+      requires a per-step requirement marker with nowhere else to carry it.
+      `SynthesisPlan.steps` is `Vec<PlannedStep>`, documented as a
+      deliberate deviation from the literal §6 signature.
+- [x] `evidence.rs`: `EvidenceKind` (verbatim, 9 variants), `PlanningEvidence`
+      (verbatim fields, AGENTS.md §7) — first real use, not present in
+      Phases 1-3. `EvidenceStrength` (categorical `Weak`/`Moderate`/`Strong`,
+      not given verbatim) is kept explicitly distinct from Phase 5's
+      `PlanScoreBreakdown.evidence_strength: Score01` (AGENTS.md §13) — a
+      plan-level *aggregate* across many evidence items — so no enum→number
+      mapping is invented before Phase 5 needs one and can document its
+      rationale. `EvidenceScope` (not given verbatim, minimal
+      `ExactTarget`/`SimilarMaterial`/`GeneralRule`).
+- [x] `conventional_solid_state_template(target, &AcceptedPrecursorSet)`:
+      weigh → mix → grind → optional form → [calcine, only if the balanced
+      reaction releases a byproduct beyond the target] → sinter → cool →
+      recommended XRD check. Every condition without evidence (temperature,
+      duration, ramp, atmosphere) is left `None` rather than guessed
+      (AGENTS.md §4.1), with a `PlanningWarning` stating why.
+      **`StepRequirement::Unresolved` is defined but never emitted yet** —
+      the current generator always knows enough to include a step (with
+      unknown conditions inside it via `None` fields); it never faces a
+      case where it doesn't know *whether* a step applies at all. Revisit
+      once a real per-target evidence source can actually leave that
+      ambiguous.
+- [x] Regression test (AGENTS.md §11 "すべての材料へ同じtemplateを適用し
+      てはいけません"): the carbonate route to BaTiO3 (BaCO3 + TiO2 → BaTiO3
+      + CO2) gets a calcination step; the oxide-only route (BaO + TiO2 →
+      BaTiO3) to the *same target* does not — proves the template branches
+      on real chemistry, not target identity alone.
+- [x] Real bug found and fixed while designing the `Weigh` step:
+      `AcceptedPrecursorSet.precursors` was built from the unfiltered
+      candidate combo and assumed index-alignment with
+      `reaction.reactants`, but `balance()` drops any reactant whose solved
+      coefficient is zero — so a redundant precursor in the combo could
+      silently desync the two lists. Fixed in `search_precursor_sets` by
+      matching each reactant back to its precursor id by composition
+      instead of assuming index alignment; regression test added.
+- [x] `SynthesisPlan` extended from the Phase 1 `{ plan_id }` stub to
+      `{ plan_id, route_family, precursors, balanced_reaction, steps,
+      evidence, warnings }` — everything Phases 2-4 now produce. `score`,
+      `confidence`, per-plan `applicability`, `assumptions`, and per-plan
+      `unresolved` remain deferred to Phase 5 (ranking/confidence don't
+      exist yet). JSON round-trip test rebuilt around a real
+      `conventional_solid_state_template()` output (not hand-authored) so
+      the new nested enums/options actually get exercised through
+      serialize/deserialize.
+
+**Locally verified, all green:** fmt, clippy -D warnings (workspace, all
+targets, all features), test under `--all-features` (38 lib tests + 4
+integration) and `--no-default-features` (38 lib tests), doc -D warnings,
+`cargo run --example balance_batio3` (unchanged output), `cargo build
+--features serde,clap --bin gugen`, `cargo check --target
+wasm32-unknown-unknown`, cargo audit (0 vulnerabilities).
+
+**No stop-and-report condition was triggered.**
 
 ## Phase 5–9
 

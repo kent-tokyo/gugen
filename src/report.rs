@@ -1,5 +1,9 @@
 use crate::composition::Composition;
+use crate::evidence::PlanningEvidence;
+use crate::precursor::PrecursorSelection;
+use crate::process::{PlannedStep, RouteFamily};
 use crate::provenance::PlanningProvenance;
+use crate::reaction::BalancedReaction;
 use crate::rejection::RejectedCandidate;
 
 pub const SCHEMA_VERSION: u32 = 1;
@@ -64,15 +68,22 @@ impl std::fmt::Display for PlanId {
     }
 }
 
-/// A candidate synthesis plan (AGENTS.md §6). Intentionally minimal in
-/// Phase 1: `route_family`, `precursors`, `balanced_reaction`, `steps`,
-/// `score`, `confidence`, `applicability`, `evidence`, `warnings`,
-/// `assumptions`, and `unresolved` are added incrementally as Phases 2-5
-/// land the subsystems that produce them (see tasks/todo.md).
+/// A candidate synthesis plan (AGENTS.md §6). `score`, `confidence`,
+/// per-plan `applicability`, `assumptions`, and per-plan `unresolved` are
+/// still missing -- they land in Phase 5 once ranking/confidence exist (see
+/// tasks/todo.md). `steps` is `Vec<PlannedStep>` rather than the bare
+/// `Vec<ProcessStep>` AGENTS.md §6 shows, so each step can carry the
+/// `StepRequirement` §11 mandates.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SynthesisPlan {
     pub plan_id: PlanId,
+    pub route_family: RouteFamily,
+    pub precursors: Vec<PrecursorSelection>,
+    pub balanced_reaction: Option<BalancedReaction>,
+    pub steps: Vec<PlannedStep>,
+    pub evidence: Vec<PlanningEvidence>,
+    pub warnings: Vec<PlanningWarning>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -1,20 +1,50 @@
 use gugen::{
-    ApplicabilityAssessment, ApplicabilityLevel, Composition, Element, PlanId, PlanningProvenance,
-    SCHEMA_VERSION, SynthesisPlan, SynthesisPlanningReport, TargetSummary, TemperatureRange,
+    AcceptedPrecursorSet, ApplicabilityAssessment, ApplicabilityLevel, Composition, Element,
+    PlanId, PlanningProvenance, PrecursorId, PrecursorSelection, SCHEMA_VERSION, SynthesisPlan,
+    SynthesisPlanningReport, TargetSummary, TemperatureRange, balance,
+    conventional_solid_state_template,
 };
 
 fn sample_report() -> SynthesisPlanningReport {
-    let composition = Composition::new([
-        (Element::new("Ba").unwrap(), 1.0),
-        (Element::new("Ti").unwrap(), 1.0),
-        (Element::new("O").unwrap(), 3.0),
-    ])
-    .unwrap();
+    let ba = Element::new("Ba").unwrap();
+    let ti = Element::new("Ti").unwrap();
+    let o = Element::new("O").unwrap();
+    let c = Element::new("C").unwrap();
+
+    let target = Composition::new([(ba, 1.0), (ti, 1.0), (o, 3.0)]).unwrap();
+    let baco3 = Composition::new([(ba, 1.0), (c, 1.0), (o, 3.0)]).unwrap();
+    let tio2 = Composition::new([(ti, 1.0), (o, 2.0)]).unwrap();
+    let co2 = Composition::new([(c, 1.0), (o, 2.0)]).unwrap();
+
+    // Real output of balance(), not hand-authored -- BaCO3 + TiO2 -> BaTiO3
+    // + CO2, the same worked example used elsewhere in this crate.
+    let reaction = balance(&[baco3, tio2], &[target.clone(), co2])
+        .unwrap()
+        .into_iter()
+        .next()
+        .expect("BaCO3 + TiO2 -> BaTiO3 + CO2 must balance");
+    let accepted = AcceptedPrecursorSet {
+        precursors: vec![
+            PrecursorId("BaCO3".to_string()),
+            PrecursorId("TiO2".to_string()),
+        ],
+        reaction: reaction.clone(),
+    };
+    let template = conventional_solid_state_template(&target, &accepted);
+    let precursors: Vec<PrecursorSelection> = accepted
+        .precursors
+        .iter()
+        .zip(&reaction.reactants)
+        .map(|(id, species)| PrecursorSelection {
+            precursor: id.clone(),
+            formula_units: species.coefficient,
+        })
+        .collect();
 
     SynthesisPlanningReport {
         schema_version: SCHEMA_VERSION,
         target: TargetSummary {
-            composition,
+            composition: target,
             structure_present: false,
             desired_phase: None,
         },
@@ -24,6 +54,12 @@ fn sample_report() -> SynthesisPlanningReport {
         },
         plans: vec![SynthesisPlan {
             plan_id: PlanId("plan-0001".to_string()),
+            route_family: template.route_family,
+            precursors,
+            balanced_reaction: Some(reaction),
+            steps: template.steps,
+            evidence: template.evidence,
+            warnings: template.warnings,
         }],
         rejected_candidates: vec![],
         unresolved: vec![],

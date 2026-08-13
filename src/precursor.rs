@@ -245,8 +245,27 @@ pub fn search_precursor_sets(
         }
 
         for reaction in found {
+            // `balance()` operates on bare `Composition`s and drops any
+            // reactant whose solved coefficient is zero, so `reaction`'s
+            // reactant list is not guaranteed to be `chosen` unfiltered --
+            // re-derive the id list by matching composition rather than
+            // assuming index alignment with `ids`.
+            let matched_ids: Vec<PrecursorId> = reaction
+                .reactants
+                .iter()
+                .map(|species| {
+                    chosen
+                        .iter()
+                        .find(|c| c.composition == species.composition)
+                        .map(|c| c.id.clone())
+                        .expect(
+                            "balance() only returns reactant species drawn from \
+                            the compositions it was given",
+                        )
+                })
+                .collect();
             accepted.push(AcceptedPrecursorSet {
-                precursors: ids.clone(),
+                precursors: matched_ids,
                 reaction,
             });
         }
@@ -518,6 +537,47 @@ mod tests {
             .filter(|a| a.precursors == vec![PrecursorId("BaO".to_string())])
             .count();
         assert_eq!(single_bao_accepts, 1);
+    }
+
+    /// `AcceptedPrecursorSet.precursors` must stay index-aligned with
+    /// `AcceptedPrecursorSet.reaction.reactants` even when `balance()`
+    /// drops a chosen precursor because its solved coefficient came out
+    /// zero -- a redundant Ba source (BaCO3 and BaO both supply Ba) is a
+    /// real case where that happens.
+    #[test]
+    fn accepted_precursor_ids_stay_aligned_with_reaction_reactants() {
+        let target = composition(&[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)]);
+        let catalog = vec![
+            candidate("BaCO3", &[("Ba", 1.0), ("C", 1.0), ("O", 3.0)]),
+            candidate("BaO", &[("Ba", 1.0), ("O", 1.0)]),
+            candidate("TiO2", &[("Ti", 1.0), ("O", 2.0)]),
+        ];
+        let outcome = search_precursor_sets(
+            &target,
+            &catalog,
+            &PlanningConstraints::default(),
+            &generous_budget(),
+        )
+        .unwrap();
+
+        for accepted in &outcome.accepted {
+            assert_eq!(
+                accepted.precursors.len(),
+                accepted.reaction.reactants.len(),
+                "precursors and reactants must be the same length: {accepted:?}"
+            );
+            for (id, species) in accepted.precursors.iter().zip(&accepted.reaction.reactants) {
+                let candidate = catalog.iter().find(|c| &c.id == id).unwrap();
+                assert_eq!(
+                    candidate.composition, species.composition,
+                    "precursor id {id} must match its reactant composition"
+                );
+            }
+        }
+        assert!(
+            !outcome.accepted.is_empty(),
+            "fixture must actually exercise the search, not vacuously pass"
+        );
     }
 
     /// AGENTS.md §21.2/§21.4: deterministic catalog-order invariance.

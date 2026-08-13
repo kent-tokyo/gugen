@@ -7,10 +7,10 @@
 （evidence）・仮定（assumption）・未確定条件（unresolved）を明示したまま、
 機械可読な形で返します。実験の成功を保証するものではありません。
 
-> **ステータス：開発初期、v0.1 開発中。** 全9フェーズ中フェーズ0〜3が完了
-> （アーキテクチャ設計、基盤型定義、厳密な反応式バランス、bounded前駆体探索）。
-> ranking、プロセステンプレート、`Planner`型、CLIの大部分はまだ存在しません。
-> 未公開・`main`未マージ・利用不可な状態です。フェーズごとの詳細は
+> **ステータス：開発初期、v0.1 開発中。** 全9フェーズ中フェーズ0〜4が完了
+> （アーキテクチャ設計、基盤型定義、厳密な反応式バランス、bounded前駆体探索、
+> 固相合成プロセステンプレート）。ranking、`Planner`型、CLIの大部分はまだ
+> 存在しません。未公開・`main`未マージ・利用不可な状態です。フェーズごとの詳細は
 > [`tasks/todo.md`](tasks/todo.md) を、レビュー中の内容は
 > [draft PR](https://github.com/kent-tokyo/gugen/pull/1) を参照してください。
 
@@ -60,6 +60,17 @@ let reactions = balance(&[bao, tio2], &[batio3])?;
 された候補すべてに理由コードを付けて返します。採用候補だけを返すことはあり
 ません。具体例は [`src/precursor.rs`](src/precursor.rs) のテストを参照して
 ください。
+
+### 固相合成プロセステンプレート
+
+`conventional_solid_state_template` は採用済み前駆体セットを、秤量・混合・
+粉砕・成形・焼成・冷却・中間確認のstep列に変換します。各stepには
+`Required`/`Recommended`/`Optional`/`Unresolved`のいずれかが付与されます。
+すべての材料へ同一のtemplateを適用することはありません。byproductを放出
+する経路（例：炭酸塩経路でCO₂を放出）には、酸化物のみの経路にはない仮焼
+stepが追加されます。温度・時間・昇温速度・雰囲気は、根拠なく推測せず
+`None`（未確定）のままとします。gugenは現時点でthermodynamic/文献evidence
+providerを持たないためです。
 
 ### CLI
 

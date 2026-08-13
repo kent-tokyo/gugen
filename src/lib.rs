@@ -7,11 +7,12 @@
 //! success. See `AGENTS.md` for the full specification and
 //! `docs/scientific_scope.md` for what is and is not in scope.
 //!
-//! This implements Phases 1-3 of the roadmap in `AGENTS.md` §26: typed
+//! This implements Phases 1-4 of the roadmap in `AGENTS.md` §26: typed
 //! errors, validated numeric types, composition, target specification, the
 //! public report schema, provenance, provider trait boundaries, exact
-//! reaction balancing, and bounded precursor-set search. Process
-//! templating and ranking land in later phases (see `tasks/todo.md`).
+//! reaction balancing, bounded precursor-set search, and a solid-state
+//! process template. Ranking and the `Planner` type land in later phases
+//! (see `tasks/todo.md`).
 
 #![forbid(unsafe_code)]
 
@@ -19,6 +20,7 @@ mod balance;
 mod composition;
 mod config;
 mod error;
+mod evidence;
 mod frac;
 mod precursor;
 mod process;
@@ -33,12 +35,16 @@ pub use balance::{balance, curated_byproducts};
 pub use composition::{Composition, ELEMENT_SYMBOLS, Element};
 pub use config::{PlanningConfig, SearchBudget};
 pub use error::{GugenError, ProviderError, Result};
+pub use evidence::{EvidenceKind, EvidenceScope, EvidenceStrength, PlanningEvidence};
 pub use precursor::{
     AcceptedPrecursorSet, AvailabilityMetadata, InMemoryPrecursorCatalog, PrecursorCandidate,
     PrecursorId, PrecursorSearchOutcome, PrecursorSelection, search_precursor_sets,
 };
 pub use process::{
-    DurationRange, PressureRange, ProcessPrecedent, RampRateRange, TemperatureRange,
+    Atmosphere, CharacterizationMethod, CoolingMode, DurationRange, FormingMethod, GrindingMethod,
+    HeatingPurpose, InertGas, MaterialAmount, MixingMethod, PlannedStep, PressureRange,
+    ProcessPrecedent, ProcessStep, ProcessTemplateResult, RampRateRange, ReducingAgent,
+    RouteFamily, StepRequirement, TemperatureRange, conventional_solid_state_template,
 };
 pub use provenance::PlanningProvenance;
 pub use provider::{PrecursorCatalog, ProcessEvidenceProvider, ThermodynamicProvider};
