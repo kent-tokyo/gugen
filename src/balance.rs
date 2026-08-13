@@ -297,6 +297,49 @@ mod tests {
         assert!(r.products.iter().all(|s| s.coefficient == 1));
     }
 
+    /// Checks an assumption precursor search (Phase 3) is built on: does
+    /// offering *every* curated byproduct at once (rather than a targeted
+    /// subset) risk defeating the single-basis-vector heuristic documented
+    /// in `balance()`'s `ponytail:` note? For BaCO3 + TiO2 -> BaTiO3 + CO2,
+    /// empirically no: H2O and O2 each touch elements (H, extra O) that
+    /// don't create genuine ambiguity here, so both forms return the same
+    /// single correct answer with H2O/O2 correctly dropped at zero
+    /// coefficient. That does NOT prove the general case is always safe --
+    /// a target or byproduct set that shares more structure could still
+    /// hit the combination-of-basis-vectors ceiling. Precursor search uses
+    /// the more expensive but strictly safer smallest-subset-first strategy
+    /// anyway (trivial cost: 2^3 = 8 subsets for 3 curated byproducts), and
+    /// this test exists so a future change to `curated_byproducts()` that
+    /// breaks this assumption is caught here instead of silently.
+    #[test]
+    fn all_curated_byproducts_at_once_happens_to_work_for_this_case_but_search_does_not_rely_on_it()
+    {
+        let reactants = vec![
+            composition(&[("Ba", 1.0), ("C", 1.0), ("O", 3.0)]),
+            composition(&[("Ti", 1.0), ("O", 2.0)]),
+        ];
+        let target = composition(&[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)]);
+        let co2 = composition(&[("C", 1.0), ("O", 2.0)]);
+        let h2o = composition(&[("H", 2.0), ("O", 1.0)]);
+        let o2 = composition(&[("O", 2.0)]);
+
+        let targeted = balance(&reactants, &[target.clone(), co2.clone()]).unwrap();
+        assert_eq!(
+            targeted.len(),
+            1,
+            "targeted subset {{target, CO2}} must balance"
+        );
+
+        let everything = balance(&reactants, &[target, co2, h2o, o2]).unwrap();
+        assert_eq!(everything.len(), 1);
+        assert_eq!(
+            everything[0].products.len(),
+            2,
+            "H2O and O2 must be dropped at zero coefficient"
+        );
+        assert_eq!(everything[0], targeted[0]);
+    }
+
     /// AGENTS.md §21.1: "酸素を副生成物または反応物として含む反応" (O2 as
     /// byproduct or as a reactant) -- byproduct direction.
     #[test]

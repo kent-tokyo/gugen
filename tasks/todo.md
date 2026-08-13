@@ -194,21 +194,96 @@ and every realistic small-species-count solid-state reaction. Revisit with
 a bounded combination search only if a real fixture surfaces a case that
 needs one — don't build it speculatively.
 
-## Phase 3 — Precursor Enumeration — NOT STARTED
+## Phase 3 — Precursor Enumeration — DONE (2026-08-13)
 
-- [ ] in-memory precursor catalog (implements `PrecursorCatalog` from
-      `provider.rs`)
-- [ ] candidate generation from target elements
-- [ ] the rest of AGENTS.md §9's constraint filters (only
-      `forbidden_elements` exists on `PlanningConstraints` today)
-- [ ] bounded search respecting `SearchBudget`
-- [ ] rejection reasons (`RejectionCode` already exists from Phase 1;
-      this phase is what actually assigns them during search)
-- [ ] deterministic ordering
-- [ ] budget-exhaustion diagnostics (must not be conflated with "no
-      candidates found" — AGENTS.md §9)
+- [x] in-memory precursor catalog (`InMemoryPrecursorCatalog`,
+      `src/precursor.rs`) — implements `PrecursorCatalog`, sorts by
+      `PrecursorId` and deduplicates same-id entries at construction
+      regardless of insertion order (AGENTS.md §21.2/§21.4)
+- [x] candidate generation from target elements — `candidates_for` scopes
+      to catalog entries sharing at least one element with the target
+      (§9's stated generation principle); combination search then applies
+      the real filters below
+- [x] the rest of AGENTS.md §9's applicable constraint filters:
+      target-element coverage, forbidden elements (still the only field
+      on `PlanningConstraints` — no new filter fields were invented beyond
+      what's specified), and "target元素へ残らない元素の除去可能性" (an
+      extra element introduced by a precursor must be removable via a
+      curated byproduct, or the set is rejected)
+- [x] bounded search respecting `SearchBudget` — deterministic
+      size-then-lexicographic combination enumeration, all three budget
+      fields honored (`max_precursors_per_plan` bounds combination size,
+      `max_precursor_sets` bounds total combinations evaluated,
+      `max_plans_returned` truncates the final accepted list)
+- [x] rejection reasons — `MissingTargetElement`, `ForbiddenElementPresent`,
+      `UnsupportedByproductRequired`, `NoStoichiometricBalance`,
+      `SearchBudgetExhausted` are all reachable and tested.
+      `PrecursorCountExceeded` and `DuplicatePlan` are unreachable *by
+      construction* in Phase 3 (combinations never exceed the configured
+      max size; index-based generation never revisits the same
+      combination) — documented on `search_precursor_sets`, not silently
+      unreachable. `AtmosphereConflict`, `HazardPolicyBlocked`,
+      `ThermodynamicDataUnavailable`, `UserConstraintViolation` belong to
+      later phases (atmosphere/process modeling, safety, ranking, and a
+      richer `PlanningConstraints` respectively).
+- [x] deterministic ordering — catalog order and combination-generation
+      order are both fixed regardless of input order; tested by shuffling
+      the catalog and asserting identical accepted sets
+- [x] budget-exhaustion diagnostics — surfaced as a `RejectedCandidate`
+      sentinel (`SearchBudgetExhausted` reason, empty `precursors`) rather
+      than a separate flag, so it can't be silently dropped by a caller
+      that only looks at one field; tested distinctly from "no candidates
+      found"
 
-## Phase 4–9
+**Byproduct-inclusion strategy, verified empirically before building the
+search on top of it:** offering every curated byproduct as a candidate
+product in one `balance()` call, rather than trying byproduct subsets
+smallest-first, was suspected to risk defeating `balance()`'s
+single-basis-vector heuristic (AGENTS.md §10's ambiguity-preservation
+requirement colliding with the `ponytail:` limitation already documented
+on `balance()`). Empirically, for the BaCO3 + TiO2 -> BaTiO3 + CO2 test
+case, offering all three curated byproducts at once actually still found
+the correct single answer (H2O/O2 naturally zeroed out) -- see
+`balance::tests::all_curated_byproducts_at_once_happens_to_work_for_this_case_but_search_does_not_rely_on_it`.
+That result does not prove the general case is safe, so
+`search_precursor_sets` uses the strictly safer smallest-subset-first
+strategy anyway; the cost is trivial (2^3 = 8 subsets for 3 curated
+byproducts).
+
+**Extended `PrecursorCandidate`** with `availability: Option<AvailabilityMetadata>`
+(minimal placeholder — AGENTS.md §9 names availability as a filter
+candidate without specifying a shape). Missing availability does not
+block acceptance, tested explicitly. Redox-compatibility,
+atmosphere-compatibility, and hazard/toxicity metadata are *not* added
+yet — AGENTS.md §26's actual Phase 3 checklist doesn't list them (they
+belong to later process/safety phases), correcting an over-broad forward
+comment left in Phase 1.
+
+**Locally verified, all green:** fmt, clippy -D warnings (workspace, all
+targets, all features), test under `--all-features` (36 lib tests + 4
+integration), `--no-default-features` (36 lib tests, no serde/clap
+needed for search itself), and `--features serde`, doc -D warnings, cargo
+audit (0 vulnerabilities).
+
+**No stop-and-report condition was triggered.**
+
+## Phase 4 — Solid-State Process Template — NOT STARTED
+
+- [ ] `RouteFamily` (single `ConventionalSolidState` variant, AGENTS.md §13)
+- [ ] `ProcessStep` enum and the method/purpose sub-enums it references
+      (`MixingMethod`, `GrindingMethod`, `FormingMethod`, `HeatingPurpose`,
+      `CoolingMode`, `CharacterizationMethod`) — variants aren't given
+      verbatim in AGENTS.md, so these need deliberate, minimal design
+      rather than transcription
+- [ ] `Atmosphere` (given verbatim in AGENTS.md §12) and `StepRequirement`
+      (given verbatim in AGENTS.md §11)
+- [ ] unresolved-condition handling — a step with unknown conditions is
+      `StepRequirement::Unresolved`, never silently dropped (AGENTS.md §11)
+- [ ] basic evidence attachment — first real use of `EvidenceKind`/
+      `PlanningEvidence` (AGENTS.md §7), not yet introduced in Phases 1-3
+- [ ] warnings
+
+## Phase 5–9
 
 Not started. Will be filled in with the same DONE/NOT STARTED tracking
 style as each phase begins; see AGENTS.md §26 for phase content and §29 for
