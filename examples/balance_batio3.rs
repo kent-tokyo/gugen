@@ -5,11 +5,17 @@
 
 use gugen::{Composition, Element, balance};
 
+/// `Composition` iterates by element symbol (alphabetical `BTreeMap`
+/// order), not conventional chemical-formula order -- concatenating
+/// symbols+amounts directly would print something that looks like a
+/// formula but isn't one (e.g. `O2Ti1` for TiO2). Rendered as explicit
+/// element:amount pairs instead, same convention as `src/bin/gugen.rs`.
 fn formula(composition: &Composition) -> String {
     composition
         .iter()
-        .map(|(element, amount)| format!("{}{}", element.symbol(), amount))
-        .collect()
+        .map(|(element, amount)| format!("{}:{amount}", element.symbol()))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn main() -> Result<(), gugen::GugenError> {

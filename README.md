@@ -58,7 +58,7 @@ let reactions = balance(&[bao, tio2], &[batio3])?;
 Output (`cargo run --example balance_batio3`):
 
 ```
-1 Ba1O1 + 1 O2Ti1 -> 1 Ba1O3Ti1
+1 Ba:1, O:1 + 1 O:2, Ti:1 -> 1 Ba:1, O:3, Ti:1
 ```
 
 ### Bounded precursor-set search

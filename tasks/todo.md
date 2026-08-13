@@ -647,7 +647,15 @@ place since Phase 1 -- not a new blocker.
       `O2Ti` for TiO2: chemically wrong-looking output from a tool whose
       whole premise is not fabricating things that look authoritative.
       Caught by actually reading the CLI's own real output during manual
-      testing, not by a spec requirement.
+      testing, not by a spec requirement. A second advisor pass after the
+      first commit found the identical bug pre-existing in
+      `examples/balance_batio3.rs`'s own `formula()` helper -- the
+      README-example source AGENTS.md §20 requires output to be "copied
+      verbatim from running" (per that file's own doc comment). Fixed the
+      same way and both README/README_ja code blocks re-synced to the
+      corrected real output (`1 Ba:1, O:1 + 1 O:2, Ti:1 -> 1 Ba:1, O:3,
+      Ti:1`), landed as a small follow-up commit rather than left for
+      Phase 9 since it directly contradicted the fix just committed.
 - [x] Real bug found and fixed via advisor review before committing (a
       Phase 3 correctness bug, not a Phase 7 one -- surfaced only now
       because `gugen plan`'s CLI output is the first place anyone actually
