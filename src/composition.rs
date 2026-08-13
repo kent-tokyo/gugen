@@ -19,7 +19,9 @@ pub const ELEMENT_SYMBOLS: [&str; 118] = [
 
 /// A validated element symbol. Construction is the only way to get one, so
 /// every `Element` in the crate is guaranteed to be a real periodic-table
-/// symbol.
+/// symbol. Matching is case-sensitive (`"Co"` cobalt vs `"CO"`, which is not
+/// a valid symbol at all) — a catalog or fixture file using non-standard
+/// casing will fail to parse rather than being silently reinterpreted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Element(&'static str);
 
@@ -85,7 +87,11 @@ impl Composition {
                     amount,
                 });
             }
-            map.insert(element, amount);
+            if map.insert(element, amount).is_some() {
+                return Err(GugenError::DuplicateElement {
+                    element: element.to_string(),
+                });
+            }
         }
         if map.is_empty() {
             return Err(GugenError::EmptyComposition);
@@ -130,8 +136,33 @@ impl<'de> serde::Deserialize<'de> for Composition {
     where
         D: serde::Deserializer<'de>,
     {
-        let map = BTreeMap::<Element, f64>::deserialize(deserializer)?;
-        Composition::new(map).map_err(serde::de::Error::custom)
+        // Deserializing straight into a `BTreeMap<Element, f64>` would let
+        // serde_json silently merge duplicate JSON object keys (last value
+        // wins) before `Composition::new`'s duplicate check ever runs. A
+        // manual visitor collects raw (possibly-duplicate) entries first so
+        // duplicates are caught, not merged.
+        struct CompositionVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for CompositionVisitor {
+            type Value = Composition;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("a map of element symbol to positive finite amount")
+            }
+
+            fn visit_map<A>(self, mut map: A) -> std::result::Result<Self::Value, A::Error>
+            where
+                A: serde::de::MapAccess<'de>,
+            {
+                let mut entries = Vec::new();
+                while let Some(entry) = map.next_entry::<Element, f64>()? {
+                    entries.push(entry);
+                }
+                Composition::new(entries).map_err(serde::de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_map(CompositionVisitor)
     }
 }
 
@@ -142,6 +173,25 @@ mod tests {
     #[test]
     fn rejects_unknown_symbol() {
         assert!(Element::new("Xx").is_err());
+    }
+
+    #[test]
+    fn symbol_matching_is_case_sensitive() {
+        assert!(Element::new("Co").is_ok()); // cobalt
+        assert!(Element::new("CO").is_err()); // not a symbol (would read as C + O)
+        assert!(Element::new("co").is_err());
+    }
+
+    #[test]
+    fn rejects_duplicate_element() {
+        let ba = Element::new("Ba").unwrap();
+        let err = Composition::new([(ba, 1.0), (ba, 2.0)]).unwrap_err();
+        assert_eq!(
+            err,
+            GugenError::DuplicateElement {
+                element: "Ba".to_string()
+            }
+        );
     }
 
     #[test]

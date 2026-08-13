@@ -68,3 +68,12 @@ fn negative_element_amount_is_rejected_on_deserialize() {
     let result: Result<Composition, _> = serde_json::from_str(bad);
     assert!(result.is_err());
 }
+
+#[test]
+fn duplicate_json_key_is_rejected_rather_than_silently_merged() {
+    // A naive `BTreeMap<Element, f64>::deserialize` would silently keep the
+    // last "Ba" value here; Composition's manual visitor must not.
+    let bad = r#"{"Ba": 1.0, "Ba": 2.0, "Ti": 1.0, "O": 3.0}"#;
+    let result: Result<Composition, _> = serde_json::from_str(bad);
+    assert!(result.is_err());
+}

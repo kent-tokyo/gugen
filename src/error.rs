@@ -17,6 +17,8 @@ pub enum GugenError {
     InvalidElementSymbol(String),
     #[error("amount for element {element} must be finite and > 0, got {amount}")]
     NonPositiveAmount { element: String, amount: f64 },
+    #[error("element {element} was supplied more than once in the same composition")]
+    DuplicateElement { element: String },
     #[error("reaction species coefficients must be > 0")]
     ZeroCoefficient,
     #[error("a reaction needs at least one reactant and one product")]
