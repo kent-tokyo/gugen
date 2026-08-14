@@ -1347,3 +1347,274 @@ suites), `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features
 `wasm32-unknown-unknown` checks, `cargo audit` (0 vulnerabilities),
 `examples/balance_batio3`/`examples/benchmark_report` re-run and diffed
 against checked-in output.
+
+## Phase 11 — Large-Scale Blind Benchmark — DONE (2026-08-14)
+
+**Goal** (per `/Users/k_tanabe/.claude/plans/typed-sparking-storm.md`):
+close the "検証・科学的信頼性" competitive-evaluation gap with a real,
+much larger holdout measurement, kept strictly separate from Phase 8's/
+Phase 10's curated data, using the same licensed Kononova et al. 2019
+corpus at a different trust tier (mined/filtered, not hand-verified).
+
+### §28 report — wrong-provenance corpus, caught before commit
+
+判明した事実 (facts found): while developing `benchmarks/fetch_kononova.py`
+against a cached local copy (`--local`, added purely for dev-iteration
+speed against the 91MB live download), the script was written assuming
+the dataset's JSON top level is `{"reactions": [...], "release_date":
+...}` with 30,031 entries — matching that cached copy exactly. Before
+committing, the plan's own verification discipline called for running the
+*live* (non-`--local`) path at least once; doing so failed immediately
+with a `TypeError`, because the actual dataset hosted at the officially-
+cited figshare DOI (9722159, `solid-state_dataset_2019-06-27_upd.json`,
+the exact file Phase 8 license-checked as CC BY 4.0 via the figshare API)
+is a **bare JSON list of 19,488 reactions**, not a dict, and not 30,031
+entries. Tracing the cached file's origin through this session's own tool
+history found it: an earlier session downloaded it not from figshare at
+all, but from `https://raw.githubusercontent.com/CederGroupHub/
+text-mined-synthesis_public/master/solid-state_dataset_2019-12-03.json.xz`
+— the same research group's GitHub repo, but a **different, later
+snapshot** (2019-12-03 vs. figshare's 2019-06-27 release) with a
+different top-level shape and 30,031 records. `gh api repos/
+CederGroupHub/text-mined-synthesis_public` reports `"license": null` —
+this repo has no detected license at all. Phase 8's CC BY 4.0 verification
+was real and correct, but for a *different file* than the one actually
+used to derive Phase 8's citation counts, Phase 10's coverage
+percentages, and (until this fix) Phase 11's entire corpus.
+
+Recounting `tests/validation.rs`'s specific DOI-attestation claims
+directly against the correct, licensed 19,488-reaction corpus:
+
+| Route | `tests/validation.rs` claims | Correct corpus |
+|---|---|---|
+| LaAlO3 (La2O3+Al2O3) | 19 independent DOIs | 10 |
+| MgAl2O4 (MgO+Al2O3) | 20 independent DOIs | 16 |
+| Zn3(PO4)2 (ZnO+P2O5) | 2 independent DOIs | **0** |
+| BaTiO3 (BaCO3+TiO2) | 88 independent DOIs | 83 |
+| (dataset size) | "the full 30,031-reaction dataset" | 19,488 |
+| (binary oxides) | "zero simple-binary-oxide-target entries" | still zero — holds |
+
+Every representative DOI Phase 8 actually cites (`10.1149/2.053405jes`,
+`10.1007/s11663-014-0207-8`, `10.1111/j.1551-2916.2006.01172.x`) is
+present in the correct corpus and still reports the same route — the
+fixtures are not fabricated, only the attestation *counts* are wrong.
+Zn3(PO4)2 is the one qualitative discrepancy: its representative DOI
+(`10.1016/j.jmmm.2015.06.001`) is present in the correct corpus exactly
+once, reporting target `Sm2NixZn40P116-2*xO333-4*x` — a complex doped
+formula, not `Zn3(PO4)2`/`Zn3P2O8` at all. The wrong-provenance (December
+2019) file's re-run of the same text-mining pipeline against the same
+paper produced a *different*, oversimplified extraction (`Zn3P2O8`) that
+does not appear in the licensed data. This independently corroborates
+Phase 10's separate finding (`src/literature_conditions.rs`'s doc
+comment) that this DOI's actual paper is a Sm-doped zinc-phosphate glass
+study, not a `Zn3(PO4)2` synthesis — Phase 10 already worked around it
+with a different, correctly-verified source for condition data, but
+Phase 8's *original* fixture (used for precursor-set recovery, a
+different claim) still cites the DOI for a route the licensed corpus does
+not actually attest to at all.
+
+Phase 10's `tasks/todo.md` entry states ~80%/70%/44% temperature/time/
+atmosphere coverage figures measured against "the already-licensed
+Kononova dataset" — these were also measured against the wrong-provenance
+file (same cached copy) and have not been recounted against the correct
+one as part of this report.
+
+なぜ問題か (why this matters): a merged, published crate (`gugen` v0.1.0
+on crates.io) contains a test file (`tests/validation.rs`) with citation
+counts that do not match the corpus they claim to summarize, and a
+dataset-size claim ("30,031-reaction dataset") that is factually wrong.
+This is exactly the class of unsourced/unverified numeric claim AGENTS.md
+§21.3/§27 exist to prevent — the individual fixtures were genuinely
+verified against real papers, but the *aggregate* framing around them
+was not independently re-checked against the dataset it names, and
+turned out to rest on an unlicensed, differently-processed file.
+
+最小解決案 (minimal fix): what this phase already did — fix
+`fetch_kononova.py` to use the correct dataset shape and count
+(19,488), rebuild Phase 11's own corpus and every downstream artifact
+from it, and document the finding without silently correcting
+`tests/validation.rs`'s or Phase 10's already-published numbers in the
+same commit.
+
+代替案 (alternatives): (a) also rewrite `tests/validation.rs`'s citation
+counts and module doc in this same phase; rejected — deciding what the
+Zn3(PO4)2 fixture should even claim, given its cited route has zero
+attestation in the licensed corpus, is a fixture-design question that
+belongs to whoever owns Phase 8's fixtures, not a number swap to make
+unilaterally while fixing an unrelated phase's corpus script. (b) attempt
+to independently verify whether the GitHub repo's data is *also* covered
+by the paper's CC BY 4.0 grant despite no repo-level license file (e.g.
+by contacting the maintainers, `cedergroup-ml-team@lbl.gov`, per the repo
+README) and keep using the larger December 2019 snapshot if so; rejected
+for this phase — slow, uncertain, and unnecessary, since the officially-
+cited figshare file is already verified, sufficient, and the paper's own
+canonical distribution point.
+
+推奨案 (recommendation): ship Phase 11 against the correct, verified
+corpus (done); recommend a small, clearly-labeled follow-up correcting
+`tests/validation.rs`'s citation text and module doc comment, owned as
+its own decision rather than bundled here.
+
+作業量 (effort): this fix, ~1 hour (script correction, corpus rebuild,
+report regeneration, this write-up). A `tests/validation.rs` correction
+would be small in size but needs a real decision about the Zn3(PO4)2
+fixture's framing, not just a number edit.
+
+影響範囲 (impact): `tests/validation.rs`'s citation text (5 DOI-count
+claims, 1 dataset-size claim) and module doc comment; Phase 10's
+`tasks/todo.md` entry's coverage percentages (unverified against the
+correct corpus, not recounted here). Phase 11's own corpus, tests, and
+report are unaffected by this report — they were rebuilt against the
+correct data before this commit.
+
+安全に継続できる作業 (safe to continue): Phase 11 exactly as rebuilt in
+this commit. Phases 12/13 are unaffected (neither touches this corpus).
+
+---
+
+**Corpus.** New `benchmarks/` directory (AGENTS.md §23: comparison/corpus
+tooling isolated from the crate's own production dependency tree — no new
+Cargo dependency, Python is dev-only tooling).
+`benchmarks/fetch_kononova.py`: fetches the same figshare-hosted dataset
+Phase 8 licensed-checked (re-verifies `license.name == "CC BY 4.0"` live
+against the figshare API on *every* run, not cached from a prior check),
+also asserts the reaction count is the expected 19,488 (a real dataset
+change would fail loudly, not silently reshape the sample — this exact
+assertion, run for real rather than trusted, is what caught the §28
+finding above). Supports `--local <path>` for dev iteration against an
+already-downloaded copy (the license check still runs live even with
+`--local`); its docstring now states plainly that the local copy must be
+byte-identical to this script's own download, after the §28 finding
+showed what happens when that invariant is silently violated.
+
+Filter, applied before ever looking at gugen's results on this data
+(AGENTS.md §27): target and every precursor must be a plain, non-doped,
+single-composition-entry formula with positive numeric element amounts
+(`Composition::new`-representable); 1-4 distinct precursors after
+dedup (gugen's own `SearchBudget::default().max_precursors_per_plan`);
+and — the leakage-prevention mechanism — excludes any `(target,
+precursor-set)` pair matched by **normalized elemental ratio**, not DOI
+or formula string, against the 6 routes already used by
+`tests/validation.rs`'s 5 fixtures and Phase 10's curated records
+(Zn3(PO4)2 appears twice: the validation.rs route and Phase 10's
+different substitute route). DOI-only exclusion was considered and
+rejected: several of these routes are independently reported by dozens of
+DOIs in this same corpus (LaAlO3: 10, MgAl2O4: 16, BaTiO3: 83, recounted
+directly against the correct corpus — see the §28 report above for why
+these differ from `tests/validation.rs`'s own text) — excluding only the
+one "representative" DOI per route would have left near-duplicate leaked
+entries in the holdout set. The Zn3(PO4)2/ZnO+P2O5 exclusion entry
+matches zero rows in the correct corpus (that route isn't attested at
+all, per the §28 report) — kept anyway, since excluding a route that
+happens not to appear is harmless and documents the intent. Ratio
+normalization also correctly matches a route reported at a different
+formula-unit scale than gugen's own fixtures happen to use (gugen's own
+`Composition::PartialEq` is exact-scale only, a documented ROADMAP.md
+gap — the benchmark's own exclusion logic is deliberately more robust
+than that).
+
+Result: 19,488 raw reactions -> 9,081 unparseable target, 954
+unparseable precursor, 408 zero-or-too-many-precursors, 109 leakage
+exclusions -> 8,936 eligible -> deterministic seeded (20260814)
+downsample to 1,500, written to
+`benchmarks/data/kononova_sample.jsonl` (473KB, checked file size before
+committing per the plan's explicit ask — well within a reasonable repo
+addition) and `benchmarks/data/ATTRIBUTION.md` (citation, license,
+exclusion-count breakdown, both regenerated by re-running the script, not
+hand-edited).
+
+**Tests** (`tests/large_scale_benchmark.rs`, cheap, part of `cargo test`):
+corpus loads at the expected row count; zero holdout rows exactly match
+an already-curated route (Rust-side exact-`Composition`-equality
+re-check, a lower-fidelity second guard alongside Python's authoritative
+ratio-based one); every row plans without panicking or returning `Err`
+(AGENTS.md §25) via `Planner::offline_minimal`, with a <5%-unparseable
+budget as a regression guard on the Python filter itself.
+
+**Full metrics** (`examples/large_scale_benchmark.rs` ->
+`docs/large_scale_benchmark_report.md`, regenerated and diffed
+byte-identical before commit): a fixed decoy pool (the 60 most frequent
+precursor formulas *in this sample itself*, not hand-picked) is added to
+every row's catalog, filtered to share >=1 element with that row's target
+and capped at 8 per row — without this, "recovery" would be nearly
+vacuous for the many rows with only one true precursor. The cap (8) was
+chosen by directly measuring `RejectionCode::SearchBudgetExhausted`
+against this sample rather than assumed; measured result: 3/1500 rows
+exhausted `SearchBudget::default()`'s `max_precursor_sets: 10_000`,
+confirming 8 is safely below the point where decoy-driven combinatorics
+would start masking genuine chemistry rejections.
+
+**Real finding, corrected mid-implementation rather than left wrong in
+the checked-in report**: the plan document predicted
+`RejectionCode::UnsupportedByproductRequired` would dominate rejections
+at this scale. The first real run showed `MissingTargetElement`
+dominating instead, at 95.4% of all 758,233 rejected candidates versus
+`UnsupportedByproductRequired`'s 4.4% — the opposite of what was
+written into the report's first draft before actually running it.
+Investigated rather than silently reworded: `src/precursor.rs`'s
+`search_precursor_sets` checks element coverage *before* any byproduct/
+balance check, short-circuiting with `continue` on failure (confirmed by
+reading the function directly, not assumed) — so most of the many small
+decoy-augmented combinations get rejected for not covering the target's
+exact elements before a byproduct check is ever reached for them. This
+is a mechanical artifact of decoy augmentation, not a chemistry finding.
+The originally-expected finding *does* hold once this noise is factored
+out: among the 36,887 combinations that passed the element-coverage gate
+(byproduct + no-balance + duplicate + accepted-and-kept),
+`UnsupportedByproductRequired` accounts for 90.2% of what's left — the
+byproduct allow-list (`CO2`/`H2O`/`O2` only) genuinely is the dominant
+blocker once combinatorial noise is removed, exactly as the plan
+anticipated, just not visible in the naive "share of all rejections"
+framing. Both the naive and coverage-conditional figures are reported
+in `docs/large_scale_benchmark_report.md`, not just the flattering one.
+Not widened reactively either way (AGENTS.md §27).
+
+**Other measured findings**: 1154/1500 rows produced >=1 plan; 1036/1500
+recovered the cited route exactly; 263/1500 found a genuine additional
+valid alternative route via the decoy pool; element-balance exactness
+1659/1659 (100%, re-verified against each plan's own reaction, not
+assumed); condition-resolution coverage split by Phase 10 overlap: 8/8
+plans resolved among the 6 holdout rows whose target matches one of
+Phase 10's 5 curated targets via a *different* precursor route (correctly
+scoped `EvidenceScope::SimilarMaterial`, not `ExactTarget` — proof that
+Phase 10's coverage generalizes across routes to a *known* target, not
+evidence of unseen-target prediction), versus 0/1651 among the remaining
+1494 rows; deterministic reproducibility confirmed by replanning the
+entire 1500-row sample twice and comparing full report equality; planning
+throughput stayed under 10ms/call even with decoy-augmented catalogs.
+
+**Non-goals, explicit**: no widening of the curated byproduct allow-list
+in response to this benchmark's own rejection numbers (AGENTS.md §27 —
+would need independent literature grounding per species, not benchmark
+pressure); no temperature MAE against this corpus's own reported
+conditions (deliberately not embedded in the JSONL at all, to remove the
+temptation — gugen still has no predicted temperature for any of these
+targets, so there is nothing non-vacuous to score); no re-sampling or
+seed-tuning after seeing gugen's results on the first draw.
+
+**One §28-adjacent condition was found and investigated, not silently
+worked around** — see the report at the top of this section. No other
+stop-and-report condition triggered: no package-name collision, no
+unresolved API dependency, no public schema breaking change (both new
+files are additive-only: `examples/large_scale_benchmark.rs` and
+`tests/large_scale_benchmark.rs` are new binaries, not changes to the
+library's public API surface). The dataset's actual figshare-hosted
+license is unchanged from Phase 8's original CC BY 4.0 finding; the issue
+was that a different file had been used, not that the license of the
+correct file was ever in doubt.
+
+**Locally verified, all green**: `cargo fmt --all -- --check`, `cargo
+clippy --workspace --all-targets --all-features -- -D warnings`, `cargo
+test --workspace --all-features` (110 tests: 63 lib + 10 bin + 6
+adversarial + 4 json_roundtrip + 6 literature_conditions + 3
+large_scale_benchmark + 6 metamorphic + 7 provider_failures + 5
+validation), `cargo test --workspace --no-default-features` and
+`--no-default-features --features mikiwame`, `RUSTDOCFLAGS="-D warnings"
+cargo doc --workspace --all-features --no-deps`, `cargo build --features
+serde,clap --bin gugen`, both `wasm32-unknown-unknown` checks, `cargo
+audit`, `examples/benchmark_report`/`examples/large_scale_benchmark`
+re-run and diffed byte-identical against checked-in output (the latter
+diffed twice in a row to also confirm its own reproducibility claim
+holds outside the report's own re-run-internally check) — all re-run
+again after the corpus rebuild described in the §28 report, not just
+once before it.
