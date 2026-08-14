@@ -1,13 +1,17 @@
 # Changelog
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
-gugen has not reached a tagged release yet — everything below is
-unreleased, in-progress v0.1 work on the `phase0/architecture-and-scope`
-branch (draft PR: https://github.com/kent-tokyo/gugen/pull/1). See
-[`tasks/todo.md`](tasks/todo.md) for full phase-by-phase detail behind
+See [`tasks/todo.md`](tasks/todo.md) for full phase-by-phase detail behind
 each entry.
 
 ## [Unreleased]
+
+## [0.1.0] - 2026-08-14
+
+Initial release. Published to [crates.io](https://crates.io/crates/gugen)
+from `main` (PR [#1](https://github.com/kent-tokyo/gugen/pull/1), merge
+commit `5419fd1`) via the manual-dispatch
+[`publish.yml`](.github/workflows/publish.yml) workflow.
 
 ### Added
 
