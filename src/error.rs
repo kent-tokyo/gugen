@@ -11,6 +11,8 @@ pub enum GugenError {
     NonFiniteValue { field: &'static str, value: f64 },
     #[error("{field} must be non-negative, got {value}")]
     NegativeMagnitude { field: &'static str, value: f64 },
+    #[error("{field} must be > 0, got {value}")]
+    NonPositiveMagnitude { field: &'static str, value: f64 },
     #[error("composition must contain at least one element")]
     EmptyComposition,
     #[error("'{0}' is not a recognized element symbol")]

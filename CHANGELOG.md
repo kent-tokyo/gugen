@@ -62,6 +62,35 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   confirmed by `cargo semver-checks --baseline-rev v0.3.0` (fails
   `function_parameter_count_changed`, correctly requiring a new minor
   version before this can ship).
+- **Phase 19P -- finite-temperature thermodynamics for gas-free,
+  closed solid-phase systems.** New `SolidThermodynamicEntry` (a
+  caller-supplied 0 K formation enthalpy + crystal-structure volume,
+  plus a `ThermodynamicDatasetIdentity` naming its dataset/release/
+  correction-scheme), `Kelvin` (validated to `[300, 1800]` K, the range
+  Bartel et al. 2018 actually validated their SISSO Gibbs-energy
+  descriptor against), and pure functions
+  (`relative_solid_gibbs_ev_per_atom`, `balanced_reaction_delta_ev_per_atom`,
+  `decomposition_margin_ev_per_atom`) estimating finite-temperature
+  Gibbs-energy quantities from that data. Deliberately does not
+  bundle any elemental-reference or gas-phase thermochemical data:
+  every quantity computed is a same-total-composition comparison
+  (a balanced reaction, or a decomposition margin against a
+  caller-named alternative assemblage), and the elemental-reference
+  term pymatgen's own equivalent implementation subtracts cancels
+  exactly for any such comparison (verified both numerically, via
+  synthetic pymatgen structures, and geometrically). New
+  `ThermodynamicSelectivityAssessment`/`DecompositionComparison` types
+  hold these raw results -- **not connected to `score_plan`, ranking,
+  or `Score01` in any way**; `thermodynamic_support` stays `None`
+  exactly as before, checked by a dedicated permanent regression test
+  (`tests/thermodynamics_ranking_invariance.rs`). `CompetingPhase`
+  (`reaction.rs`) is deliberately untouched -- this is new, separate
+  API, not an extension of it.
+- **Breaking**: `GugenError::NonPositiveMagnitude { field, value }` is
+  a new variant (`GugenError` has no `#[non_exhaustive]`, so this is a
+  genuine breaking addition, confirmed by `cargo semver-checks
+  --baseline-rev v0.3.0`). Returned by `SolidThermodynamicEntry::new`
+  when `volume_angstrom3_per_atom` is not strictly positive.
 
 ### Known limitations
 
@@ -71,6 +100,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   conservative reading, since `TemperatureRange`/`DurationRange`/
   `RampRateRange` have no overlap/subsumption semantics defined and
   designing one was explicitly out of scope for this phase.
+- **Phase 19P**: gas-releasing/consuming reactions (e.g. any
+  carbonate-decomposition route) are entirely out of scope -- they
+  abstain automatically (a caller never has a `SolidThermodynamicEntry`
+  for a gas species, since that type requires a crystal-structure
+  volume), not via any gas-classification logic in this module. A
+  future phase would need its own gas chemical-potential data source
+  and model, deliberately not started here. No `Score01`/ranking
+  connection of any kind -- unlocking `thermodynamic_support` requires
+  an independently-calibrated eV/atom-to-`Score01` mapping this phase
+  does not attempt. `decomposition_margin_ev_per_atom` compares against
+  one caller-named alternative assemblage, never an
+  automatically-searched "best" decomposition (no hull/combinatorial
+  search) -- a deliberate scope narrowing from this phase's original
+  sketch, since a search would require gugen itself to decide which
+  candidates to enumerate, and a margin computed that way could be
+  misread as an absolute stability claim rather than "no cheaper
+  decomposition among what this caller supplied." Polymorph phase
+  transitions are not predicted -- where more than one
+  `SolidThermodynamicEntry` shares a composition, the lowest-0K-energy
+  one is always used (order-independent, matching
+  `MaterialsProjectSnapshotProvider`'s existing convention), never the
+  lowest finite-temperature one, which the SISSO descriptor's
+  volume-only structural input cannot reliably predict (Bartel et al.
+  2018's own stated limitation).
 
 ## [0.3.0] - 2026-08-14
 
