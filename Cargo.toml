@@ -8,7 +8,7 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/kent-tokyo/gugen"
 documentation = "https://docs.rs/gugen"
 keywords = ["chemistry", "materials-science", "synthesis", "planning"]
-categories = ["science", "command-line-utilities", "algorithms"]
+categories = ["science::computational-chemistry", "command-line-utilities", "algorithms"]
 
 [package.metadata.docs.rs]
 # default = [] hides most public types (serde impls, the mikiwame adapter)

@@ -14,10 +14,10 @@
 （evidence）・仮定（assumption）・未確定条件（unresolved）を明示したまま、
 機械可読な形で返します。実験の成功を保証するものではありません。
 
-> **ステータス：v0.2.0 公開済み**、v0.3.0リリース準備中。
+> **ステータス：v0.3.0 公開済み。**
 > [crates.io](https://crates.io/crates/gugen) /
 > [docs.rs](https://docs.rs/gugen) /
-> [v0.2.0リリース](https://github.com/kent-tokyo/gugen/releases/tag/v0.2.0)。
+> [v0.3.0リリース](https://github.com/kent-tokyo/gugen/releases/tag/v0.3.0)。
 > v0.3.0では、根拠を保持したroute-family適合性判定（`route_suitability`）、
 > 保守的な除外フィルタリング（`not_recommended`）、オプションの
 > `chematic-crystal`–`mikiwame`構造ブリッジを追加しました -- 未較正の根拠
