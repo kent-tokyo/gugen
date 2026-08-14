@@ -397,3 +397,61 @@ fn both_optional_providers_unavailable_still_produces_a_full_report() {
         );
     }
 }
+
+/// Phase 13: `competing_phases` is a second, independent failure point on
+/// `ThermodynamicProvider` -- `reaction_energy` succeeding (or being
+/// skipped) must not mask a `competing_phases` failure, and vice versa.
+/// `AlwaysUnavailable` above doesn't override `competing_phases`, so it
+/// only ever exercises the trait's default `Ok(Vec::new())` path; this
+/// provider is the one that actually fails it.
+struct CompetingPhasesFails;
+impl ThermodynamicProvider for CompetingPhasesFails {
+    fn reaction_energy(
+        &self,
+        _reaction: &BalancedReaction,
+        _conditions: &ThermodynamicConditions,
+    ) -> std::result::Result<Option<ReactionEnergy>, ProviderError> {
+        Ok(None)
+    }
+
+    fn competing_phases(
+        &self,
+        _target: &gugen::Composition,
+    ) -> std::result::Result<Vec<gugen::CompetingPhase>, ProviderError> {
+        Err(ProviderError::Unavailable(
+            "competing-phase lookup offline".to_string(),
+        ))
+    }
+}
+
+#[test]
+fn a_failing_competing_phases_lookup_degrades_to_a_warning_not_a_failure() {
+    let report = Planner::new(
+        two_route_catalog(),
+        NoPrecedents,
+        CompetingPhasesFails,
+        PlanningConfig::default(),
+    )
+    .plan(&batio3_target(), "2026-08-14T00:00:00Z")
+    .unwrap();
+
+    assert!(!report.plans.is_empty());
+    for plan in &report.plans {
+        assert!(
+            plan.warnings
+                .iter()
+                .any(|w| w.message.contains("competing-phase lookup offline")),
+            "{:?}",
+            plan.warnings
+        );
+        assert!(
+            !plan
+                .evidence
+                .iter()
+                .any(|e| e.kind == EvidenceKind::ThermodynamicData),
+            "reaction_energy returned Ok(None) and competing_phases failed -- no \
+            thermodynamic evidence should have been attached: {:?}",
+            plan.evidence
+        );
+    }
+}

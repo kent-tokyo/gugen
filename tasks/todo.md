@@ -1811,3 +1811,207 @@ leaving it as an unstated implication of `step_bounds`.
 
 **Shipped**: branch `phase12/mechanochemical-route-family` → PR #5 → CI
 green → squash-merged to `main` at `296ba2c`.
+
+## Phase 13 — ThermodynamicProvider Adapter Boundary — DONE (2026-08-14)
+
+**Goal** (per `/Users/k_tanabe/.claude/plans/typed-sparking-storm.md`):
+address the evaluation's "reaction-network/Materials Projectとの連携" gap
+without compromising gugen's deterministic, offline-first core design (no
+network call inside library code — the same spirit as AGENTS.md §25's "no
+system clock reads inside library code" rule, generalized to network
+access). "reaction-network" is a Python/pymatgen package and cannot be a
+direct Rust dependency; Materials Project's REST API needs a personal API
+key not available this session — confirmed decision from the plan: trait +
+adapter + a small synthetic fixture only, no live fetch.
+
+**Non-breaking, by design, unlike Phase 12**: `ThermodynamicProvider`
+already has one required method (`reaction_energy`). Adding a second
+required method would break every existing implementor (this crate's own
+`tests/provider_failures.rs` fixtures, any downstream user's own impl).
+`competing_phases` is a **default method** (`Ok(Vec::new())` — "no data"),
+confirmed object-safe and confirmed not to break the trait's existing
+`Box<dyn ThermodynamicProvider>` usage in `Planner`. This is the one
+non-breaking change among Phases 10-13 (each of the other three changed a
+public signature or struct shape), so it does not add to the pending
+0.2.0 breaking-change list.
+
+**New type — `CompetingPhase`** (`src/reaction.rs`): a formation energy
+for a phase that might compete with a target for the same elements.
+Mirrors `ReactionEnergy`'s own pattern exactly — a private, `require_finite`
+-validated `f64` field plus a hand-written `Deserialize` impl (so a bad
+JSON value fails at deserialize time via the same validation, not only if
+later constructed through `new`), `Serialize` auto-derived (serializing
+already-validated data is always safe). Added as a **sibling** type to
+`ReactionEnergy`, not a new field on it — `ReactionEnergy`'s own doc
+comment explicitly forbids growing unrelated "likelihood" fields onto
+*that* type (AGENTS.md §4.3's required separation), which says nothing
+about a different type for a genuinely different quantity.
+
+**Wiring — `src/planner.rs`**: `competing_phases` is called inside the
+same `if let Some(provider) = &self.thermodynamic_provider` block that
+already calls `reaction_energy`, immediately after it. A non-empty result
+becomes one more `PlanningEvidence { kind: ThermodynamicData, .. }` with
+an explicit "does not account for kinetics, particle size, or atmosphere,
+and is not converted into a selectivity judgment (AGENTS.md §4.3)"
+limitation — `EvidenceStrength::Weak` (weaker than `reaction_energy`'s own
+`Moderate` entry, since "some other phase near this composition has a
+known energy" says less about *this specific reaction* than a direct
+reaction-energy calculation does). An `Err` degrades to a `PlanningWarning`
+(`WarningSeverity::Info`), same pattern as every other optional-provider
+failure (AGENTS.md §21.5) — `AlwaysUnavailable`/`PartialCoverageProvider`
+in `tests/provider_failures.rs` don't override `competing_phases`, so they
+exercise the trait's *default* `Ok(Vec::new())` path for free (all 7 of
+that file's pre-existing tests pass unmodified), but that only proves the
+default doesn't break anything, not that a real `competing_phases` failure
+degrades correctly. A dedicated `CompetingPhasesFails` provider and
+`a_failing_competing_phases_lookup_degrades_to_a_warning_not_a_failure`
+were added to actually exercise that path (a pre-commit review gap, see
+below).
+
+**Adapter — new `src/materials_project_adapter.rs`**, feature-gated
+(`materials_project = []` — zero new dependencies, confirmed: this
+adapter takes only pre-fetched, caller-supplied `CompetingPhase` entries,
+so there is no HTTP client, no API key field, nothing to fetch with even
+if the code wanted to). Reused `CompetingPhase` directly as the snapshot's
+entry type rather than introducing a separate `MpEntry` wrapper the plan
+had sketched — same shape, same validation, avoids a duplicate type for
+no behavioral difference (YAGNI).
+
+- `MaterialsProjectSnapshotProvider::from_entries(entries: Vec<CompetingPhase>)`.
+- `reaction_energy`: ΔE = (Σ product formula-unit energies) − (Σ reactant
+  formula-unit energies), each species weighted by its
+  `ReactionSpecies::coefficient`, normalized per atom of the reactant
+  side's total atom count (equal to the product side's, by element
+  conservation, for any reaction `balance.rs` actually produced).
+  Documented in the function's own doc comment. Returns `Ok(None)` — never
+  a partial sum — the instant any participating species' exact
+  `Composition` isn't in the snapshot; proven both at the unit level
+  (`reaction_energy_returns_none_not_a_partial_sum_when_a_species_is_missing`)
+  and end to end through `Planner::plan`
+  (`tests/materials_project_adapter.rs::a_snapshot_missing_one_species_produces_no_reaction_energy_evidence`).
+  One hand-checked-arithmetic unit test
+  (`reaction_energy_computes_the_hand_checked_delta_for_a_two_species_reaction`):
+  2 FeO → Fe2O2 (a trivial, genuinely element-balanced two-species
+  reaction), reactant total −8.0 eV / 4 atoms, product total −12.0 eV,
+  Δ = −4.0 eV / 4 atoms = −1.0 eV/atom — matches the test's assertion
+  exactly, not approximately.
+- `competing_phases`: every snapshot entry sharing ≥1 element with the
+  target, excluding an entry whose composition exactly equals the target
+  itself (that's the target, not something competing with it).
+
+**Field-name grounding** (AGENTS.md §21.3 — no guessed JSON shape):
+verified via two independent live lookups this session (a web search
+plus a direct doc-page fetch of `mp-api`'s `SummaryRester` reference and
+the `materialsproject/mapidoc` GitHub repo) that `formula_pretty` and
+`formation_energy_per_atom` are real, current Materials Project summary-
+endpoint field names, both in eV/atom (confirmed against `energy_above_hull`'s
+documented units too, same endpoint). Did not fabricate a specific shape
+for the endpoint's `composition` dict field — the doc fetch could not
+confirm its exact structure, so `docs/integration.md`'s worked example
+stays limited to what was actually verified (`formula_pretty` +
+`formation_energy_per_atom`) and states plainly that formula→`Composition`
+conversion is the caller's job, with one hand-written (not auto-parsed)
+example for `"Fe2O3"`.
+
+**Docs updated**:
+- `docs/architecture.md`'s Provider isolation section: added the
+  clarifying sentence the plan specified — an adapter consuming
+  pre-fetched, offline external data (no network call performed by gugen
+  itself) may live in-crate, feature-gated, mirroring
+  `mikiwame_adapter.rs`'s existing shape; only a live-fetching client
+  stays out-of-crate.
+- `docs/integration.md`: new "Materials Project: pre-fetched snapshot
+  only, no live client" section mirroring the existing mikiwame section's
+  structure (what's implemented, what's deliberately not wired up, the
+  worked conversion example), plus a one-line addition to the Status
+  section explaining why no "is this published" check applies here (there
+  is nothing to fetch, so nothing to check availability of).
+- `CHANGELOG.md`: new `### Added`/`### Known limitations` entries under
+  `[Unreleased]`, same technical depth as Phase 10-12's entries.
+
+**Known limitations, documented not fixed**:
+- Once Phase 12 and 13 are both configured, `reaction_energy`/
+  `competing_phases` run once per route family sharing the same accepted
+  precursor set — duplicating identical thermodynamic evidence across
+  those plans, since the underlying `BalancedReaction` doesn't depend on
+  route family. Flagged in the original plan's cross-phase notes as a
+  known, accepted inefficiency, not a blocker for either phase; still true
+  now that both are implemented.
+- `MaterialsProjectSnapshotProvider` matches species by exact `Composition`
+  equality — same convention Phase 10's
+  `InMemoryLiteratureConditionProvider` already uses, no fuzzy matching.
+
+**Pre-commit review** (advisor pass, before staging) found two real bugs
+in the adapter's semantics, not its plumbing — both fixed before commit:
+
+- `energy_for` used `.find(...)` — the *first* snapshot entry whose exact
+  `Composition` matched. A real Materials Project query snapshot can
+  legitimately contain more than one entry for the same composition
+  (distinct polymorphs, e.g. rutile vs. anatase TiO2, are different
+  `material_id`s that happen to share a formula) — `find` made
+  `reaction_energy`'s result silently depend on the caller-supplied `Vec`'s
+  ordering (AGENTS.md §21.4). Fixed: `energy_for` now takes the *lowest*
+  (most stable) formation energy among all matches — the standard
+  "most stable known phase" convention, and order-independent by
+  construction. Pinned with a new test that computes the same reaction
+  through two providers differing only in entry order and asserts equal
+  results, with the exact expected value hand-checked (not just "equal to
+  each other") so a bug that made both orderings agree on the *wrong*
+  value couldn't slip through.
+- `competing_phases`'s filter ("shares an element with the target, isn't
+  the target itself") is deliberately target-only in the trait signature,
+  but that meant a plan's own precursors and reaction byproduct — which
+  share elements with the target and aren't the target itself — got
+  reported as "competing phases" on the evidence attached to that *same*
+  plan. Calling a plan's own reaction inputs "competing" with it is a
+  false-confidence-shaped claim exactly like the ones `tests/adversarial.rs`
+  audits for. The adapter's `competing_phases` itself is left general
+  (correct behavior for a target-only trait method); the fix is in
+  `Planner::plan`, which has the specific reaction in scope: phases
+  exactly matching this reaction's own reactants/products are filtered
+  out before the evidence is attached, and the evidence statement's
+  wording says so explicitly ("excluding this plan's own precursors and
+  reaction products"). The integration test that would have caught this
+  only asserted `evidence.len() == 2` and a substring match, never the
+  actual count inside the statement — advisor review's exact ask was "run
+  it and look" — so the test itself was tightened to pin an explicit "1
+  competing phase(s)" (not 4) with a comment naming which three entries
+  must be excluded and why.
+
+Also added during this pass: a `CompetingPhasesFails` provider and
+`a_failing_competing_phases_lookup_degrades_to_a_warning_not_a_failure` in
+`tests/provider_failures.rs` (the `Err` path had no dedicated coverage —
+existing fixtures only exercised the trait's *default* `Ok(Vec::new())`);
+and two doc-comment fixes in `src/score.rs` (`PlanScoreBreakdown`'s and
+`score_plan`'s own comments both said `thermodynamic_support` is always
+`None` "because no `ThermodynamicProvider` is wired in" — no longer true
+now that one exists; reworded to state the real reason, that a resolved
+reaction energy is deliberately never converted into this score, AGENTS.md
+§4.3) and matching updates to `README.md`/`README_ja.md`'s two similar
+claims.
+
+**Locally verified, all green**: `cargo fmt --all -- --check`, `cargo
+clippy --workspace --all-targets --all-features -- -D warnings`, `cargo
+test --workspace --all-features` (120 tests: 70 lib + 10 bin + 6
+adversarial + 4 json_roundtrip + 3 large_scale_benchmark + 6
+literature_conditions + 2 materials_project_adapter + 6 metamorphic + 8
+provider_failures + 5 validation), `cargo test --workspace
+--no-default-features`, `--no-default-features --features mikiwame`, and
+`--no-default-features --features materials_project` (new combination —
+confirmed the feature compiles and its tests run with zero other optional
+features enabled), `RUSTDOCFLAGS="-D warnings" cargo doc --workspace
+--all-features --no-deps`, `cargo build --features serde,clap --bin
+gugen`, both `wasm32-unknown-unknown` checks (with/without mikiwame),
+`cargo audit`.
+
+**Version bump**: `Cargo.toml` bumped to `0.2.0` and `CHANGELOG.md`'s
+`[Unreleased]` section finalized into `[0.2.0]` as the last step of this
+phase, per the plan's own closing instruction ("After Phase 13, bump
+Cargo.toml to 0.2.0, update CHANGELOG.md's [Unreleased] into a new
+[0.2.0] section, and only then trigger the existing manual-dispatch
+publish.yml workflow — with the owner's explicit go-ahead"). **Publishing
+itself (`publish.yml`) was explicitly NOT triggered** — that step waits
+for the owner's separate, explicit go-ahead, same as v0.1.0's release.
+
+**Shipped**: branch `phase13/thermodynamic-provider-adapter` → PR → CI
+green → squash-merged to `main`.

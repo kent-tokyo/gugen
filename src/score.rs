@@ -44,14 +44,17 @@ impl<'de> serde::Deserialize<'de> for Score01 {
     }
 }
 
-/// AGENTS.md §13, verbatim. With no `ThermodynamicProvider`, most of this
-/// breakdown is structurally constant across every plan the crate can
-/// currently produce:
+/// AGENTS.md §13, verbatim. Most of this breakdown is structurally
+/// constant across every plan the crate can currently produce:
 /// `stoichiometric_validity` and `precursor_coverage` are always `1.0`
 /// (reaction balancing is exact and `search_precursor_sets` already
 /// hard-filters on full element coverage -- both are re-derived defensively
 /// here rather than assumed, but neither can discriminate between plans
-/// yet); `thermodynamic_support` is always `None`; `safety_penalty` is
+/// yet); `thermodynamic_support` is always `None` -- with no
+/// `ThermodynamicProvider` configured there's simply no data, and even
+/// with one configured (Phase 13's `MaterialsProjectSnapshotProvider`, for
+/// one) a resolved reaction energy still isn't converted into this score,
+/// deliberately (see `score_plan`'s own doc comment); `safety_penalty` is
 /// always `0.0` (no hazard data source exists -- see `manual_review_required`
 /// on [`PlanAssessment`]). `uncertainty_penalty` was always `1.0` before
 /// Phase 10 (no condition was ever resolved); with a
@@ -354,10 +357,15 @@ fn collect_unresolved(
 /// every other dimension is computed the same way regardless of route
 /// family.
 ///
-/// `thermodynamic_support` is always `None` (no `ThermodynamicProvider` is
-/// wired in yet) and is excluded from the weighted average entirely rather
-/// than treated as `0.0` (AGENTS.md §13: "missing thermodynamic dataを
-/// 自動的に失敗扱いしない").
+/// `thermodynamic_support` is always `None` -- this is not "no data source
+/// exists" (Phase 13 added one, `MaterialsProjectSnapshotProvider`) but a
+/// deliberate choice: a resolved `ReactionEnergy`/`CompetingPhase` becomes
+/// `PlanningEvidence` only, never a numeric score (AGENTS.md §4.3 keeps
+/// thermodynamic favorability separate from experimental likelihood, and
+/// no calibration data exists to justify converting eV/atom into a [0, 1]
+/// support score). `None` is excluded from the weighted average entirely
+/// rather than treated as `0.0` either way (AGENTS.md §13: "missing
+/// thermodynamic dataを自動的に失敗扱いしない").
 ///
 /// `manual_review_required` is always `true`: no hazard/safety data source
 /// exists yet (AGENTS.md §15's `PrecursorCandidate` hazard metadata isn't

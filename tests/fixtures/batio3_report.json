@@ -507,7 +507,7 @@
   "unresolved": [],
   "warnings": [],
   "provenance": {
-    "gugen_version": "0.1.0",
+    "gugen_version": "0.2.0",
     "build_identifier": null,
     "schema_version": 1,
     "chematic_crystal_version": null,
@@ -521,7 +521,8 @@
     "enabled_features": [
       "serde",
       "clap",
-      "mikiwame"
+      "mikiwame",
+      "materials_project"
     ]
   }
 }

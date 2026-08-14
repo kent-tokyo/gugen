@@ -6,6 +6,8 @@ each entry.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-14
+
 ### Added
 
 - **Phase 10 — literature condition provider.** `ProcessPrecedent` gains a
@@ -230,6 +232,63 @@ each entry.
   can currently produce, not an independent claim about real-world process
   complexity. A third route family with genuinely different achievable
   step counts needs its own range the same way, not a shared guess.
+
+### Added
+
+- **Phase 13 — `ThermodynamicProvider` adapter boundary.** New
+  `CompetingPhase` (`src/reaction.rs`): a formation energy for a phase that
+  might compete with a target for the same elements, additive to
+  `ThermodynamicProvider` rather than to `ReactionEnergy` — that type's own
+  doc comment forbids growing unrelated fields onto *it* specifically, not
+  onto a sibling type for a genuinely different quantity. New
+  `ThermodynamicProvider::competing_phases` default method (returns
+  `Ok(Vec::new())`) — a **non-breaking** addition, unlike Phase 12's
+  `score_plan` signature change: every existing `ThermodynamicProvider`
+  implementor keeps compiling unchanged. `Planner::plan` calls it alongside
+  the existing `reaction_energy` call; a non-empty result becomes one more
+  `EvidenceKind::ThermodynamicData` entry with an explicit "does not
+  account for kinetics, particle size, or atmosphere" limitation — like
+  `reaction_energy`, never converted into a selectivity/favorability score
+  (AGENTS.md §4.3).
+- New `materials_project` Cargo feature (`[]` — zero new dependencies) and
+  `src/materials_project_adapter.rs`: `MaterialsProjectSnapshotProvider`
+  implements `ThermodynamicProvider` entirely over a caller-supplied
+  `Vec<CompetingPhase>` snapshot — gugen performs no network call, holds no
+  API key, and has no live-fetch code path anywhere in this module. `
+  reaction_energy` computes ΔE per atom from the snapshot's weighted
+  formula-unit energies (documented normalization convention, hand-checked
+  in a unit test) and returns `Ok(None)` — never a partial sum — the
+  moment any participating species' exact `Composition` isn't in the
+  snapshot. `competing_phases` returns every snapshot entry sharing at
+  least one element with the target, excluding the target's own
+  composition. No formula parser exists in gugen (`Composition` has no
+  `Display`/`FromStr`) — the adapter's input is explicit element/amount
+  pairs, matching `Composition::new`'s own shape, not a `formula_pretty:
+  String` field; converting a Materials Project formula into that shape is
+  documented as the caller's job (`docs/integration.md`), grounded against
+  Materials Project's real, verified field names (`formula_pretty`,
+  `formation_energy_per_atom`, both eV/atom — confirmed via `mp-api`'s
+  `SummaryRester` reference and `materialsproject/mapidoc`, not recalled
+  from memory, AGENTS.md §21.3).
+- `docs/architecture.md`'s Provider isolation section refined: an adapter
+  that only *consumes* pre-fetched, caller-supplied external data (no
+  network call performed by gugen itself) may live in-crate behind its own
+  feature gate, same as `mikiwame_adapter.rs`'s existing shape — only a
+  client that would *fetch* live data itself stays out of this crate
+  entirely.
+
+### Known limitations
+
+- Once both Phase 12 and Phase 13 are configured together, `reaction_energy`/
+  `competing_phases` are called once per route family sharing the same
+  accepted precursor set, duplicating identical thermodynamic evidence
+  across those plans (the underlying `BalancedReaction` is the same
+  regardless of route family) — a known, accepted inefficiency, not a
+  correctness issue (same category as Phase 12's own equivalent note about
+  provider calls being duplicated per route family).
+- `MaterialsProjectSnapshotProvider` matches species by exact `Composition`
+  equality, the same convention `InMemoryLiteratureConditionProvider`
+  (Phase 10) already uses — no fuzzy or near-composition matching.
 
 ## [0.1.0] - 2026-08-14
 

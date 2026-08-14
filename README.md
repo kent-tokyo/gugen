@@ -84,7 +84,10 @@ template to every material: a route that releases a byproduct (e.g. a
 carbonate route releasing CO₂) gets an extra calcination step that an
 oxide-only route to the same target does not. Temperature, duration, ramp
 rate, and atmosphere are left unresolved (`None`) rather than guessed —
-gugen has no thermodynamic or literature evidence provider wired in yet.
+this worked example uses `Planner::offline_minimal`, which wires in no
+provider at all. A caller can configure a `ProcessEvidenceProvider` (e.g.
+`InMemoryLiteratureConditionProvider`) to resolve some of these fields from
+cited literature; see `docs/integration.md`.
 
 ### Plan scoring and confidence
 
@@ -93,9 +96,12 @@ per plan — never a single collapsed number. Missing thermodynamic data is
 excluded from the score rather than treated as failure; a plan with no
 evidence scores lower than one with evidence. `total_ranking_score` is an
 ordinal, explainable score for comparing candidates, never a success
-probability — and with no thermodynamic provider, it's honestly driven by
-only one real signal (`process_simplicity`, now computed per-route-family
-since Phase 12 added a second route family — see below); see
+probability — `thermodynamic_support` stays `None` regardless of whether a
+`ThermodynamicProvider` is configured (a resolved reaction energy becomes
+evidence, never a numeric score — AGENTS.md §4.3), so `total_ranking_score`
+is honestly driven by only one real signal (`process_simplicity`, now
+computed per-route-family since Phase 12 added a second route family — see
+below); see
 [`PlanScoreBreakdown`'s doc comment](src/score.rs) for the full breakdown
 of what's currently constant versus load-bearing. Every plan currently sets `manual_review_required:
 true`, since gugen has no hazard/safety data source wired in yet.

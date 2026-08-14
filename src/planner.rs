@@ -172,6 +172,67 @@ impl Planner {
                             severity: WarningSeverity::Info,
                         }),
                     }
+
+                    // Phase 13: context-only, same as reaction_energy above --
+                    // never folded into score.rs's numeric scoring (AGENTS.md
+                    // §4.3, ThermodynamicProvider::competing_phases's own doc
+                    // comment).
+                    //
+                    // `competing_phases` is a target-only query (no reaction
+                    // in its signature) -- a provider's honest answer can
+                    // include this specific plan's own precursors/byproducts,
+                    // since they're real phases in the same chemical system.
+                    // But labeling a plan's own reaction participants as
+                    // "competing" with it, on the evidence attached to that
+                    // *same* plan, would be a false-confidence-shaped claim
+                    // (AGENTS.md §21 audit) -- so anything exactly matching
+                    // this reaction's own reactants/products is filtered out
+                    // here, where the reaction is in scope, rather than in
+                    // the provider (which reasonably has no reaction to
+                    // compare against).
+                    let this_reaction_species: Vec<_> = accepted
+                        .reaction
+                        .reactants
+                        .iter()
+                        .chain(&accepted.reaction.products)
+                        .map(|s| s.composition.clone())
+                        .collect();
+                    match provider.competing_phases(composition) {
+                        Ok(phases) => {
+                            let phases: Vec<_> = phases
+                                .into_iter()
+                                .filter(|p| !this_reaction_species.contains(&p.composition))
+                                .collect();
+                            if !phases.is_empty() {
+                                evidence.push(PlanningEvidence {
+                                    kind: EvidenceKind::ThermodynamicData,
+                                    source_id: None,
+                                    statement: format!(
+                                        "{} competing phase(s) with known formation energy \
+                                        reported near this target composition by the \
+                                        configured ThermodynamicProvider, excluding this \
+                                        plan's own precursors and reaction products",
+                                        phases.len()
+                                    ),
+                                    strength: EvidenceStrength::Weak,
+                                    applicable_to: EvidenceScope::ExactTarget,
+                                    limitations: vec![
+                                        "competing-phase energetics do not account for \
+                                        kinetics, particle size, or atmosphere, and are not \
+                                        converted into a selectivity judgment (AGENTS.md §4.3)"
+                                            .to_string(),
+                                    ],
+                                });
+                            }
+                        }
+                        Err(err) => provider_warnings.push(PlanningWarning {
+                            message: format!(
+                                "thermodynamic provider's competing-phase lookup failed for \
+                            this candidate, continuing without it: {err}"
+                            ),
+                            severity: WarningSeverity::Info,
+                        }),
+                    }
                 }
 
                 let precursors: Vec<PrecursorSelection> = accepted
@@ -336,6 +397,9 @@ fn enabled_features() -> Vec<String> {
     }
     if cfg!(feature = "mikiwame") {
         features.push("mikiwame".to_string());
+    }
+    if cfg!(feature = "materials_project") {
+        features.push("materials_project".to_string());
     }
     features
 }
