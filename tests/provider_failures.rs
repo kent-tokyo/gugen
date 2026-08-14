@@ -179,8 +179,9 @@ fn partial_thermodynamic_coverage_across_candidates_in_one_report_does_not_crash
 
     assert_eq!(
         report.plans.len(),
-        2,
-        "both BaTiO3 routes must still be planned"
+        4,
+        "both BaTiO3 precursor routes must still be planned, each under both route families \
+        (Phase 12)"
     );
     // `PlanScoreBreakdown.thermodynamic_support` is a *different* thing
     // from "did a provider return data" -- it stays `None` unconditionally
@@ -210,12 +211,13 @@ fn partial_thermodynamic_coverage_across_candidates_in_one_report_does_not_crash
         })
         .count();
     assert_eq!(
-        with_data, 1,
-        "the carbonate route should carry thermodynamic evidence"
+        with_data, 2,
+        "the carbonate route should carry thermodynamic evidence under both route families \
+        (Phase 12) -- reaction_energy depends only on the reaction, shared by both"
     );
     assert_eq!(
-        without_data, 1,
-        "the oxide route legitimately has none -- not an error state"
+        without_data, 2,
+        "the oxide route legitimately has none, under either route family -- not an error state"
     );
     assert!(
         report
@@ -371,7 +373,11 @@ fn both_optional_providers_unavailable_still_produces_a_full_report() {
     .plan(&batio3_target(), "2026-08-14T00:00:00Z")
     .unwrap();
 
-    assert_eq!(report.plans.len(), 2);
+    assert_eq!(
+        report.plans.len(),
+        4,
+        "2 precursor routes x 2 route families (Phase 12)"
+    );
     for plan in &report.plans {
         assert!(plan.score.thermodynamic_support.is_none());
         assert!(

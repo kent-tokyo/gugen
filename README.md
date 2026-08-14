@@ -93,11 +93,11 @@ per plan — never a single collapsed number. Missing thermodynamic data is
 excluded from the score rather than treated as failure; a plan with no
 evidence scores lower than one with evidence. `total_ranking_score` is an
 ordinal, explainable score for comparing candidates, never a success
-probability — and in v0.1, with one route family and no thermodynamic
-provider, it's honestly driven by only one real signal
-(`process_simplicity`); see [`PlanScoreBreakdown`'s doc
-comment](src/score.rs) for the full breakdown of what's currently constant
-versus load-bearing. Every plan currently sets `manual_review_required:
+probability — and with no thermodynamic provider, it's honestly driven by
+only one real signal (`process_simplicity`, now computed per-route-family
+since Phase 12 added a second route family — see below); see
+[`PlanScoreBreakdown`'s doc comment](src/score.rs) for the full breakdown
+of what's currently constant versus load-bearing. Every plan currently sets `manual_review_required:
 true`, since gugen has no hazard/safety data source wired in yet.
 
 ### CLI
@@ -199,9 +199,9 @@ solid-state route to it):
 ```
 
 Output (real, unedited `gugen plan` output; this is also
-`tests/fixtures/batio3_report.md`'s golden snapshot, minus its unresolved-
-conditions list and rejected-candidate section for length — both are in the
-full file):
+`tests/fixtures/batio3_report.md`'s golden snapshot, minus its score-
+breakdown/confidence/assumptions/unresolved-conditions sections and
+rejected-candidate section for length — all are in the full file):
 
 ```markdown
 # Synthesis Planning Report (schema v1)
@@ -210,7 +210,7 @@ full file):
 
 **Applicability:** PartiallyInDomain -- formula-only target, no structure provided (AGENTS.md §16's own example for this level)
 
-## Plan plan-a702f5b0380d3716 (score 0.062)
+## Plan plan-1677d44bfe4dbdc2 (score 0.062)
 
 - Target: Ba:1, O:3, Ti:1
 - Route family: ConventionalSolidState
@@ -240,14 +240,47 @@ full file):
 
 - [Caution] temperature, duration, ramp rate, and atmosphere are unresolved for every heating step: gugen has no thermodynamic or literature evidence provider wired in yet (AGENTS.md §4.1)
 - [Severe] no hazard or safety data source is wired in yet: safety_penalty carries no real safety information, and this is not a safety clearance (AGENTS.md §15 "unknown hazardを安全と扱わない")
+
+## Plan plan-ee311be9350b7d8b (score 0.062)
+
+- Target: Ba:1, O:3, Ti:1
+- Route family: Mechanochemical
+- Reaction: 1x(Ba:1, C:1, O:3) + 1x(O:2, Ti:1) -> 1x(Ba:1, O:3, Ti:1) + 1x(C:1, O:2)
+- Manual review required: true
+- Applicability: PartiallyInDomain -- formula-only target, no structure provided (AGENTS.md §16's own example for this level)
+
+### Steps
+
+- [Required] Weigh: BaCO3 x1, TiO2 x1
+- [Required] Grind (BallMilling), duration=unresolved
+- [Optional] Form (UniaxialPressing), pressure=unresolved
+- [Required] Heat (Annealing): temperature=unresolved, duration=unresolved, atmosphere=unresolved, ramp=unresolved
+- [Required] Cool (FurnaceCooling)
+- [Recommended] Characterize (Xrd): verify target-phase formation
+
+### Evidence
+
+- [Weak/ProcessTemplate] weigh, then a single high-energy ball-milling step (which performs mixing and grinding together, unlike the separate Mix/Grind steps of the conventional solid-state template) is the fixed opening sequence of the mechanochemical route template
+- [Moderate/StoichiometricBalance] balanced reaction releases a byproduct beyond the target; ball milling alone is not reliably sufficient to complete such a reaction at room temperature, so a post-milling anneal is included -- the cited review reports specific byproduct-releasing compounds (e.g. gamma-Al2O3, ZrO2) that formed only after heating the as-milled powder
+
+### Warnings
+
+- [Caution] grinding duration, forming pressure, and (if present) heating temperature/duration/atmosphere/ramp are unresolved: gugen has no thermodynamic or literature evidence provider wired in yet (AGENTS.md §4.1)
+- [Severe] no hazard or safety data source is wired in yet: safety_penalty carries no real safety information, and this is not a safety clearance (AGENTS.md §15 "unknown hazardを安全と扱わない")
 ```
 
-Note the calcination/regrind step: it's there because the balanced reaction
-releases CO2 (see the Evidence entry), not because every plan gets the same
-template — a carbonate-free route to the same target wouldn't have it. The
-full report also carries a per-plan score breakdown, confidence assessment
-(five independent sub-scores, not one blended number), assumptions list, and
-every rejected single-precursor candidate with its reason code.
+Note the two plans: since Phase 12, every accepted precursor set is offered
+under *every* applicable route family (currently 2), not just one — gugen
+has no route-suitability classifier to prefer one for a given target, so
+both are always shown, ranked independently (AGENTS.md §13). Note also the
+calcination/regrind step in the first plan: it's there because the balanced
+reaction releases CO2 (see the Evidence entry), not because every plan gets
+the same template — a carbonate-free route to the same target wouldn't have
+it, and the mechanochemical plan's own post-milling anneal is conditioned
+the same way. The full report also carries a per-plan score breakdown,
+confidence assessment (five independent sub-scores, not one blended
+number), assumptions list, and every rejected single-precursor candidate
+with its reason code.
 
 ## Ecosystem
 

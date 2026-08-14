@@ -1,7 +1,7 @@
 use crate::composition::{Composition, Element};
 use crate::error::{GugenError, Result, require_finite};
 use crate::evidence::{EvidenceStrength, PlanningEvidence};
-use crate::process::{PlannedStep, ProcessStep};
+use crate::process::{PlannedStep, ProcessStep, RouteFamily};
 use crate::reaction::BalancedReaction;
 use crate::report::{
     ApplicabilityAssessment, PlanningWarning, UnresolvedRequirement, WarningSeverity,
@@ -44,9 +44,9 @@ impl<'de> serde::Deserialize<'de> for Score01 {
     }
 }
 
-/// AGENTS.md §13, verbatim. With one route family and no
-/// `ThermodynamicProvider`, most of this breakdown is structurally
-/// constant across every plan the crate can currently produce:
+/// AGENTS.md §13, verbatim. With no `ThermodynamicProvider`, most of this
+/// breakdown is structurally constant across every plan the crate can
+/// currently produce:
 /// `stoichiometric_validity` and `precursor_coverage` are always `1.0`
 /// (reaction balancing is exact and `search_precursor_sets` already
 /// hard-filters on full element coverage -- both are re-derived defensively
@@ -66,9 +66,17 @@ impl<'de> serde::Deserialize<'de> for Score01 {
 /// of condition resolution, since resolved-condition evidence doesn't
 /// remove the template's own baseline `Weak` entries. **`total_ranking_score`
 /// varies with `process_simplicity` always, and with `uncertainty_penalty`
-/// only for targets a condition provider actually covers.** This is the
-/// true extent of v0.1's ranking discriminating power; it is not a
-/// seven-dimensional judgment yet.
+/// only for targets a condition provider actually covers.** Since Phase 12,
+/// `process_simplicity` is computed against a per-`RouteFamily` step-count
+/// range (`step_bounds`), not one shared range -- a plan's route family can
+/// therefore change its `process_simplicity` (and so `total_ranking_score`)
+/// relative to a same-precursor-set plan under a different route family,
+/// but this is still the *same* one real driver, not a new independent
+/// dimension: two plans that each happen to sit at their own family's
+/// maximum step count still score identically (see the worked BaTiO3
+/// example in `README.md`, where both route families tie at 0.0625). This
+/// is the true extent of v0.1/v0.2.0's ranking discriminating power; it is
+/// not a seven-dimensional judgment yet.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PlanScoreBreakdown {
@@ -215,13 +223,27 @@ fn strength_value(strength: EvidenceStrength) -> f64 {
     }
 }
 
-/// AGENTS.md §11's numbered outline has 9 steps; v0.1's generator either
-/// includes calcination+regrind or doesn't, so 7 and 9 are the only step
-/// counts it can currently produce. `process_simplicity` is computed from
-/// the actual step count (not by re-checking the byproduct branch) so a
-/// future generator with more variability changes this score automatically.
-const MIN_TEMPLATE_STEPS: usize = 7;
-const MAX_TEMPLATE_STEPS: usize = 9;
+/// Per-route-family achievable step-count range, each derived the same way
+/// the original single global range was: from that family's own
+/// template's actual achievable step counts, not a shared guess (Phase 12
+/// fix -- a single global range made a `Mechanochemical` plan's genuinely
+/// shorter step count compare unfairly against `ConventionalSolidState`'s
+/// own range, since `process_simplicity` is computed from the raw count
+/// clamped into whatever range was passed in).
+///
+/// `ConventionalSolidState` (AGENTS.md §11's numbered outline has 9 steps):
+/// the generator either includes calcination+regrind or doesn't, so 7 and
+/// 9 are the only step counts it can currently produce.
+///
+/// `Mechanochemical` (`mechanochemical_template`): weigh + ball-milling
+/// (combined mix+grind) + optional form + characterize is 4 steps; a
+/// byproduct-releasing reaction adds a required anneal + cool, for 6.
+fn step_bounds(route_family: RouteFamily) -> (usize, usize) {
+    match route_family {
+        RouteFamily::ConventionalSolidState => (7, 9),
+        RouteFamily::Mechanochemical => (4, 6),
+    }
+}
 
 fn resolved_condition_fraction(steps: &[PlannedStep]) -> Score01 {
     let mut total = 0u32;
@@ -327,9 +349,10 @@ fn collect_unresolved(
     unresolved
 }
 
-/// Scores one plan's ingredients (AGENTS.md §13/§16). `route_family` isn't
-/// a parameter: v0.1 has exactly one, and it doesn't affect any dimension
-/// computed here.
+/// Scores one plan's ingredients (AGENTS.md §13/§16). `route_family`
+/// (Phase 12) only affects `process_simplicity`, via `step_bounds` --
+/// every other dimension is computed the same way regardless of route
+/// family.
 ///
 /// `thermodynamic_support` is always `None` (no `ThermodynamicProvider` is
 /// wired in yet) and is excluded from the weighted average entirely rather
@@ -348,6 +371,13 @@ fn collect_unresolved(
 /// `steps` (already mutated by `apply_condition_precedents`, if at all,
 /// before this is called). Pass `false` for `Planner::offline_minimal`, so
 /// its output stays byte-identical to pre-Phase-10 behavior.
+///
+/// Eight parameters, each independently meaningful and already documented
+/// above -- bundling any subset into an artificial struct just to satisfy
+/// clippy's default argument-count lint would add a layer of indirection
+/// without improving clarity, so that lint is explicitly disabled here
+/// rather than routed around.
+#[allow(clippy::too_many_arguments)]
 pub fn score_plan(
     target: &Composition,
     target_applicability: &ApplicabilityAssessment,
@@ -355,6 +385,7 @@ pub fn score_plan(
     steps: &[PlannedStep],
     evidence: &[PlanningEvidence],
     process_evidence_provider_consulted: bool,
+    route_family: RouteFamily,
     weights: &RankingWeights,
 ) -> PlanAssessment {
     let stoichiometric_validity = if balanced_reaction.is_some() {
@@ -380,12 +411,13 @@ pub fn score_plan(
         None => Score01::ZERO,
     };
 
-    let step_count = steps.len().clamp(MIN_TEMPLATE_STEPS, MAX_TEMPLATE_STEPS);
+    let (min_template_steps, max_template_steps) = step_bounds(route_family);
+    let step_count = steps.len().clamp(min_template_steps, max_template_steps);
     let process_simplicity = Score01::new(
-        1.0 - (step_count - MIN_TEMPLATE_STEPS) as f64
-            / (MAX_TEMPLATE_STEPS - MIN_TEMPLATE_STEPS) as f64,
+        1.0 - (step_count - min_template_steps) as f64
+            / (max_template_steps - min_template_steps) as f64,
     )
-    .expect("step_count is clamped to [MIN_TEMPLATE_STEPS, MAX_TEMPLATE_STEPS]");
+    .expect("step_count is clamped to [min_template_steps, max_template_steps]");
 
     // Weakest-link, not average: one Strong entry alongside several Weak
     // template defaults must not be allowed to outweigh how weak most of
@@ -481,15 +513,21 @@ pub fn score_plan(
 
     // AGENTS.md §29's "evidenceとassumptionを分離できる" is only
     // demonstrable if a real assumption the code makes is machine-readable,
-    // not just a code comment. v0.1 makes exactly one: per-plan
-    // applicability is a copy of the target-level assessment, not an
-    // independent per-route judgment -- true only because v0.1 has a
-    // single route family (AGENTS.md §13).
+    // not just a code comment. Per-plan applicability is still a copy of
+    // the target-level assessment, not an independent per-route judgment
+    // (Phase 12 does not add a real route-suitability classifier -- doing
+    // so with no calibration data would be exactly the unsourced heuristic
+    // AGENTS.md §27 forbids). Since Phase 12, that gap is stated as a
+    // route-family-specific fact rather than "v0.1 has exactly one route
+    // family," which stopped being true once `Mechanochemical` shipped.
     let assumptions = vec![PlanningAssumption {
-        statement: "applicability is copied from the target-level assessment, \
-            not independently evaluated per route family: v0.1 has exactly \
-            one route family (ConventionalSolidState)"
-            .to_string(),
+        statement: format!(
+            "applicability is copied from the target-level assessment, not \
+            independently evaluated per route family: no route-suitability \
+            precedent exists for this target under {route_family:?} \
+            specifically (every applicable route family is offered \
+            unconditionally, AGENTS.md §13)"
+        ),
     }];
 
     PlanAssessment {
@@ -557,17 +595,27 @@ mod tests {
             reaction: oxide_reaction,
         };
 
+        let mechanochemical_carbonate =
+            crate::process::mechanochemical_template(&target, &carbonate_set);
+        let mechanochemical_oxide = crate::process::mechanochemical_template(&target, &oxide_set);
+
         let carbonate = crate::process::conventional_solid_state_template(&target, &carbonate_set);
         let oxide = crate::process::conventional_solid_state_template(&target, &oxide_set);
         (
             target,
             ProcessTemplateResultPair {
-                carbonate_reaction: carbonate_set.reaction,
+                carbonate_reaction: carbonate_set.reaction.clone(),
                 carbonate_steps: carbonate.steps,
                 carbonate_evidence: carbonate.evidence,
-                oxide_reaction: oxide_set.reaction,
+                oxide_reaction: oxide_set.reaction.clone(),
                 oxide_steps: oxide.steps,
                 oxide_evidence: oxide.evidence,
+                mechanochemical_carbonate_reaction: carbonate_set.reaction,
+                mechanochemical_carbonate_steps: mechanochemical_carbonate.steps,
+                mechanochemical_carbonate_evidence: mechanochemical_carbonate.evidence,
+                mechanochemical_oxide_reaction: oxide_set.reaction,
+                mechanochemical_oxide_steps: mechanochemical_oxide.steps,
+                mechanochemical_oxide_evidence: mechanochemical_oxide.evidence,
             },
         )
     }
@@ -579,6 +627,12 @@ mod tests {
         oxide_reaction: BalancedReaction,
         oxide_steps: Vec<PlannedStep>,
         oxide_evidence: Vec<PlanningEvidence>,
+        mechanochemical_carbonate_reaction: BalancedReaction,
+        mechanochemical_carbonate_steps: Vec<PlannedStep>,
+        mechanochemical_carbonate_evidence: Vec<PlanningEvidence>,
+        mechanochemical_oxide_reaction: BalancedReaction,
+        mechanochemical_oxide_steps: Vec<PlannedStep>,
+        mechanochemical_oxide_evidence: Vec<PlanningEvidence>,
     }
 
     #[test]
@@ -603,6 +657,7 @@ mod tests {
             &routes.oxide_steps,
             &routes.oxide_evidence,
             false,
+            RouteFamily::ConventionalSolidState,
             &RankingWeights::default(),
         );
         assert_eq!(assessment.score.thermodynamic_support, None);
@@ -624,6 +679,7 @@ mod tests {
             &routes.oxide_steps,
             &routes.oxide_evidence,
             false,
+            RouteFamily::ConventionalSolidState,
             &RankingWeights::default(),
         );
         let without_evidence = score_plan(
@@ -633,6 +689,7 @@ mod tests {
             &routes.oxide_steps,
             &[],
             false,
+            RouteFamily::ConventionalSolidState,
             &RankingWeights::default(),
         );
 
@@ -658,6 +715,7 @@ mod tests {
             &routes.oxide_steps,
             &routes.oxide_evidence,
             false,
+            RouteFamily::ConventionalSolidState,
             &RankingWeights::default(),
         );
         assert!(assessment.manual_review_required);
@@ -682,6 +740,7 @@ mod tests {
             &routes.oxide_steps,
             &routes.oxide_evidence,
             false,
+            RouteFamily::ConventionalSolidState,
             &RankingWeights::default(),
         );
         assert_eq!(assessment.score.stoichiometric_validity, Score01::ZERO);
@@ -703,6 +762,7 @@ mod tests {
             &routes.carbonate_steps,
             &routes.carbonate_evidence,
             false,
+            RouteFamily::ConventionalSolidState,
             &RankingWeights::default(),
         );
         // Every condition-bearing step is None in v0.1: 2 Heat steps
@@ -735,6 +795,7 @@ mod tests {
             &routes.carbonate_steps,
             &routes.carbonate_evidence,
             false,
+            RouteFamily::ConventionalSolidState,
             &RankingWeights::default(),
         );
         let oxide = score_plan(
@@ -744,8 +805,60 @@ mod tests {
             &routes.oxide_steps,
             &routes.oxide_evidence,
             false,
+            RouteFamily::ConventionalSolidState,
             &RankingWeights::default(),
         );
+        assert!(
+            carbonate.score.process_simplicity.value() < oxide.score.process_simplicity.value()
+        );
+    }
+
+    /// Phase 12: `step_bounds` is per-`RouteFamily`, not one shared global
+    /// range (see that function's doc comment for the bug this fixes). The
+    /// oxide-only mechanochemical route (4 steps, `Mechanochemical`'s own
+    /// minimum) must score `process_simplicity == 1.0` on its *own* scale --
+    /// same as `ConventionalSolidState`'s 7-step minimum scores 1.0 on
+    /// *its* scale, exercised above. A route sitting at its family's
+    /// minimum step count scoring 1.0 in both families is the intended,
+    /// symmetric per-family normalization, not a bug: `process_simplicity`
+    /// measures a route's simplicity relative to what its own family can
+    /// achieve, never across families.
+    #[test]
+    fn mechanochemical_process_simplicity_is_scored_against_its_own_family_range() {
+        let (target, routes) = carbonate_and_oxide_routes();
+        let carbonate = score_plan(
+            &target,
+            &in_domain(),
+            Some(&routes.mechanochemical_carbonate_reaction),
+            &routes.mechanochemical_carbonate_steps,
+            &routes.mechanochemical_carbonate_evidence,
+            false,
+            RouteFamily::Mechanochemical,
+            &RankingWeights::default(),
+        );
+        let oxide = score_plan(
+            &target,
+            &in_domain(),
+            Some(&routes.mechanochemical_oxide_reaction),
+            &routes.mechanochemical_oxide_steps,
+            &routes.mechanochemical_oxide_evidence,
+            false,
+            RouteFamily::Mechanochemical,
+            &RankingWeights::default(),
+        );
+
+        assert_eq!(
+            routes.mechanochemical_oxide_steps.len(),
+            4,
+            "oxide-only mechanochemical route must be at Mechanochemical's own minimum"
+        );
+        assert_eq!(
+            routes.mechanochemical_carbonate_steps.len(),
+            6,
+            "byproduct-releasing mechanochemical route must be at Mechanochemical's own maximum"
+        );
+        assert_eq!(oxide.score.process_simplicity, Score01::ONE);
+        assert_eq!(carbonate.score.process_simplicity, Score01::ZERO);
         assert!(
             carbonate.score.process_simplicity.value() < oxide.score.process_simplicity.value()
         );

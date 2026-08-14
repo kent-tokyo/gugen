@@ -16,9 +16,17 @@ full spec.
 
 - Inorganic crystalline bulk materials, explicit target composition,
   optional target structure.
-- Conventional solid-state synthesis only: weigh → mix → grind → (optional
-  form) → calcine → regrind → sinter/anneal → cool → (optional)
-  intermediate characterization.
+- Two route families (v0.2.0, Phase 12 added the second):
+  - Conventional solid-state: weigh → mix → grind → (optional form) →
+    calcine → regrind → sinter/anneal → cool → (optional) intermediate
+    characterization.
+  - Mechanochemical (structural route only -- see below): weigh → ball
+    milling (combined mix+grind) → (optional form) → (conditional
+    post-milling anneal) → (conditional cool) → (optional) intermediate
+    characterization. Both route families are offered unconditionally for
+    every accepted precursor set (AGENTS.md §13); gugen has no
+    route-suitability classifier to prefer one over the other for a given
+    target.
 - Abstract atmosphere categories (air / inert / oxidizing / reducing /
   vacuum / controlled-described), roughly ambient pressure.
 - Multiple alternative candidate plans, ranked by an explainable, rule-based
@@ -29,11 +37,15 @@ full spec.
 
 Organic synthesis, retrosynthesis, MOF/COF planning, polymer synthesis,
 thin-film/CVD/PVD/ALD, electrodeposition, high-pressure synthesis,
-hydrothermal/solvothermal, detailed mechanochemical conditions, molten-salt
-synthesis, direct control of automated lab equipment, DFT, molecular
-dynamics, kinetic-rate-constant prediction, yield prediction, success-
-probability prediction, automated literature scraping, ungrounded
-LLM-generated recipes, patent search, market analysis.
+hydrothermal/solvothermal, molten-salt synthesis, direct control of
+automated lab equipment, DFT, molecular dynamics, kinetic-rate-constant
+prediction, yield prediction, success-probability prediction, automated
+literature scraping, ungrounded LLM-generated recipes, patent search,
+market analysis. *Detailed* mechanochemical conditions (milling duration,
+ball-to-powder ratio, RPM, etc.) stay out of scope even though the
+mechanochemical route's structure is now in scope (Phase 12) -- same
+"no unsourced numeric conditions" discipline the conventional route's
+firing conditions are already held to.
 
 These are candidate future *route-family plugins*, not v0.1 features. A
 design that quietly starts depending on solving one of these (e.g. a ranking

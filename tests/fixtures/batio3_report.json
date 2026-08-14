@@ -17,7 +17,7 @@
   },
   "plans": [
     {
-      "plan_id": "plan-a702f5b0380d3716",
+      "plan_id": "plan-1677d44bfe4dbdc2",
       "route_family": "ConventionalSolidState",
       "precursors": [
         {
@@ -227,7 +227,7 @@
       ],
       "assumptions": [
         {
-          "statement": "applicability is copied from the target-level assessment, not independently evaluated per route family: v0.1 has exactly one route family (ConventionalSolidState)"
+          "statement": "applicability is copied from the target-level assessment, not independently evaluated per route family: no route-suitability precedent exists for this target under ConventionalSolidState specifically (every applicable route family is offered unconditionally, AGENTS.md §13)"
         }
       ],
       "unresolved": [
@@ -273,6 +273,211 @@
         },
         {
           "description": "Sintering heating step ramp rate",
+          "reason": "no thermodynamic or literature evidence provider is wired in yet (AGENTS.md §4.1)"
+        }
+      ],
+      "manual_review_required": true
+    },
+    {
+      "plan_id": "plan-ee311be9350b7d8b",
+      "route_family": "Mechanochemical",
+      "precursors": [
+        {
+          "precursor": "BaCO3",
+          "formula_units": 1
+        },
+        {
+          "precursor": "TiO2",
+          "formula_units": 1
+        }
+      ],
+      "balanced_reaction": {
+        "reactants": [
+          {
+            "composition": {
+              "Ba": 1.0,
+              "C": 1.0,
+              "O": 3.0
+            },
+            "coefficient": 1
+          },
+          {
+            "composition": {
+              "O": 2.0,
+              "Ti": 1.0
+            },
+            "coefficient": 1
+          }
+        ],
+        "products": [
+          {
+            "composition": {
+              "Ba": 1.0,
+              "O": 3.0,
+              "Ti": 1.0
+            },
+            "coefficient": 1
+          },
+          {
+            "composition": {
+              "C": 1.0,
+              "O": 2.0
+            },
+            "coefficient": 1
+          }
+        ]
+      },
+      "steps": [
+        {
+          "requirement": "Required",
+          "step": {
+            "Weigh": {
+              "materials": [
+                {
+                  "precursor": "BaCO3",
+                  "formula_units": 1,
+                  "mass_grams": null
+                },
+                {
+                  "precursor": "TiO2",
+                  "formula_units": 1,
+                  "mass_grams": null
+                }
+              ]
+            }
+          }
+        },
+        {
+          "requirement": "Required",
+          "step": {
+            "Grind": {
+              "method": "BallMilling",
+              "duration": null
+            }
+          }
+        },
+        {
+          "requirement": "Optional",
+          "step": {
+            "Form": {
+              "method": "UniaxialPressing",
+              "pressure": null
+            }
+          }
+        },
+        {
+          "requirement": "Required",
+          "step": {
+            "Heat": {
+              "purpose": "Annealing",
+              "temperature": null,
+              "duration": null,
+              "atmosphere": null,
+              "ramp": null
+            }
+          }
+        },
+        {
+          "requirement": "Required",
+          "step": {
+            "Cool": {
+              "mode": "FurnaceCooling"
+            }
+          }
+        },
+        {
+          "requirement": "Recommended",
+          "step": {
+            "IntermediateCharacterization": {
+              "method": "Xrd",
+              "purpose": "verify target-phase formation"
+            }
+          }
+        }
+      ],
+      "score": {
+        "stoichiometric_validity": 1.0,
+        "precursor_coverage": 1.0,
+        "thermodynamic_support": null,
+        "process_simplicity": 0.0,
+        "evidence_strength": 0.25,
+        "safety_penalty": 0.0,
+        "uncertainty_penalty": 1.0,
+        "total_ranking_score": 0.0625
+      },
+      "confidence": {
+        "overall": 0.75,
+        "stoichiometry": 1.0,
+        "precursor_selection": 1.0,
+        "process_conditions": 0.0,
+        "evidence_coverage": 1.0
+      },
+      "applicability": {
+        "level": "PartiallyInDomain",
+        "rationale": [
+          "formula-only target, no structure provided (AGENTS.md §16's own example for this level)"
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "ProcessTemplate",
+          "source_id": "10.1016/S0079-6425(99)00010-9",
+          "statement": "weigh, then a single high-energy ball-milling step (which performs mixing and grinding together, unlike the separate Mix/Grind steps of the conventional solid-state template) is the fixed opening sequence of the mechanochemical route template",
+          "strength": "Weak",
+          "applicable_to": "GeneralRule",
+          "limitations": [
+            "milling method (planetary/shaker/attritor), duration, and ball-to-powder ratio are not selected from target- or precursor-specific data -- detailed mechanochemical conditions are out of scope (AGENTS.md §3)"
+          ]
+        },
+        {
+          "kind": "StoichiometricBalance",
+          "source_id": "10.1016/S0079-6425(99)00010-9",
+          "statement": "balanced reaction releases a byproduct beyond the target; ball milling alone is not reliably sufficient to complete such a reaction at room temperature, so a post-milling anneal is included -- the cited review reports specific byproduct-releasing compounds (e.g. gamma-Al2O3, ZrO2) that formed only after heating the as-milled powder",
+          "strength": "Moderate",
+          "applicable_to": "GeneralRule",
+          "limitations": [
+            "whether ball milling alone could complete this specific reaction at room temperature, without any anneal, is not determined per-target -- unlike conventional solid-state calcination, milling-induced mechanical activation can itself drive some decompositions, so this is Moderate, not Strong, evidence"
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "message": "grinding duration, forming pressure, and (if present) heating temperature/duration/atmosphere/ramp are unresolved: gugen has no thermodynamic or literature evidence provider wired in yet (AGENTS.md §4.1)",
+          "severity": "Caution"
+        },
+        {
+          "message": "no hazard or safety data source is wired in yet: safety_penalty carries no real safety information, and this is not a safety clearance (AGENTS.md §15 \"unknown hazardを安全と扱わない\")",
+          "severity": "Severe"
+        }
+      ],
+      "assumptions": [
+        {
+          "statement": "applicability is copied from the target-level assessment, not independently evaluated per route family: no route-suitability precedent exists for this target under Mechanochemical specifically (every applicable route family is offered unconditionally, AGENTS.md §13)"
+        }
+      ],
+      "unresolved": [
+        {
+          "description": "grinding duration",
+          "reason": "no thermodynamic or literature evidence provider is wired in yet (AGENTS.md §4.1)"
+        },
+        {
+          "description": "forming pressure",
+          "reason": "no thermodynamic or literature evidence provider is wired in yet (AGENTS.md §4.1)"
+        },
+        {
+          "description": "Annealing heating step temperature",
+          "reason": "no thermodynamic or literature evidence provider is wired in yet (AGENTS.md §4.1)"
+        },
+        {
+          "description": "Annealing heating step duration",
+          "reason": "no thermodynamic or literature evidence provider is wired in yet (AGENTS.md §4.1)"
+        },
+        {
+          "description": "Annealing heating step atmosphere",
+          "reason": "no thermodynamic or literature evidence provider is wired in yet (AGENTS.md §4.1)"
+        },
+        {
+          "description": "Annealing heating step ramp rate",
           "reason": "no thermodynamic or literature evidence provider is wired in yet (AGENTS.md §4.1)"
         }
       ],

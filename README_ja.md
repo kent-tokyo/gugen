@@ -88,10 +88,11 @@ providerを持たないためです。
 算出します。単一の数値に潰すことはありません。thermodynamicデータの欠損
 は失敗扱いにせずスコアから除外し、evidenceのないplanはevidenceのある
 planより低いスコアになります。`total_ranking_score`は候補を比較するため
-の序数的・説明可能なスコアであり、成功確率ではありません。v0.1では
-route familyが1つのみでthermodynamic providerも存在しないため、実質的に
-`process_simplicity`という単一の指標だけが結果を左右します（内訳の詳細は
-[`PlanScoreBreakdown`のdocコメント](src/score.rs)を参照）。
+の序数的・説明可能なスコアであり、成功確率ではありません。thermodynamic
+providerが存在しないため、実質的に`process_simplicity`という単一の指標
+だけが結果を左右します（Phase 12でroute familyが2つになって以降は
+route familyごとに計算されます — 詳細は下記）。内訳の詳細は
+[`PlanScoreBreakdown`のdocコメント](src/score.rs)を参照してください。
 gugenは現時点でhazard/safetyデータsourceを持たないため、すべてのplanで
 `manual_review_required: true`となります。
 
@@ -194,8 +195,9 @@ $ gugen plan target.json --catalog precursors.json --format markdown
 ```
 
 出力（実際の`gugen plan`の出力そのもの。`tests/fixtures/batio3_report.md`の
-golden snapshotと同一内容だが、紙面の都合でunresolved一覧とrejected
-candidatesの節を省略。両方とも完全な出力ファイルには含まれる）：
+golden snapshotと同一内容だが、紙面の都合でscore breakdown/confidence/
+assumptions/unresolved一覧とrejected candidatesの節を省略。すべて完全な
+出力ファイルには含まれる）：
 
 ```markdown
 # Synthesis Planning Report (schema v1)
@@ -204,7 +206,7 @@ candidatesの節を省略。両方とも完全な出力ファイルには含ま�
 
 **Applicability:** PartiallyInDomain -- formula-only target, no structure provided (AGENTS.md §16's own example for this level)
 
-## Plan plan-a702f5b0380d3716 (score 0.062)
+## Plan plan-1677d44bfe4dbdc2 (score 0.062)
 
 - Target: Ba:1, O:3, Ti:1
 - Route family: ConventionalSolidState
@@ -234,14 +236,47 @@ candidatesの節を省略。両方とも完全な出力ファイルには含ま�
 
 - [Caution] temperature, duration, ramp rate, and atmosphere are unresolved for every heating step: gugen has no thermodynamic or literature evidence provider wired in yet (AGENTS.md §4.1)
 - [Severe] no hazard or safety data source is wired in yet: safety_penalty carries no real safety information, and this is not a safety clearance (AGENTS.md §15 "unknown hazardを安全と扱わない")
+
+## Plan plan-ee311be9350b7d8b (score 0.062)
+
+- Target: Ba:1, O:3, Ti:1
+- Route family: Mechanochemical
+- Reaction: 1x(Ba:1, C:1, O:3) + 1x(O:2, Ti:1) -> 1x(Ba:1, O:3, Ti:1) + 1x(C:1, O:2)
+- Manual review required: true
+- Applicability: PartiallyInDomain -- formula-only target, no structure provided (AGENTS.md §16's own example for this level)
+
+### Steps
+
+- [Required] Weigh: BaCO3 x1, TiO2 x1
+- [Required] Grind (BallMilling), duration=unresolved
+- [Optional] Form (UniaxialPressing), pressure=unresolved
+- [Required] Heat (Annealing): temperature=unresolved, duration=unresolved, atmosphere=unresolved, ramp=unresolved
+- [Required] Cool (FurnaceCooling)
+- [Recommended] Characterize (Xrd): verify target-phase formation
+
+### Evidence
+
+- [Weak/ProcessTemplate] weigh, then a single high-energy ball-milling step (which performs mixing and grinding together, unlike the separate Mix/Grind steps of the conventional solid-state template) is the fixed opening sequence of the mechanochemical route template
+- [Moderate/StoichiometricBalance] balanced reaction releases a byproduct beyond the target; ball milling alone is not reliably sufficient to complete such a reaction at room temperature, so a post-milling anneal is included -- the cited review reports specific byproduct-releasing compounds (e.g. gamma-Al2O3, ZrO2) that formed only after heating the as-milled powder
+
+### Warnings
+
+- [Caution] grinding duration, forming pressure, and (if present) heating temperature/duration/atmosphere/ramp are unresolved: gugen has no thermodynamic or literature evidence provider wired in yet (AGENTS.md §4.1)
+- [Severe] no hazard or safety data source is wired in yet: safety_penalty carries no real safety information, and this is not a safety clearance (AGENTS.md §15 "unknown hazardを安全と扱わない")
 ```
 
-仮焼（Calcination）と再粉砕のstepがあるのは、バランス済み反応式がCO2を
-放出しているためです（Evidenceの2番目の項目を参照）。すべてのplanに同じ
-templateが適用されるわけではなく、炭酸塩を経由しないルートにはこのstepは
-付きません。完全なレポートには、plan単位のスコア内訳、confidence評価
-（1つに潰した数値ではなく5つの独立した副指標）、assumptions一覧、却下
-された単一前駆体候補すべてが理由コード付きで含まれます。
+2つのplanが出力されている点に注意してください。Phase 12以降、受理された
+前駆体の組み合わせは適用可能な**すべての**route family（現在2つ）のもとで
+それぞれplanが生成されます — gugenには特定targetに対してどちらが適切かを
+判断するroute-suitability分類器がないため、両方とも常に提示され、独立に
+ランク付けされます（AGENTS.md §13）。1つ目のplanの仮焼（Calcination）と
+再粉砕のstepがあるのは、バランス済み反応式がCO2を放出しているためです
+（Evidenceの2番目の項目を参照）。すべてのplanに同じtemplateが適用される
+わけではなく、炭酸塩を経由しないルートにはこのstepは付きません — 2つ目の
+mechanochemicalなplanの再粉砕後annealも同じ条件で付与されています。完全な
+レポートには、plan単位のスコア内訳、confidence評価（1つに潰した数値では
+なく5つの独立した副指標）、assumptions一覧、却下された単一前駆体候補すべて
+が理由コード付きで含まれます。
 
 ## エコシステム上の位置づけ
 

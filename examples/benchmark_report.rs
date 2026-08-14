@@ -248,11 +248,21 @@ fn main() {
     ));
 
     // route-family coverage
-    out.push_str(
-        "- **Route-family coverage:** 1/1 -- v0.1 implements exactly one route family \
-        (`RouteFamily::ConventionalSolidState`); this metric is trivially 100% and not yet a \
-        meaningful discriminator.\n",
-    );
+    let all_route_families = [
+        gugen::RouteFamily::ConventionalSolidState,
+        gugen::RouteFamily::Mechanochemical,
+    ];
+    let seen_route_families: BTreeSet<gugen::RouteFamily> =
+        all_plans.iter().map(|p| p.route_family).collect();
+    out.push_str(&format!(
+        "- **Route-family coverage:** {}/{} route families exercised across the fixture set \
+        (Phase 12 added `Mechanochemical` alongside `ConventionalSolidState`; both are offered \
+        unconditionally for every accepted precursor set, AGENTS.md §13, so this is expected \
+        to be 100% for any fixture with at least one accepted precursor set, not a \
+        discriminator between fixtures).\n",
+        seen_route_families.len(),
+        all_route_families.len()
+    ));
 
     // process-step coverage
     let mut seen_steps = BTreeSet::new();

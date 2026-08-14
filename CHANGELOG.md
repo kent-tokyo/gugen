@@ -153,6 +153,84 @@ each entry.
   data) is a fixture-design decision, not this phase's number to change
   unilaterally. Full detail in `tasks/todo.md`'s Phase 11 §28 report.
 
+### Added
+
+- **Phase 12 — Mechanochemical route family.** New `RouteFamily::Mechanochemical`
+  and `mechanochemical_template` (`src/process.rs`), structurally grounded
+  in two independently verified literature reviews (Suryanarayana 2001,
+  DOI `10.1016/S0079-6425(99)00010-9`; Qiang, Hu, Jiang 2025, DOI
+  `10.3390/polym17172340`) — not invented from memory (AGENTS.md §21.3).
+  Weigh, then a single high-energy ball-milling step (`GrindingMethod::
+  BallMilling`) performing mixing and grinding together (unlike the
+  separate `Mix`/`Grind` steps of the conventional template), optionally
+  followed by pressing, with a post-milling anneal only when the balanced
+  reaction releases a byproduct — the cited review reports specific
+  byproduct-releasing compounds (e.g. gamma-Al2O3, ZrO2) that formed only
+  after heating the as-milled powder. New `applicable_route_family_templates`
+  (`src/process.rs`) is the one integration point `Planner::plan` uses: one
+  accepted precursor set now yields one plan per applicable route family
+  (currently 2), not just one.
+- `RouteFamily` gains `PartialOrd`/`Ord` (needed to key on it in a
+  `BTreeMap`, e.g. for deduplicating plans by `(precursor set, route
+  family)`).
+
+### Fixed
+
+- **Two real bugs a naive multi-route-family implementation would have
+  introduced, both caught by design review before writing code, not found
+  by a failing test afterward:**
+  - `process_simplicity`'s step-count clamp
+    (`MIN_TEMPLATE_STEPS`/`MAX_TEMPLATE_STEPS`) was a single global range
+    derived from `conventional_solid_state_template`'s own achievable step
+    counts (7-9). Applied unconditionally to `Mechanochemical`'s genuinely
+    shorter templates (4-6 steps), every mechanochemical plan would have
+    clamped to the global minimum and scored a perfect `process_simplicity
+    = 1.0` on zero real evidence of relative merit, beating every
+    conventional-route plan by construction. Fixed: `score_plan` gains a
+    `route_family: RouteFamily` parameter and a new `step_bounds(route_family)
+    -> (usize, usize)` lookup, each range derived the same way the original
+    one was — from that family's own template's actual achievable step
+    counts.
+  - `derive_plan_id` (`src/planner.rs`) didn't hash `route_family`. Two
+    plans built from the same accepted precursor set under different route
+    families would have collided on `plan_id`. Fixed explicitly (route
+    family is now part of the hash input) rather than discovered via the
+    existing plan-id-uniqueness test failing.
+  - A third issue was reasoned through but is not a "fix" — `score_plan`'s
+    `applicability: target_applicability.clone()` was already documented as
+    a stated assumption ("v0.1 has exactly one route family"), which Phase
+    12 falsifies regardless of implementation. Rather than fabricate a
+    numeric applicability penalty per route family (no route-suitability
+    precedent exists to justify one — AGENTS.md §27), both route families
+    are offered as separate ranked plans and the `PlanningAssumption` text
+    is now route-family-specific ("no route-suitability precedent exists
+    for this target under `{route_family}` specifically").
+- `tests/fixtures/batio3_report.json`/`.md` (golden snapshots),
+  `docs/benchmark_report.md`, `docs/large_scale_benchmark_report.md`, and
+  the `README.md`/`README_ja.md` worked `gugen plan` example all
+  regenerated from real runs: every one now legitimately shows 2 plans
+  per accepted precursor set (one per route family) instead of 1. Several
+  existing tests that hardcoded "exactly 1 plan" for a given precursor set
+  (`plan_id_is_stable_when_an_unrelated_candidate_is_added_to_the_catalog`,
+  `a_precursor_identical_to_the_target_plans_as_a_trivial_identity`,
+  `formula_unit_scale_is_not_currently_normalized_a_documented_gap`, two
+  `provider_failures.rs` cases) updated to the new, correct expectation —
+  each one a real assumption Phase 12 broke, not busywork.
+
+### Known limitations
+
+- No route-suitability classifier exists: every applicable route family is
+  offered unconditionally for every accepted precursor set, regardless of
+  whether that route family is actually a sensible real-world choice for
+  the specific target (e.g. mechanochemical synthesis of an air-sensitive
+  or thermally unstable compound). Not fixed — no calibration data exists
+  to justify a per-target route-family suitability score (AGENTS.md §27).
+- `step_bounds`'s two ranges are each still derived the same way the
+  original single global range was — from what each template's generator
+  can currently produce, not an independent claim about real-world process
+  complexity. A third route family with genuinely different achievable
+  step counts needs its own range the same way, not a shared guess.
+
 ## [0.1.0] - 2026-08-14
 
 Initial release. Published to [crates.io](https://crates.io/crates/gugen)

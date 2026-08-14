@@ -1618,3 +1618,179 @@ diffed twice in a row to also confirm its own reproducibility claim
 holds outside the report's own re-run-internally check) — all re-run
 again after the corpus rebuild described in the §28 report, not just
 once before it.
+
+## Phase 12 — Mechanochemical Route Family — DONE (2026-08-14)
+
+**Goal** (per `/Users/k_tanabe/.claude/plans/typed-sparking-storm.md`):
+close part of "合成計画の機能幅" with a second, structurally real route
+family, without inventing the *detailed* mechanochemical conditions
+AGENTS.md §3 explicitly keeps out of scope (the route's *structure* is in
+scope; specific milling duration/ball-to-powder-ratio/RPM numbers are not).
+
+**Literature grounding, verified before writing template code** (AGENTS.md
+§21.3 — no process outline from memory): a research pass found and
+directly verified two review papers, rejecting a third (Baláž et al.,
+"Hallmarks of mechanochemistry," DOI 10.1039/c3cs35468g) after its full
+text was blocked on every accessible mirror, and two more paywalled
+oxide-ceramic-specific reviews — documented as inaccessible rather than
+guessed at.
+- Suryanarayana, "Mechanical alloying and milling," *Progress in
+  Materials Science* 46(1-2), 1-184 (2001), DOI
+  `10.1016/S0079-6425(99)00010-9` — read directly (title page, abstract,
+  TOC, pp. 11-14, 125-128). Basis for: weighing/loading precursors
+  directly into the mill (no separate mixing step -- milling performs
+  mixing and grinding together); named sub-variants under the
+  "high-energy ball milling" umbrella (SPEX/shaker, planetary, attritor --
+  `GrindingMethod::BallMilling` already covers this without a new
+  variant); and, specifically, Table 21's examples of byproduct-releasing
+  compounds (gamma-Al2O3, ZrO2) that formed only after heating the
+  as-milled powder -- the literature basis for conditioning the
+  post-milling anneal on `releases_byproduct`, the same way
+  `conventional_solid_state_template` conditions calcination.
+- Qiang, Hu, Jiang, "Mechanochemical Synthesis of Advanced Materials for
+  All-Solid-State Battery (ASSB) Applications: A Review," *Polymers*
+  17(17), 2340 (2025), DOI `10.3390/polym17172340` — read via open-access
+  PMC full text (PMC12431395), DOI redirect confirmed. Basis for: an
+  explicit framing of ball milling as an alternative to "conventional
+  high-temperature solid-phase synthesis methods" for inorganic materials
+  generally (not a niche technique); an optional post-milling
+  pressing/pelletizing step before heat treatment.
+
+**Implementation** (`src/process.rs`): `RouteFamily::Mechanochemical`
+added (gains `PartialOrd`/`Ord` too, needed to key on it in a `BTreeMap`).
+`mechanochemical_template(target, accepted)`: Weigh -> Grind(BallMilling)
+-> optional Form -> [conditional: Heat(Annealing) -> Cool] ->
+Characterize. No byproduct: 4 steps. Byproduct release needed: 6 steps —
+a genuine, literature-grounded step-count range (not a single constant),
+avoiding a divide-by-zero in `process_simplicity`'s normalization and
+giving Phase 4's "don't apply the same template to every material"
+principle (AGENTS.md §11) real force for this route family too, mirrored
+by a dedicated test
+(`mechanochemical_template_differs_between_carbonate_and_oxide_routes_to_the_same_target`).
+New `applicable_route_family_templates(target, accepted)` calls both
+templates unconditionally — the one integration point `Planner::plan`
+needed; verified by
+`applicable_route_family_templates_yields_a_distinct_template_per_route_family`.
+
+**Two real bugs found during design review (before writing the fix),
+verified by reading the actual source, not assumed from the plan's own
+prediction:**
+1. `process_simplicity`'s step bounds (`src/score.rs`) were a single
+   global `MIN_TEMPLATE_STEPS`/`MAX_TEMPLATE_STEPS = (7, 9)` pair, derived
+   specifically from `conventional_solid_state_template`'s own achievable
+   range. Applied unconditionally to `Mechanochemical`'s genuinely shorter
+   4-6-step templates, every mechanochemical plan would clamp to the
+   global minimum (7) and score a perfect `process_simplicity = 1.0` on
+   zero real evidence of relative merit — confirmed by actually computing
+   it before the fix landed, not just reasoning abstractly. Fixed:
+   `score_plan` gains a `route_family: RouteFamily` parameter and a new
+   `step_bounds(route_family) -> (usize, usize)` lookup, each range
+   derived the same way the original one was.
+2. `derive_plan_id` (`src/planner.rs:383`, confirmed by reading it
+   directly) hashed precursor set + reaction only, not route family — two
+   plans from the same accepted set under different route families would
+   collide on `plan_id`. Fixed by hashing `route_family` into the input.
+   Caught a real pre-existing test that depended on the *old*,
+   colliding behavior without realizing it:
+   `plan_id_is_stable_when_an_unrelated_candidate_is_added_to_the_catalog`
+   built a `BTreeMap<Vec<String>, &str>` keyed only by precursor-id-set —
+   with two route families now producing two plans per key, `collect()`
+   silently kept only the last one per key, making the test vacuous for
+   whichever plan survived. Fixed by keying on `(precursor ids,
+   route_family)` and asserting the map's length matches the plan count
+   (so a future silent collision fails loudly, not quietly).
+3. A third issue was reasoned through, not "fixed" as a bug: `score_plan`'s
+   `applicability: target_applicability.clone()` already carried a stated
+   `PlanningAssumption` ("v0.1 has exactly one route family"), which Phase
+   12 falsifies regardless of implementation choice. Per the plan's own
+   explicit guidance, both route families are offered as separate ranked
+   plans (preserving "always show alternatives, never silently pick one")
+   rather than inventing a numeric per-route-family applicability penalty
+   with no real precedent behind it (AGENTS.md §27) — the assumption text
+   is now route-family-specific instead.
+
+**`src/bin/gugen.rs`'s `doctor` subcommand** (`~line 261`, confirmed by
+reading it): hardcoded `gugen::RouteFamily::ConventionalSolidState`
+singular in its "enabled route families" line. Now reports both via an
+array; "supported domain" and "known limitations" lines updated to
+mention the mechanochemical structural route and the new
+no-route-suitability-classifier limitation, replacing the now-stale
+"single route family" phrasing.
+
+**Ripple effects, all regenerated from real runs, not hand-edited** —
+every accepted precursor set now legitimately produces one plan per
+applicable route family (currently 2) instead of one:
+- `tests/fixtures/batio3_report.json`/`.md` (golden snapshots) —
+  regenerated via a temporary `#[test]` that printed real output,
+  deleted immediately after use; diffed to confirm only the expected
+  changes (new `plan_id` reflecting the route-family hash, updated
+  assumption text, a second `Mechanochemical` plan block).
+- `docs/benchmark_report.md` (`examples/benchmark_report.rs`) — the
+  previously-hardcoded `"Route-family coverage: 1/1"` string replaced
+  with a real measurement (`seen_route_families.len()` vs. the full
+  enum); other counts doubled as expected (8 -> 16 plans across the 5
+  fixtures).
+- `docs/large_scale_benchmark_report.md`
+  (`examples/large_scale_benchmark.rs`) — regenerated; plan counts
+  doubled (1659 -> 3174), the byproduct-allow-list coverage-conditional
+  finding stayed qualitatively the same (90.2% -> 86.6%, still dominant),
+  search-budget exhaustion rose slightly (3 -> 11 of 1500 rows, still
+  negligible) as an expected side effect of `max_plans_returned`
+  truncation firing more often once plan counts double — not a change to
+  the search algorithm itself.
+- `README.md`/`README_ja.md`'s worked `gugen plan` example — re-run for
+  real against the same `target.json`/`precursors.json` shown in the
+  README, now showing both plans (trimmed the same way the original
+  excerpt already was, for length); prose updated to explain why two
+  plans appear.
+- Five existing tests had hardcoded "exactly 1 plan for this precursor
+  set" expectations that Phase 12 genuinely breaks, found by actually
+  running the full suite, not anticipated in advance:
+  `plan_id_is_stable_when_an_unrelated_candidate_is_added_to_the_catalog`
+  (`src/planner.rs`, the `BTreeMap` collision above),
+  `a_precursor_identical_to_the_target_plans_as_a_trivial_identity`
+  (`tests/adversarial.rs`, updated to assert 2 plans + 2 distinct route
+  families),
+  `formula_unit_scale_is_not_currently_normalized_a_documented_gap`
+  (`tests/metamorphic.rs`, an unrelated documented gap -- updated to
+  filter to one route family so it stays focused on what it actually
+  tests, rather than coupling to route-family count), and two
+  `tests/provider_failures.rs` cases
+  (`partial_thermodynamic_coverage_across_candidates_in_one_report_does_not_crash_or_fail`,
+  `both_optional_providers_unavailable_still_produces_a_full_report`,
+  both updated from 2 to 4 expected plans, and the former's
+  with-data/without-data counts from 1/1 to 2/2 since thermodynamic
+  evidence depends only on the shared reaction, not route family).
+
+**Docs**: `docs/scientific_scope.md`'s "conventional solid-state only"
+line rewritten to describe both route families, with the *detailed*-
+mechanochemical-conditions exclusion kept explicit; `src/score.rs`'s
+`PlanScoreBreakdown` doc comment updated to explain `process_simplicity`
+is now computed per-route-family (still the same one real driver, not a
+new independent dimension — two plans that each sit at their own
+family's step-count maximum still score identically, as the regenerated
+BaTiO3 example itself shows: both plans score 0.0625).
+
+**No stop-and-report condition was triggered.** No package-name
+collision, no unresolved API dependency, no unclear license, no *public
+schema* breaking change in the sense §28 means it (the two `ProcessTemplateResult`-
+returning functions and `score_plan`'s new parameter are additive/
+already-breaking-tolerated changes toward the single planned 0.2.0 bump,
+not a new destabilizing decision) — `RouteFamily` gaining a variant is
+exactly the kind of accepted breaking change the v0.2.0 plan named in
+advance.
+
+**Locally verified, all green**: `cargo fmt --all -- --check`, `cargo
+clippy --workspace --all-targets --all-features -- -D warnings` (one
+`#[allow(clippy::too_many_arguments)]` added to `score_plan`, 8 params,
+each independently meaningful and already documented — not routed around
+via an artificial bundling struct), `cargo test --workspace --all-features`
+(112 tests: 65 lib + 10 bin + 6 adversarial + 4 json_roundtrip + 6
+literature_conditions + 3 large_scale_benchmark + 6 metamorphic + 7
+provider_failures + 5 validation), `cargo test --workspace
+--no-default-features` and `--no-default-features --features mikiwame`,
+`RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features
+--no-deps`, `cargo build --features serde,clap --bin gugen`, both
+`wasm32-unknown-unknown` checks, `cargo audit`,
+`examples/benchmark_report`/`examples/large_scale_benchmark` re-run and
+diffed byte-identical against checked-in output.
