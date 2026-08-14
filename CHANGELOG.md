@@ -2,6 +2,76 @@
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Phase 19 — order-independent literature-condition conflict
+  resolution.** `apply_condition_precedents` (`src/process.rs`) used to
+  fill each `Heat` step field on a first-match-wins basis across whatever
+  order its `ConditionPrecedent` slice happened to arrive in -- if two
+  precedents ever supplied different values for the same field, whichever
+  ran first silently won and the second was discarded with no record of
+  the disagreement. Latent since `Planner::plan` called
+  `apply_condition_precedents` once per `ProcessPrecedent` in a loop
+  (rather than once over all of them together) and `curated_records()`
+  has so far had only one record per target, so it never actually
+  triggered -- but it would have as soon as a target ever had two
+  differing curated (or otherwise provider-supplied) records, silently
+  making a plan's firing temperature depend on corpus/provider ordering.
+  Fixed before any condition-provider data expansion, per the owner's
+  explicit directive that this fix must come first. Now:
+  `Planner::plan` collects every `ConditionPrecedent` across every
+  `ProcessPrecedent` a provider's single `precedents()` call returns
+  into one flat list and applies them in a single, order-independent
+  pass; each of the four fields (temperature/duration/atmosphere/ramp)
+  on each step is resolved independently (field-granular, not
+  precedent-granular -- two precedents disagreeing on temperature but
+  agreeing on duration still resolve duration) by exact-value equality
+  (no overlap/subsumption semantics for range types -- out of scope for
+  this phase); a field with two or more distinct values is left
+  unresolved rather than picking one or averaging, and its
+  `UnresolvedRequirement.reason` names the conflict and cites every
+  disagreeing source, replacing the generic (and, in this case, false)
+  "no matching precedent" text. A related ordering hole surfaced during
+  review of this same fix: the *resolved* (non-conflicting) case
+  aggregated per-precedent evidence into a `BTreeMap` keyed by each
+  precedent's position in the caller's slice, so two precedents with
+  asymmetric field coverage that both resolved fields on one step could
+  emit their `PlanningEvidence` entries in different sequence depending
+  on provider return order -- same set, different order, which would
+  have made a plan's serialized `evidence` array (and therefore any
+  golden JSON snapshot) provider-order-dependent the moment a target
+  ever had two contributing records for one step. Fixed by sorting each
+  step's newly-resolved evidence entries by their own content
+  (source/statement/limitations) before appending, rather than by
+  precedent input position.
+
+### Added
+
+- **Breaking**: `ConditionConflict` (`src/process.rs`, re-exported at
+  the crate root) is a new public type: `{ step_index: usize, field:
+  &'static str, reason: String }`, one entry per field that hit a
+  conflict during condition resolution. `apply_condition_precedents`
+  (crate-internal) now returns `(Vec<PlanningEvidence>,
+  Vec<ConditionConflict>)` instead of `Vec<PlanningEvidence>` alone.
+  `score_plan` (public API) gained a new required parameter,
+  `condition_conflicts: &[ConditionConflict]`, threaded through to
+  `collect_unresolved` so it can supply the conflict-specific reason --
+  a genuine breaking signature change (9 parameters instead of 8),
+  confirmed by `cargo semver-checks --baseline-rev v0.3.0` (fails
+  `function_parameter_count_changed`, correctly requiring a new minor
+  version before this can ship).
+
+### Known limitations
+
+- Conflict detection is exact-value equality only. Two overlapping but
+  non-identical ranges (e.g. a point value inside a wider reported
+  range) are treated as a conflict, not silently reconciled -- the
+  conservative reading, since `TemperatureRange`/`DurationRange`/
+  `RampRateRange` have no overlap/subsumption semantics defined and
+  designing one was explicitly out of scope for this phase.
+
 ## [0.3.0] - 2026-08-14
 
 ### Added

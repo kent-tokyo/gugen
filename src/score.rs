@@ -1,7 +1,7 @@
 use crate::composition::{Composition, Element};
 use crate::error::{GugenError, Result, require_finite};
 use crate::evidence::{EvidenceStrength, PlanningEvidence};
-use crate::process::{PlannedStep, ProcessStep, RouteFamily};
+use crate::process::{ConditionConflict, PlannedStep, ProcessStep, RouteFamily};
 use crate::reaction::BalancedReaction;
 use crate::report::{
     ApplicabilityAssessment, PlanningWarning, UnresolvedRequirement, WarningSeverity,
@@ -291,6 +291,7 @@ fn resolved_condition_fraction(steps: &[PlannedStep]) -> Score01 {
 fn collect_unresolved(
     steps: &[PlannedStep],
     process_evidence_provider_consulted: bool,
+    condition_conflicts: &[ConditionConflict],
 ) -> Vec<UnresolvedRequirement> {
     const NO_PROVIDER_REASON: &str =
         "no thermodynamic or literature evidence provider is wired in yet (AGENTS.md §4.1)";
@@ -302,14 +303,23 @@ fn collect_unresolved(
     // provider WAS consulted; it simply had nothing for this specific
     // field). `apply_condition_precedents` only ever fills an unset field,
     // so if a field is still `None` here after a consulted provider ran,
-    // that provider genuinely had no matching data for it.
+    // that provider genuinely had no matching data for it -- unless
+    // `condition_conflicts` (Phase 19) says otherwise: it *did* have data,
+    // but two or more precedents disagreed, so the field was deliberately
+    // left unresolved rather than picking one or averaging.
     let reason = if process_evidence_provider_consulted {
         CONSULTED_NO_MATCH_REASON
     } else {
         NO_PROVIDER_REASON
     };
     let mut unresolved = Vec::new();
-    for planned in steps {
+    for (step_index, planned) in steps.iter().enumerate() {
+        let conflict_reason = |field: &str| {
+            condition_conflicts
+                .iter()
+                .find(|c| c.step_index == step_index && c.field == field)
+                .map(|c| c.reason.clone())
+        };
         match &planned.step {
             ProcessStep::Heat {
                 purpose,
@@ -329,7 +339,7 @@ fn collect_unresolved(
                     if is_unresolved {
                         unresolved.push(UnresolvedRequirement {
                             description: format!("{purpose:?} heating step {field}"),
-                            reason: reason.to_string(),
+                            reason: conflict_reason(field).unwrap_or_else(|| reason.to_string()),
                         });
                     }
                 }
@@ -393,6 +403,7 @@ pub fn score_plan(
     steps: &[PlannedStep],
     evidence: &[PlanningEvidence],
     process_evidence_provider_consulted: bool,
+    condition_conflicts: &[ConditionConflict],
     route_family: RouteFamily,
     weights: &RankingWeights,
 ) -> PlanAssessment {
@@ -543,7 +554,11 @@ pub fn score_plan(
         confidence,
         applicability: target_applicability.clone(),
         assumptions,
-        unresolved: collect_unresolved(steps, process_evidence_provider_consulted),
+        unresolved: collect_unresolved(
+            steps,
+            process_evidence_provider_consulted,
+            condition_conflicts,
+        ),
         manual_review_required: true,
         warnings,
     }
@@ -665,6 +680,7 @@ mod tests {
             &routes.oxide_steps,
             &routes.oxide_evidence,
             false,
+            &[],
             RouteFamily::ConventionalSolidState,
             &RankingWeights::default(),
         );
@@ -687,6 +703,7 @@ mod tests {
             &routes.oxide_steps,
             &routes.oxide_evidence,
             false,
+            &[],
             RouteFamily::ConventionalSolidState,
             &RankingWeights::default(),
         );
@@ -697,6 +714,7 @@ mod tests {
             &routes.oxide_steps,
             &[],
             false,
+            &[],
             RouteFamily::ConventionalSolidState,
             &RankingWeights::default(),
         );
@@ -723,6 +741,7 @@ mod tests {
             &routes.oxide_steps,
             &routes.oxide_evidence,
             false,
+            &[],
             RouteFamily::ConventionalSolidState,
             &RankingWeights::default(),
         );
@@ -748,6 +767,7 @@ mod tests {
             &routes.oxide_steps,
             &routes.oxide_evidence,
             false,
+            &[],
             RouteFamily::ConventionalSolidState,
             &RankingWeights::default(),
         );
@@ -770,6 +790,7 @@ mod tests {
             &routes.carbonate_steps,
             &routes.carbonate_evidence,
             false,
+            &[],
             RouteFamily::ConventionalSolidState,
             &RankingWeights::default(),
         );
@@ -790,6 +811,60 @@ mod tests {
         assert_eq!(assessment.confidence.process_conditions, Score01::ZERO);
     }
 
+    /// Phase 19: a field left unresolved because of a genuine conflict
+    /// between two literature precedents must say so specifically, not
+    /// fall back to the generic "no matching precedent" text -- that text
+    /// is false in this case (there *was* matching data; it disagreed).
+    #[test]
+    fn a_conflicted_field_uses_its_specific_reason_not_the_generic_one() {
+        let (target, routes) = carbonate_and_oxide_routes();
+        let calcination_index = routes
+            .carbonate_steps
+            .iter()
+            .position(|p| {
+                matches!(
+                    &p.step,
+                    ProcessStep::Heat {
+                        purpose: crate::process::HeatingPurpose::Calcination,
+                        ..
+                    }
+                )
+            })
+            .expect("carbonate route has a Calcination step");
+        let conflicts = vec![ConditionConflict {
+            step_index: calcination_index,
+            field: "temperature",
+            reason: "2 matching literature precedents disagree on temperature: 900.0 (10.0/a) \
+                vs. 1100.0 (10.0/b) -- left unresolved rather than picking one or averaging"
+                .to_string(),
+        }];
+        let assessment = score_plan(
+            &target,
+            &in_domain(),
+            Some(&routes.carbonate_reaction),
+            &routes.carbonate_steps,
+            &routes.carbonate_evidence,
+            true,
+            &conflicts,
+            RouteFamily::ConventionalSolidState,
+            &RankingWeights::default(),
+        );
+        let temperature_entry = assessment
+            .unresolved
+            .iter()
+            .find(|u| u.description == "Calcination heating step temperature")
+            .expect("temperature must still be unresolved");
+        assert_eq!(temperature_entry.reason, conflicts[0].reason);
+        // Every other still-unresolved field on the same plan keeps the
+        // ordinary reason -- the conflict is specific to this one field.
+        let duration_entry = assessment
+            .unresolved
+            .iter()
+            .find(|u| u.description == "Calcination heating step duration")
+            .expect("duration must still be unresolved too");
+        assert_ne!(duration_entry.reason, conflicts[0].reason);
+    }
+
     /// AGENTS.md §11: "すべての材料へ同じtemplateを適用してはいけません" --
     /// the carbonate route's extra steps must be visible in
     /// `process_simplicity`, not just in the step list itself.
@@ -803,6 +878,7 @@ mod tests {
             &routes.carbonate_steps,
             &routes.carbonate_evidence,
             false,
+            &[],
             RouteFamily::ConventionalSolidState,
             &RankingWeights::default(),
         );
@@ -813,6 +889,7 @@ mod tests {
             &routes.oxide_steps,
             &routes.oxide_evidence,
             false,
+            &[],
             RouteFamily::ConventionalSolidState,
             &RankingWeights::default(),
         );
@@ -841,6 +918,7 @@ mod tests {
             &routes.mechanochemical_carbonate_steps,
             &routes.mechanochemical_carbonate_evidence,
             false,
+            &[],
             RouteFamily::Mechanochemical,
             &RankingWeights::default(),
         );
@@ -851,6 +929,7 @@ mod tests {
             &routes.mechanochemical_oxide_steps,
             &routes.mechanochemical_oxide_evidence,
             false,
+            &[],
             RouteFamily::Mechanochemical,
             &RankingWeights::default(),
         );

@@ -5,9 +5,11 @@
 //! routes now actually resolve, not just the precursor set.
 
 use gugen::{
-    Composition, Element, EvidenceKind, EvidenceScope, InMemoryLiteratureConditionProvider,
+    Composition, ConditionPrecedent, DurationRange, Element, EvidenceKind, EvidenceScope,
+    EvidenceStrength, HeatingPurpose, InMemoryLiteratureConditionProvider,
     InMemoryPrecursorCatalog, Planner, PlanningConfig, PlanningConstraints, PrecursorCandidate,
-    PrecursorId, ProcessStep, TargetSpecification,
+    PrecursorId, PrecursorSelection, ProcessEvidenceProvider, ProcessPrecedent, ProcessStep,
+    ProviderError, TargetSpecification, TemperatureRange,
 };
 
 fn element(symbol: &str) -> Element {
@@ -318,4 +320,113 @@ fn a_target_with_no_curated_coverage_still_leaves_every_condition_unresolved() {
             a.unresolved
         );
     }
+}
+
+/// A provider whose `precedents()` call returns two `ProcessPrecedent`s
+/// disagreeing on the same field for the same purpose -- the scenario
+/// Phase 19 exists for. `curated_records()` currently has only one record
+/// per target, so this can't be exercised through
+/// `InMemoryLiteratureConditionProvider` alone; this hand-rolled provider
+/// stands in for what a future, richer condition provider (out of scope
+/// here) would eventually be able to trigger for real.
+struct ConflictingConditionsProvider;
+
+impl ProcessEvidenceProvider for ConflictingConditionsProvider {
+    fn precedents(
+        &self,
+        _target: &TargetSpecification,
+        _precursors: &[PrecursorSelection],
+    ) -> std::result::Result<Vec<ProcessPrecedent>, ProviderError> {
+        let base = ConditionPrecedent {
+            purpose: HeatingPurpose::Sintering,
+            temperature: None,
+            duration: Some(DurationRange::new(1.0, 1.0).unwrap()),
+            atmosphere: None,
+            ramp: None,
+            evidence_kind: EvidenceKind::CuratedLiteratureRecord,
+            source_id: None,
+            statement: "test precedent".to_string(),
+            strength: EvidenceStrength::Moderate,
+            applicable_to: EvidenceScope::ExactTarget,
+        };
+        Ok(vec![
+            ProcessPrecedent {
+                description: String::new(),
+                conditions: vec![ConditionPrecedent {
+                    temperature: Some(TemperatureRange::new(900.0, 900.0).unwrap()),
+                    source_id: Some("10.0000/first".to_string()),
+                    ..base.clone()
+                }],
+            },
+            ProcessPrecedent {
+                description: String::new(),
+                conditions: vec![ConditionPrecedent {
+                    temperature: Some(TemperatureRange::new(1100.0, 1100.0).unwrap()),
+                    source_id: Some("10.0000/second".to_string()),
+                    ..base
+                }],
+            },
+        ])
+    }
+}
+
+/// End-to-end through `Planner::plan`: two `ProcessPrecedent`s returned
+/// from a single `precedents()` call, disagreeing on temperature but
+/// agreeing on duration, must resolve duration, leave temperature
+/// unresolved with a conflict-specific reason citing both sources, and
+/// must not depend on which `ProcessPrecedent` the provider happened to
+/// list first.
+#[test]
+fn conflicting_precedents_from_one_provider_call_leave_the_field_unresolved_end_to_end() {
+    let target_spec = target(composition(&[("Mg", 1.0), ("Al", 2.0), ("O", 4.0)]));
+    let catalog = vec![
+        candidate("MgO", &[("Mg", 1.0), ("O", 1.0)]),
+        candidate("Al2O3", &[("Al", 2.0), ("O", 3.0)]),
+    ];
+    let report = Planner::with_process_evidence_provider(
+        InMemoryPrecursorCatalog::new(catalog),
+        ConflictingConditionsProvider,
+        PlanningConfig::default(),
+    )
+    .plan(&target_spec, "2026-08-14T00:00:00Z")
+    .unwrap();
+
+    assert!(!report.plans.is_empty());
+    let plan = &report.plans[0];
+    let sintering = plan
+        .steps
+        .iter()
+        .find_map(|s| match &s.step {
+            ProcessStep::Heat {
+                purpose: HeatingPurpose::Sintering,
+                temperature,
+                duration,
+                ..
+            } => Some((temperature, duration)),
+            _ => None,
+        })
+        .expect("oxide route must have a Sintering step");
+    assert!(
+        sintering.0.is_none(),
+        "temperature disagrees between the two precedents and must stay unresolved: {:?}",
+        sintering.0
+    );
+    assert_eq!(
+        sintering.1.unwrap().min_hours,
+        1.0,
+        "duration agrees across both precedents and must still resolve"
+    );
+
+    let temperature_unresolved = plan
+        .unresolved
+        .iter()
+        .find(|u| u.description == "Sintering heating step temperature")
+        .expect("temperature must be reported as unresolved");
+    assert!(
+        temperature_unresolved.reason.contains("10.0000/first")
+            && temperature_unresolved.reason.contains("10.0000/second"),
+        "the conflict reason must cite both disagreeing sources, not the generic \
+        no-matching-precedent text: {:?}",
+        temperature_unresolved.reason
+    );
 }

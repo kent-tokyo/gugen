@@ -52,6 +52,7 @@ fn sample_report() -> SynthesisPlanningReport {
         &template.steps,
         &template.evidence,
         false,
+        &[],
         RouteFamily::ConventionalSolidState,
         &RankingWeights::default(),
     );
