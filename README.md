@@ -15,9 +15,9 @@ solid-state process plans — each with its evidence, assumptions, and
 unresolved conditions kept explicit and machine-readable. It does not
 predict experimental success.
 
-> **Status: v0.2.0 published**, v0.3.0 release in progress.
+> **Status: v0.3.0 published.**
 > [crates.io](https://crates.io/crates/gugen) /
-> [docs.rs](https://docs.rs/gugen) / [v0.2.0 release](https://github.com/kent-tokyo/gugen/releases/tag/v0.2.0).
+> [docs.rs](https://docs.rs/gugen) / [v0.3.0 release](https://github.com/kent-tokyo/gugen/releases/tag/v0.3.0).
 > v0.3.0 adds evidence-preserving route-family suitability decisions
 > (`route_suitability`), conservative negative filtering
 > (`not_recommended`), and an optional `chematic-crystal`–`mikiwame`

@@ -53,7 +53,8 @@
 //! explicitly not a route-family prediction-accuracy benchmark (see
 //! `docs/route_suitability_corpus_audit.md`); no production code changed.
 //! Phases 15A/15B/16/17 together are v0.3.0's planned development work.
-//! See `CHANGELOG.md` for the user-facing summary.
+//! **v0.3.0 is published** (crates.io, tagged `v0.3.0`). See
+//! `CHANGELOG.md` for the user-facing summary.
 
 #![forbid(unsafe_code)]
 
