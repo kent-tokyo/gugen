@@ -1,6 +1,6 @@
 [package]
 name = "gugen"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.85"
 description = "Explainable materials synthesis and process planning"
@@ -27,11 +27,22 @@ default = []
 serde = ["dep:serde", "dep:serde_json"]
 clap = ["dep:clap"]
 mikiwame = ["dep:mikiwame"]
+# Zero new dependencies: gugen never fetches Materials Project data itself
+# (src/materials_project_adapter.rs takes only pre-fetched, caller-supplied
+# entries) -- this feature exists purely to keep that adapter's types out of
+# the default public API surface, the same opt-in convention `mikiwame`
+# uses for its own (dependency-backed) adapter.
+materials_project = []
 
 [[test]]
 name = "json_roundtrip"
 path = "tests/json_roundtrip.rs"
 required-features = ["serde"]
+
+[[test]]
+name = "materials_project_adapter"
+path = "tests/materials_project_adapter.rs"
+required-features = ["materials_project"]
 
 [[test]]
 name = "large_scale_benchmark"

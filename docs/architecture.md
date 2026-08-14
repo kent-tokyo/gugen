@@ -118,5 +118,13 @@ fractions, not floating point.
 
 `provider.rs` traits are the only supported extension point for external
 data. Core has zero network access (AGENTS.md §8, §25); `in-memory`, JSON,
-and fixture providers ship in v0.1. Anything hitting a network (e.g. a
-future Materials Project adapter) lives outside this crate entirely.
+and fixture providers ship in v0.1.
+
+Refined in Phase 13, once a real precedent existed to refine it against:
+an adapter that only *consumes* pre-fetched, caller-supplied external data
+-- performing no network call itself, like `src/materials_project_adapter.rs`
+-- may live in-crate, behind its own feature gate (the same shape
+`src/mikiwame_adapter.rs` already uses for a dependency-backed adapter).
+Only a client that would *fetch* live data itself (query an HTTP API,
+hold credentials, decide when to refresh) stays out of this crate
+entirely.

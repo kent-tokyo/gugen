@@ -79,8 +79,11 @@ let reactions = balance(&[bao, tio2], &[batio3])?;
 すべての材料へ同一のtemplateを適用することはありません。byproductを放出
 する経路（例：炭酸塩経路でCO₂を放出）には、酸化物のみの経路にはない仮焼
 stepが追加されます。温度・時間・昇温速度・雰囲気は、根拠なく推測せず
-`None`（未確定）のままとします。gugenは現時点でthermodynamic/文献evidence
-providerを持たないためです。
+`None`（未確定）のままとします。このworked exampleは`Planner::offline_minimal`
+を使っており、providerを一切wireしていないためです。呼び出し側が
+`ProcessEvidenceProvider`（例：`InMemoryLiteratureConditionProvider`）を
+設定すれば、これらの一部を引用文献から解決できます — `docs/integration.md`
+を参照してください。
 
 ### Plan scoring・confidence
 
@@ -88,8 +91,10 @@ providerを持たないためです。
 算出します。単一の数値に潰すことはありません。thermodynamicデータの欠損
 は失敗扱いにせずスコアから除外し、evidenceのないplanはevidenceのある
 planより低いスコアになります。`total_ranking_score`は候補を比較するため
-の序数的・説明可能なスコアであり、成功確率ではありません。thermodynamic
-providerが存在しないため、実質的に`process_simplicity`という単一の指標
+の序数的・説明可能なスコアであり、成功確率ではありません。`ThermodynamicProvider`
+の設定有無に関わらず`thermodynamic_support`は常に`None`のままです（解決
+されたreaction energyはevidenceにはなってもスコアには反映されません —
+AGENTS.md §4.3）。そのため実質的に`process_simplicity`という単一の指標
 だけが結果を左右します（Phase 12でroute familyが2つになって以降は
 route familyごとに計算されます — 詳細は下記）。内訳の詳細は
 [`PlanScoreBreakdown`のdocコメント](src/score.rs)を参照してください。

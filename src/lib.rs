@@ -23,11 +23,13 @@
 //! `tasks/todo.md`'s Phase 8 section). **v0.1.0 is published** (crates.io,
 //! merged to `main`, tagged `v0.1.0`) — see `tasks/todo.md`'s Phase 9
 //! section for the release record. Post-v0.1 development toward v0.2.0
-//! (Phase 10 onward — real literature-sourced process conditions, a
+//! (Phase 10-13 — real literature-sourced process conditions, a
 //! large-scale blind benchmark, a second route family, a thermodynamic-
 //! provider adapter boundary) is tracked from `tasks/todo.md`'s Phase 10
 //! section onward, not `AGENTS.md` §26 (which only defines the original 9
-//! phases).
+//! phases). All four are implemented and merged to `main`; **v0.2.0 itself
+//! is not yet published** — that step waits on the owner's separate,
+//! explicit go-ahead, same as v0.1.0's release.
 
 #![forbid(unsafe_code)]
 
@@ -38,6 +40,8 @@ mod error;
 mod evidence;
 mod frac;
 mod literature_conditions;
+#[cfg(feature = "materials_project")]
+mod materials_project_adapter;
 #[cfg(feature = "mikiwame")]
 mod mikiwame_adapter;
 mod planner;
@@ -57,6 +61,8 @@ pub use config::{PlanningConfig, SearchBudget};
 pub use error::{GugenError, ProviderError, Result};
 pub use evidence::{EvidenceKind, EvidenceScope, EvidenceStrength, PlanningEvidence};
 pub use literature_conditions::{CuratedConditionRecord, InMemoryLiteratureConditionProvider};
+#[cfg(feature = "materials_project")]
+pub use materials_project_adapter::MaterialsProjectSnapshotProvider;
 #[cfg(feature = "mikiwame")]
 pub use mikiwame_adapter::{StructuralDiagnosticEffects, structural_effects};
 pub use planner::Planner;
@@ -73,7 +79,9 @@ pub use process::{
 };
 pub use provenance::PlanningProvenance;
 pub use provider::{PrecursorCatalog, ProcessEvidenceProvider, ThermodynamicProvider};
-pub use reaction::{BalancedReaction, ReactionEnergy, ReactionSpecies, ThermodynamicConditions};
+pub use reaction::{
+    BalancedReaction, CompetingPhase, ReactionEnergy, ReactionSpecies, ThermodynamicConditions,
+};
 pub use rejection::{RejectedCandidate, RejectionCode};
 pub use report::{
     ApplicabilityAssessment, ApplicabilityLevel, PlanId, PlanningWarning, SCHEMA_VERSION,

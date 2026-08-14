@@ -14,6 +14,10 @@
   v0.1.0, `kent-tokyo`). Phase 6 consumes it as an optional feature-gated
   adapter (`src/mikiwame_adapter.rs`) — see below for the implemented
   mapping and its scope.
+- **Materials Project**: no publication check applies here — Phase 13's
+  adapter consumes only pre-fetched, caller-supplied data (no live API
+  call from gugen itself), so there is nothing to verify as "published" or
+  "available"; see below for what was verified instead (real field names).
 
 chematic-crystal's unavailability doesn't block gugen development.
 AGENTS.md §5 states exactly this contingency and prescribes the
@@ -84,6 +88,66 @@ mikiwame = ["dep:mikiwame"]
   exposed as a standalone function for a caller with its own structure
   data to call directly and apply the result (e.g. to a `SynthesisPlan`'s
   `confidence`/`warnings`) themselves.
+
+## Materials Project: pre-fetched snapshot only, no live client (Phase 13)
+
+`src/materials_project_adapter.rs`, feature-gated (`materials_project`
+Cargo feature, declaring zero new dependencies -- see the module's own doc
+comment). `MaterialsProjectSnapshotProvider` implements
+`ThermodynamicProvider` entirely over a `Vec<CompetingPhase>` the caller
+already has; this crate never queries `api.materialsproject.org`, never
+holds an API key, and has no notion of "refresh" or "stale."
+
+- `reaction_energy`: arithmetic over the snapshot (weighted formula-unit
+  energies, normalized per atom -- see the function's own doc comment for
+  the exact convention), not a lookup. Returns `Ok(None)` -- never a
+  partial sum -- the moment any reactant or product's exact `Composition`
+  isn't in the snapshot.
+- `competing_phases` (the new Phase 13 default method on
+  `ThermodynamicProvider`): every snapshot entry sharing at least one
+  element with the target, excluding the target's own composition.
+  Evidence-only, like `reaction_energy` -- neither is converted into a
+  selectivity or favorability score (AGENTS.md §4.3); `Planner::plan`
+  attaches a non-empty result as one more `EvidenceKind::ThermodynamicData`
+  entry with an explicit "does not account for kinetics, particle size, or
+  atmosphere" limitation.
+
+**No formula parser exists in gugen** (`Composition` has no `Display`/
+`FromStr`, and none is planned -- see `composition.rs`'s own doc comment).
+`CompetingPhase`'s input shape is explicit element/amount pairs, matching
+`Composition::new`'s own shape, not a `formula_pretty: String` field --
+converting a formula into that shape is the caller's job, during their own
+pre-fetch step, before any of this data reaches gugen.
+
+Field names below were verified directly against Materials Project's own
+API documentation (`mp-api`'s `SummaryRester` reference and
+`materialsproject/mapidoc`), not recalled from memory (AGENTS.md §21.3):
+the summary endpoint's `formula_pretty` (e.g. `"Fe2O3"`) and
+`formation_energy_per_atom` fields, both in eV/atom. A worked conversion
+for one such entry, hand-written rather than through any string parser
+(the exact reason gugen doesn't ship one -- Hill-notation parsing has
+enough edge cases, e.g. implicit `1` subscripts and element-order
+conventions, that it isn't a "few lines" the "already-installed
+dependency" ladder would justify skipping a real parsing crate for):
+
+```rust
+// From an MP summary response with formula_pretty = "Fe2O3" and
+// formation_energy_per_atom = -2.5:
+use gugen::{CompetingPhase, Composition, Element};
+
+let composition = Composition::new([
+    (Element::new("Fe").unwrap(), 2.0),
+    (Element::new("O").unwrap(), 3.0),
+])
+.unwrap();
+let entry = CompetingPhase::new(composition, -2.5).unwrap();
+```
+
+**Not wired into any automatic fetch path** -- same non-goal as the
+mikiwame section above. A caller constructs
+`MaterialsProjectSnapshotProvider::from_entries(..)` from data they already
+retrieved and passes it to `Planner::new`, exactly like any other
+`ThermodynamicProvider`.
 
 ## What Phase 0 is *not* deciding
 

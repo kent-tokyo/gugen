@@ -83,3 +83,50 @@ impl<'de> serde::Deserialize<'de> for ReactionEnergy {
         ReactionEnergy::new(raw.value_ev_per_atom).map_err(serde::de::Error::custom)
     }
 }
+
+/// A candidate phase's formation energy, offered for context alongside a
+/// [`BalancedReaction`] -- e.g. "would this target's elements more readily
+/// form some other known compound instead" (Phase 13,
+/// `ThermodynamicProvider::competing_phases`). Additive to
+/// `ThermodynamicProvider`, not to `ReactionEnergy`: that type's own doc
+/// comment forbids growing unrelated fields onto *it* specifically, but
+/// says nothing against a sibling type for a genuinely different quantity.
+/// gugen does not compute a selectivity/likelihood score from this data
+/// (AGENTS.md §4.3) -- it is surfaced only as `PlanningEvidence`.
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+pub struct CompetingPhase {
+    pub composition: Composition,
+    formation_energy_ev_per_atom: f64,
+}
+
+impl CompetingPhase {
+    pub fn new(composition: Composition, formation_energy_ev_per_atom: f64) -> Result<Self> {
+        require_finite("formation_energy_ev_per_atom", formation_energy_ev_per_atom)?;
+        Ok(Self {
+            composition,
+            formation_energy_ev_per_atom,
+        })
+    }
+
+    pub fn formation_energy_ev_per_atom(&self) -> f64 {
+        self.formation_energy_ev_per_atom
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for CompetingPhase {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        struct Raw {
+            composition: Composition,
+            formation_energy_ev_per_atom: f64,
+        }
+        let raw = Raw::deserialize(deserializer)?;
+        CompetingPhase::new(raw.composition, raw.formation_energy_ev_per_atom)
+            .map_err(serde::de::Error::custom)
+    }
+}
