@@ -1,0 +1,39 @@
+[package]
+name = "gugen"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Explainable materials synthesis and process planning"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/kent-tokyo/gugen"
+documentation = "https://docs.rs/gugen"
+keywords = ["chemistry", "materials-science", "synthesis", "planning"]
+categories = ["science"]
+
+[package.metadata.docs.rs]
+# default = [] hides most public types (serde impls, the mikiwame adapter)
+# from a default-feature doc build; build docs.rs with everything enabled.
+all-features = true
+
+[dependencies]
+clap = { version = "4.6.6", features = ["derive"], optional = true }
+mikiwame = { version = "0.1.0", default-features = false, optional = true }
+serde = { version = "1.0.229", features = ["derive"], optional = true }
+serde_json = { version = "1.0.151", optional = true }
+thiserror = "2.0.20"
+
+[features]
+default = []
+serde = ["dep:serde", "dep:serde_json"]
+clap = ["dep:clap"]
+mikiwame = ["dep:mikiwame"]
+
+[[test]]
+name = "json_roundtrip"
+path = "tests/json_roundtrip.rs"
+required-features = ["serde"]
+
+[[bin]]
+name = "gugen"
+path = "src/bin/gugen.rs"
+required-features = ["serde", "clap"]

@@ -1,0 +1,723 @@
+use crate::composition::{Composition, Element};
+use crate::error::{GugenError, Result, require_finite};
+use crate::evidence::{EvidenceStrength, PlanningEvidence};
+use crate::process::{PlannedStep, ProcessStep};
+use crate::reaction::BalancedReaction;
+use crate::report::{
+    ApplicabilityAssessment, PlanningWarning, UnresolvedRequirement, WarningSeverity,
+};
+use std::collections::BTreeSet;
+
+/// A validated score in `[0.0, 1.0]`. Not given a concrete shape by
+/// AGENTS.md (only referenced as `Score01`) -- a rejecting newtype matches
+/// every other validated numeric type in this crate (`TemperatureRange`,
+/// `ReactionEnergy`, ...).
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+pub struct Score01(f64);
+
+impl Score01 {
+    pub const ZERO: Score01 = Score01(0.0);
+    pub const ONE: Score01 = Score01(1.0);
+
+    pub fn new(value: f64) -> Result<Self> {
+        require_finite("Score01", value)?;
+        if !(0.0..=1.0).contains(&value) {
+            return Err(GugenError::ScoreOutOfRange { value });
+        }
+        Ok(Self(value))
+    }
+
+    pub fn value(&self) -> f64 {
+        self.0
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Score01 {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = f64::deserialize(deserializer)?;
+        Score01::new(value).map_err(serde::de::Error::custom)
+    }
+}
+
+/// AGENTS.md §13, verbatim. In v0.1 (one route family, no thermodynamic or
+/// literature evidence provider wired in), most of this breakdown is
+/// structurally constant across every plan the crate can currently
+/// produce: `stoichiometric_validity` and `precursor_coverage` are always
+/// `1.0` (reaction balancing is exact and `search_precursor_sets` already
+/// hard-filters on full element coverage -- both are re-derived defensively
+/// here rather than assumed, but neither can discriminate between plans
+/// yet); `thermodynamic_support` is always `None`; `safety_penalty` is
+/// always `0.0` (no hazard data source exists -- see `manual_review_required`
+/// on [`PlanAssessment`]); `uncertainty_penalty` is always `1.0` (no
+/// condition is ever resolved). With `safety_penalty`/`uncertainty_penalty`
+/// both constant, their weighted-average `penalty_average` is a constant
+/// `0.5` under the default weights. `evidence_strength` uses weakest-link
+/// aggregation (see `strength_value`) and is `0.25` for every plan the
+/// current generator produces, since every route attaches at least one
+/// `Weak` template-default entry. **In practice, `total_ranking_score`
+/// currently varies only with `process_simplicity`** -- i.e. only with
+/// whether the route calcines. This is the true extent of v0.1's ranking
+/// discriminating power; it is not a seven-dimensional judgment yet.
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct PlanScoreBreakdown {
+    pub stoichiometric_validity: Score01,
+    pub precursor_coverage: Score01,
+    pub thermodynamic_support: Option<Score01>,
+    pub process_simplicity: Score01,
+    pub evidence_strength: Score01,
+    pub safety_penalty: Score01,
+    pub uncertainty_penalty: Score01,
+    pub total_ranking_score: Score01,
+}
+
+/// AGENTS.md §13, verbatim fields.
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct RankingWeights {
+    pub stoichiometric_validity: f64,
+    pub precursor_coverage: f64,
+    pub thermodynamic_support: f64,
+    pub process_simplicity: f64,
+    pub evidence_strength: f64,
+    pub safety_penalty: f64,
+    pub uncertainty_penalty: f64,
+}
+
+impl Default for RankingWeights {
+    /// Equal weight (`1.0`) on every dimension. AGENTS.md §13 explicitly
+    /// forbids tuning weights against a validation corpus or holdout set,
+    /// and v0.1 has neither (curated fixtures are Phase 8 work) -- equal
+    /// weighting is the only default that doesn't smuggle in an
+    /// unjustified claim about which dimension matters more.
+    fn default() -> Self {
+        Self {
+            stoichiometric_validity: 1.0,
+            precursor_coverage: 1.0,
+            thermodynamic_support: 1.0,
+            process_simplicity: 1.0,
+            evidence_strength: 1.0,
+            safety_penalty: 1.0,
+            uncertainty_penalty: 1.0,
+        }
+    }
+}
+
+/// A deterministic fingerprint of `weights`, for
+/// `PlanningProvenance.ranking_config_digest` (AGENTS.md §13:
+/// "weightをprovenanceに保存"). Not a cryptographic hash -- `DefaultHasher`
+/// is enough to detect "did the ranking config change between two runs",
+/// which is all provenance needs it for.
+pub fn ranking_weights_digest(weights: &RankingWeights) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    for w in [
+        weights.stoichiometric_validity,
+        weights.precursor_coverage,
+        weights.thermodynamic_support,
+        weights.process_simplicity,
+        weights.evidence_strength,
+        weights.safety_penalty,
+        weights.uncertainty_penalty,
+    ] {
+        w.to_bits().hash(&mut hasher);
+    }
+    format!("{:016x}", hasher.finish())
+}
+
+/// AGENTS.md §16, verbatim. Kept as four independent dimensions rather
+/// than collapsed into `overall`, specifically because a reaction can be
+/// stoichiometrically certain while its process conditions are completely
+/// unresolved ("条件未確定でも反応式が確実なケースがあります。単一
+/// confidenceに潰さないでください").
+///
+/// **`overall` is currently structurally constant at `0.75` for every
+/// plan with a balanced reaction and non-empty evidence** (Phase 8's
+/// false-confidence audit, `tests/validation.rs`,
+/// `confidence_overall_is_measured_not_assumed_to_be_constant`, and
+/// `docs/benchmark_report.md`): it averages four `Score01` values, and
+/// `process_conditions` is always `0.0` in v0.1 (no provider ever resolves
+/// a condition), so `(1 + 1 + 0 + 1) / 4` is the only value this can
+/// currently produce for a successfully planned route. Each sub-score is
+/// individually honest; the constancy just means `overall` cannot yet
+/// discriminate between plans of genuinely different real uncertainty.
+/// Not "fixed" with an invented weighting -- no calibration data exists
+/// to justify one (AGENTS.md §27). See `tasks/todo.md`'s Phase 8
+/// stop-and-report entry for the full analysis.
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct ConfidenceAssessment {
+    pub overall: Score01,
+    pub stoichiometry: Score01,
+    pub precursor_selection: Score01,
+    pub process_conditions: Score01,
+    pub evidence_coverage: Score01,
+}
+
+/// AGENTS.md §6's `SynthesisPlan.assumptions`. Not given a verbatim shape.
+/// `score_plan` populates this only with premises that aren't already
+/// surfaced as a `PlanningEvidence.limitations` entry or a
+/// `PlanningWarning` (most of the v0.1 generator's defaults are -- e.g.
+/// "method choice is a fixed template default" -- so this stays short).
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct PlanningAssumption {
+    pub statement: String,
+}
+
+/// Everything [`score_plan`] computes for one plan, ready to be merged into
+/// the rest of a `SynthesisPlan`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlanAssessment {
+    pub score: PlanScoreBreakdown,
+    pub confidence: ConfidenceAssessment,
+    pub applicability: ApplicabilityAssessment,
+    pub assumptions: Vec<PlanningAssumption>,
+    pub unresolved: Vec<UnresolvedRequirement>,
+    pub manual_review_required: bool,
+    pub warnings: Vec<PlanningWarning>,
+}
+
+/// Weak/Moderate/Strong -> `[0, 1]`. Deliberately avoids the extremes: even
+/// "Strong" evidence in this domain (e.g. an exact stoichiometric balance
+/// requiring a step) isn't absolute certainty about the real world, and
+/// "Weak" evidence (a template default) is still a stated, non-arbitrary
+/// choice, not zero information.
+///
+/// `evidence_strength` aggregates by minimum (weakest link), and the
+/// current `conventional_solid_state_template` always attaches at least
+/// one `Weak` entry (its opening weigh/mix/grind/form justification) --
+/// so `Moderate`/`Strong` are currently unreachable as the *aggregate*
+/// value even though individual entries do use them. This table stays
+/// three-valued because individual `PlanningEvidence.strength` values are
+/// real, per-item information; only the aggregate is currently flat.
+fn strength_value(strength: EvidenceStrength) -> f64 {
+    match strength {
+        EvidenceStrength::Weak => 0.25,
+        EvidenceStrength::Moderate => 0.6,
+        EvidenceStrength::Strong => 0.9,
+    }
+}
+
+/// AGENTS.md §11's numbered outline has 9 steps; v0.1's generator either
+/// includes calcination+regrind or doesn't, so 7 and 9 are the only step
+/// counts it can currently produce. `process_simplicity` is computed from
+/// the actual step count (not by re-checking the byproduct branch) so a
+/// future generator with more variability changes this score automatically.
+const MIN_TEMPLATE_STEPS: usize = 7;
+const MAX_TEMPLATE_STEPS: usize = 9;
+
+fn resolved_condition_fraction(steps: &[PlannedStep]) -> Score01 {
+    let mut total = 0u32;
+    let mut resolved = 0u32;
+    for planned in steps {
+        match &planned.step {
+            ProcessStep::Heat {
+                temperature,
+                duration,
+                atmosphere,
+                ramp,
+                ..
+            } => {
+                for slot in [
+                    temperature.is_some(),
+                    duration.is_some(),
+                    atmosphere.is_some(),
+                    ramp.is_some(),
+                ] {
+                    total += 1;
+                    resolved += slot as u32;
+                }
+            }
+            ProcessStep::Grind { duration, .. } => {
+                total += 1;
+                resolved += duration.is_some() as u32;
+            }
+            ProcessStep::Form { pressure, .. } => {
+                total += 1;
+                resolved += pressure.is_some() as u32;
+            }
+            _ => {}
+        }
+    }
+    if total == 0 {
+        return Score01::ONE;
+    }
+    Score01::new(f64::from(resolved) / f64::from(total))
+        .expect("resolved <= total, so the ratio is within [0, 1]")
+}
+
+fn collect_unresolved(steps: &[PlannedStep]) -> Vec<UnresolvedRequirement> {
+    const NO_PROVIDER_REASON: &str =
+        "no thermodynamic or literature evidence provider is wired in yet (AGENTS.md §4.1)";
+    let mut unresolved = Vec::new();
+    for planned in steps {
+        match &planned.step {
+            ProcessStep::Heat {
+                purpose,
+                temperature,
+                duration,
+                atmosphere,
+                ramp,
+                ..
+            } => {
+                let named = [
+                    (temperature.is_none(), "temperature"),
+                    (duration.is_none(), "duration"),
+                    (atmosphere.is_none(), "atmosphere"),
+                    (ramp.is_none(), "ramp rate"),
+                ];
+                for (is_unresolved, field) in named {
+                    if is_unresolved {
+                        unresolved.push(UnresolvedRequirement {
+                            description: format!("{purpose:?} heating step {field}"),
+                            reason: NO_PROVIDER_REASON.to_string(),
+                        });
+                    }
+                }
+            }
+            ProcessStep::Grind { duration, .. } if duration.is_none() => {
+                unresolved.push(UnresolvedRequirement {
+                    description: "grinding duration".to_string(),
+                    reason: NO_PROVIDER_REASON.to_string(),
+                });
+            }
+            ProcessStep::Form { pressure, .. } if pressure.is_none() => {
+                unresolved.push(UnresolvedRequirement {
+                    description: "forming pressure".to_string(),
+                    reason: NO_PROVIDER_REASON.to_string(),
+                });
+            }
+            _ => {}
+        }
+    }
+    unresolved
+}
+
+/// Scores one plan's ingredients (AGENTS.md §13/§16). `route_family` isn't
+/// a parameter: v0.1 has exactly one, and it doesn't affect any dimension
+/// computed here.
+///
+/// `thermodynamic_support` is always `None` (no `ThermodynamicProvider` is
+/// wired in yet) and is excluded from the weighted average entirely rather
+/// than treated as `0.0` (AGENTS.md §13: "missing thermodynamic dataを
+/// 自動的に失敗扱いしない").
+///
+/// `manual_review_required` is always `true`: no hazard/safety data source
+/// exists yet (AGENTS.md §15's `PrecursorCandidate` hazard metadata isn't
+/// built), so `safety_penalty` staying at `0.0` must not be read as a
+/// safety clearance -- "unknown hazardを安全と扱わない". A `Severe`
+/// warning says so explicitly.
+pub fn score_plan(
+    target: &Composition,
+    target_applicability: &ApplicabilityAssessment,
+    balanced_reaction: Option<&BalancedReaction>,
+    steps: &[PlannedStep],
+    evidence: &[PlanningEvidence],
+    weights: &RankingWeights,
+) -> PlanAssessment {
+    let stoichiometric_validity = if balanced_reaction.is_some() {
+        Score01::ONE
+    } else {
+        Score01::ZERO
+    };
+
+    let precursor_coverage = match balanced_reaction {
+        Some(reaction) => {
+            let target_elements: BTreeSet<Element> = target.elements().collect();
+            let covered: BTreeSet<Element> = reaction
+                .reactants
+                .iter()
+                .flat_map(|s| s.composition.elements())
+                .collect();
+            if target_elements.is_subset(&covered) {
+                Score01::ONE
+            } else {
+                Score01::ZERO
+            }
+        }
+        None => Score01::ZERO,
+    };
+
+    let step_count = steps.len().clamp(MIN_TEMPLATE_STEPS, MAX_TEMPLATE_STEPS);
+    let process_simplicity = Score01::new(
+        1.0 - (step_count - MIN_TEMPLATE_STEPS) as f64
+            / (MAX_TEMPLATE_STEPS - MIN_TEMPLATE_STEPS) as f64,
+    )
+    .expect("step_count is clamped to [MIN_TEMPLATE_STEPS, MAX_TEMPLATE_STEPS]");
+
+    // Weakest-link, not average: one Strong entry alongside several Weak
+    // template defaults must not be allowed to outweigh how weak most of
+    // the plan's justification actually is.
+    let evidence_strength = evidence
+        .iter()
+        .map(|e| strength_value(e.strength))
+        .fold(None::<f64>, |acc, v| Some(acc.map_or(v, |a| a.min(v))))
+        .map(|v| Score01::new(v).expect("strength_value is within [0, 1]"))
+        .unwrap_or(Score01::ZERO);
+
+    let safety_penalty = Score01::ZERO;
+    let uncertainty_penalty = Score01::new(1.0 - resolved_condition_fraction(steps).value())
+        .expect("1.0 minus a Score01 in [0, 1] is within [0, 1]");
+
+    let positive_components: Vec<(f64, f64)> = vec![
+        (
+            weights.stoichiometric_validity,
+            stoichiometric_validity.value(),
+        ),
+        (weights.precursor_coverage, precursor_coverage.value()),
+        (weights.process_simplicity, process_simplicity.value()),
+        (weights.evidence_strength, evidence_strength.value()),
+    ];
+    let weight_sum: f64 = positive_components.iter().map(|(w, _)| w).sum();
+    let positive_average = if weight_sum > 0.0 {
+        positive_components.iter().map(|(w, v)| w * v).sum::<f64>() / weight_sum
+    } else {
+        0.0
+    };
+    // `positive_average` is already a weighted *average* (divided by its
+    // weight_sum), so it's in [0, 1] regardless of weight magnitude. The
+    // penalty side must be normalized the same way before subtracting --
+    // otherwise a single maxed-out penalty (e.g. uncertainty_penalty=1.0,
+    // structurally true for every v0.1 plan with no thermodynamic provider)
+    // can swamp a legitimately strong positive_average just because it
+    // wasn't divided by anything.
+    let penalty_components: Vec<(f64, f64)> = vec![
+        (weights.safety_penalty, safety_penalty.value()),
+        (weights.uncertainty_penalty, uncertainty_penalty.value()),
+    ];
+    let penalty_weight_sum: f64 = penalty_components.iter().map(|(w, _)| w).sum();
+    let penalty_average = if penalty_weight_sum > 0.0 {
+        penalty_components.iter().map(|(w, v)| w * v).sum::<f64>() / penalty_weight_sum
+    } else {
+        0.0
+    };
+    let total_ranking_score = Score01::new((positive_average - penalty_average).clamp(0.0, 1.0))
+        .expect("clamped to [0, 1]");
+
+    let score = PlanScoreBreakdown {
+        stoichiometric_validity,
+        precursor_coverage,
+        thermodynamic_support: None,
+        process_simplicity,
+        evidence_strength,
+        safety_penalty,
+        uncertainty_penalty,
+        total_ranking_score,
+    };
+
+    let process_conditions =
+        Score01::new(1.0 - uncertainty_penalty.value()).expect("clamped to [0, 1]");
+    let evidence_coverage = if evidence.is_empty() {
+        Score01::ZERO
+    } else {
+        Score01::ONE
+    };
+    let overall = Score01::new(
+        (stoichiometric_validity.value()
+            + precursor_coverage.value()
+            + process_conditions.value()
+            + evidence_coverage.value())
+            / 4.0,
+    )
+    .expect("average of four Score01 values is within [0, 1]");
+
+    let confidence = ConfidenceAssessment {
+        overall,
+        stoichiometry: stoichiometric_validity,
+        precursor_selection: precursor_coverage,
+        process_conditions,
+        evidence_coverage,
+    };
+
+    let warnings = vec![PlanningWarning {
+        message: "no hazard or safety data source is wired in yet: safety_penalty \
+            carries no real safety information, and this is not a safety \
+            clearance (AGENTS.md §15 \"unknown hazardを安全と扱わない\")"
+            .to_string(),
+        severity: WarningSeverity::Severe,
+    }];
+
+    // AGENTS.md §29's "evidenceとassumptionを分離できる" is only
+    // demonstrable if a real assumption the code makes is machine-readable,
+    // not just a code comment. v0.1 makes exactly one: per-plan
+    // applicability is a copy of the target-level assessment, not an
+    // independent per-route judgment -- true only because v0.1 has a
+    // single route family (AGENTS.md §13).
+    let assumptions = vec![PlanningAssumption {
+        statement: "applicability is copied from the target-level assessment, \
+            not independently evaluated per route family: v0.1 has exactly \
+            one route family (ConventionalSolidState)"
+            .to_string(),
+    }];
+
+    PlanAssessment {
+        score,
+        confidence,
+        applicability: target_applicability.clone(),
+        assumptions,
+        unresolved: collect_unresolved(steps),
+        manual_review_required: true,
+        warnings,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::precursor::{AcceptedPrecursorSet, PrecursorId};
+    use crate::report::ApplicabilityLevel;
+
+    fn in_domain() -> ApplicabilityAssessment {
+        ApplicabilityAssessment {
+            level: ApplicabilityLevel::InDomain,
+            rationale: vec!["bulk inorganic, formula-only target".to_string()],
+        }
+    }
+
+    /// Real generator output (not hand-authored), matching the fixture used
+    /// in `process.rs`'s own template-differentiation test.
+    fn carbonate_and_oxide_routes() -> (Composition, ProcessTemplateResultPair) {
+        let ba = Element::new("Ba").unwrap();
+        let ti = Element::new("Ti").unwrap();
+        let o = Element::new("O").unwrap();
+        let c = Element::new("C").unwrap();
+
+        let target = Composition::new([(ba, 1.0), (ti, 1.0), (o, 3.0)]).unwrap();
+        let tio2 = Composition::new([(ti, 1.0), (o, 2.0)]).unwrap();
+
+        let baco3 = Composition::new([(ba, 1.0), (c, 1.0), (o, 3.0)]).unwrap();
+        let co2 = Composition::new([(c, 1.0), (o, 2.0)]).unwrap();
+        let carbonate_reaction =
+            crate::balance::balance(&[baco3, tio2.clone()], &[target.clone(), co2])
+                .unwrap()
+                .into_iter()
+                .next()
+                .expect("BaCO3 + TiO2 -> BaTiO3 + CO2 must balance");
+        let carbonate_set = AcceptedPrecursorSet {
+            precursors: vec![
+                PrecursorId("BaCO3".to_string()),
+                PrecursorId("TiO2".to_string()),
+            ],
+            reaction: carbonate_reaction,
+        };
+
+        let bao = Composition::new([(ba, 1.0), (o, 1.0)]).unwrap();
+        let oxide_reaction = crate::balance::balance(&[bao, tio2], std::slice::from_ref(&target))
+            .unwrap()
+            .into_iter()
+            .next()
+            .expect("BaO + TiO2 -> BaTiO3 must balance");
+        let oxide_set = AcceptedPrecursorSet {
+            precursors: vec![
+                PrecursorId("BaO".to_string()),
+                PrecursorId("TiO2".to_string()),
+            ],
+            reaction: oxide_reaction,
+        };
+
+        let carbonate = crate::process::conventional_solid_state_template(&target, &carbonate_set);
+        let oxide = crate::process::conventional_solid_state_template(&target, &oxide_set);
+        (
+            target,
+            ProcessTemplateResultPair {
+                carbonate_reaction: carbonate_set.reaction,
+                carbonate_steps: carbonate.steps,
+                carbonate_evidence: carbonate.evidence,
+                oxide_reaction: oxide_set.reaction,
+                oxide_steps: oxide.steps,
+                oxide_evidence: oxide.evidence,
+            },
+        )
+    }
+
+    struct ProcessTemplateResultPair {
+        carbonate_reaction: BalancedReaction,
+        carbonate_steps: Vec<PlannedStep>,
+        carbonate_evidence: Vec<PlanningEvidence>,
+        oxide_reaction: BalancedReaction,
+        oxide_steps: Vec<PlannedStep>,
+        oxide_evidence: Vec<PlanningEvidence>,
+    }
+
+    #[test]
+    fn score01_rejects_out_of_range_and_non_finite() {
+        assert!(Score01::new(-0.01).is_err());
+        assert!(Score01::new(1.01).is_err());
+        assert!(Score01::new(f64::NAN).is_err());
+        assert!(Score01::new(0.0).is_ok());
+        assert!(Score01::new(1.0).is_ok());
+    }
+
+    /// AGENTS.md §13: "missing thermodynamic dataを自動的に失敗扱いしない" --
+    /// `thermodynamic_support` is always absent in v0.1, but the total score
+    /// must still be a sensible positive value, not zeroed out by the gap.
+    #[test]
+    fn missing_thermodynamic_support_does_not_zero_the_total_score() {
+        let (target, routes) = carbonate_and_oxide_routes();
+        let assessment = score_plan(
+            &target,
+            &in_domain(),
+            Some(&routes.oxide_reaction),
+            &routes.oxide_steps,
+            &routes.oxide_evidence,
+            &RankingWeights::default(),
+        );
+        assert_eq!(assessment.score.thermodynamic_support, None);
+        assert!(
+            assessment.score.total_ranking_score.value() > 0.0,
+            "missing thermodynamic data must not zero the total score: {:?}",
+            assessment.score
+        );
+    }
+
+    /// AGENTS.md §13: "evidenceなしのplanはconfidenceを下げる".
+    #[test]
+    fn a_plan_with_no_evidence_scores_lower_than_one_with_evidence() {
+        let (target, routes) = carbonate_and_oxide_routes();
+        let with_evidence = score_plan(
+            &target,
+            &in_domain(),
+            Some(&routes.oxide_reaction),
+            &routes.oxide_steps,
+            &routes.oxide_evidence,
+            &RankingWeights::default(),
+        );
+        let without_evidence = score_plan(
+            &target,
+            &in_domain(),
+            Some(&routes.oxide_reaction),
+            &routes.oxide_steps,
+            &[],
+            &RankingWeights::default(),
+        );
+
+        assert!(!routes.oxide_evidence.is_empty());
+        assert_eq!(without_evidence.score.evidence_strength, Score01::ZERO);
+        assert_eq!(without_evidence.confidence.evidence_coverage, Score01::ZERO);
+        assert!(with_evidence.confidence.evidence_coverage.value() > 0.0);
+        assert!(
+            with_evidence.confidence.overall.value() > without_evidence.confidence.overall.value()
+        );
+    }
+
+    /// AGENTS.md §15: no hazard data source exists yet, so every v0.1 plan
+    /// requires manual review, and safety_penalty=0 must not read as a
+    /// safety clearance -- both facts must be present together.
+    #[test]
+    fn every_plan_requires_manual_review_with_an_explicit_warning() {
+        let (target, routes) = carbonate_and_oxide_routes();
+        let assessment = score_plan(
+            &target,
+            &in_domain(),
+            Some(&routes.oxide_reaction),
+            &routes.oxide_steps,
+            &routes.oxide_evidence,
+            &RankingWeights::default(),
+        );
+        assert!(assessment.manual_review_required);
+        assert_eq!(assessment.score.safety_penalty, Score01::ZERO);
+        assert!(
+            assessment
+                .warnings
+                .iter()
+                .any(|w| w.severity == WarningSeverity::Severe),
+            "safety_penalty=0 must be paired with an explicit Severe warning: {:?}",
+            assessment.warnings
+        );
+    }
+
+    #[test]
+    fn no_balanced_reaction_means_zero_stoichiometric_and_coverage_scores() {
+        let (target, routes) = carbonate_and_oxide_routes();
+        let assessment = score_plan(
+            &target,
+            &in_domain(),
+            None,
+            &routes.oxide_steps,
+            &routes.oxide_evidence,
+            &RankingWeights::default(),
+        );
+        assert_eq!(assessment.score.stoichiometric_validity, Score01::ZERO);
+        assert_eq!(assessment.score.precursor_coverage, Score01::ZERO);
+        assert_eq!(assessment.confidence.stoichiometry, Score01::ZERO);
+        assert_eq!(assessment.confidence.precursor_selection, Score01::ZERO);
+    }
+
+    /// AGENTS.md §11: unresolved conditions are kept, not deleted -- every
+    /// `None` condition field on the real generator's Heat steps must
+    /// surface as an `UnresolvedRequirement`.
+    #[test]
+    fn collects_one_unresolved_entry_per_none_condition_field() {
+        let (target, routes) = carbonate_and_oxide_routes();
+        let assessment = score_plan(
+            &target,
+            &in_domain(),
+            Some(&routes.carbonate_reaction),
+            &routes.carbonate_steps,
+            &routes.carbonate_evidence,
+            &RankingWeights::default(),
+        );
+        // Every condition-bearing step is None in v0.1: 2 Heat steps
+        // (calcination + sintering) x 4 fields, 2 Grind steps (initial +
+        // regrind) x 1 field, 1 Form step x 1 field -- see the carbonate
+        // route in process.rs.
+        let expected: usize = routes
+            .carbonate_steps
+            .iter()
+            .map(|p| match &p.step {
+                ProcessStep::Heat { .. } => 4,
+                ProcessStep::Grind { .. } | ProcessStep::Form { .. } => 1,
+                _ => 0,
+            })
+            .sum();
+        assert_eq!(assessment.unresolved.len(), expected);
+        assert_eq!(assessment.confidence.process_conditions, Score01::ZERO);
+    }
+
+    /// AGENTS.md §11: "すべての材料へ同じtemplateを適用してはいけません" --
+    /// the carbonate route's extra steps must be visible in
+    /// `process_simplicity`, not just in the step list itself.
+    #[test]
+    fn process_simplicity_differs_between_carbonate_and_oxide_routes() {
+        let (target, routes) = carbonate_and_oxide_routes();
+        let carbonate = score_plan(
+            &target,
+            &in_domain(),
+            Some(&routes.carbonate_reaction),
+            &routes.carbonate_steps,
+            &routes.carbonate_evidence,
+            &RankingWeights::default(),
+        );
+        let oxide = score_plan(
+            &target,
+            &in_domain(),
+            Some(&routes.oxide_reaction),
+            &routes.oxide_steps,
+            &routes.oxide_evidence,
+            &RankingWeights::default(),
+        );
+        assert!(
+            carbonate.score.process_simplicity.value() < oxide.score.process_simplicity.value()
+        );
+    }
+
+    #[test]
+    fn ranking_weights_digest_is_deterministic_and_sensitive_to_changes() {
+        let a = ranking_weights_digest(&RankingWeights::default());
+        let b = ranking_weights_digest(&RankingWeights::default());
+        assert_eq!(a, b);
+
+        let changed = RankingWeights {
+            evidence_strength: 2.0,
+            ..RankingWeights::default()
+        };
+        let c = ranking_weights_digest(&changed);
+        assert_ne!(a, c);
+    }
+}

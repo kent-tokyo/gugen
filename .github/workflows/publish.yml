@@ -1,0 +1,29 @@
+name: Publish to crates.io
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refuse to publish from a non-main branch
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::workflow_dispatch was run from a non-main ref. Re-run this workflow with main selected as the branch."
+          exit 1
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - run: cargo test --workspace --all-features
+      - run: cargo test --workspace --no-default-features
+      - run: RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
+      - uses: taiki-e/install-action@cargo-audit
+      - run: cargo audit
+      - name: cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish
