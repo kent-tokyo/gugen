@@ -7,18 +7,21 @@
 //! success. See `AGENTS.md` for the full specification and
 //! `docs/scientific_scope.md` for what is and is not in scope.
 //!
-//! This implements Phases 1-8 of the roadmap in `AGENTS.md` §26: typed
+//! This implements all 9 phases of the roadmap in `AGENTS.md` §26: typed
 //! errors, validated numeric types, composition, target specification, the
 //! public report schema, provenance, provider trait boundaries, exact
 //! reaction balancing, bounded precursor-set search, a solid-state process
 //! template, plan scoring/confidence, end-to-end orchestration via
 //! `Planner`, an optional `mikiwame` structural-diagnostics adapter, a
 //! CLI (`src/bin/gugen.rs`: `plan`, `balance`, `explain`, `validate-target`,
-//! `doctor`, `batch`), and a validation suite against curated literature
-//! fixtures (`tests/`, `docs/benchmark_report.md`). The `chematic-crystal`
+//! `doctor`, `batch`), a validation suite against curated literature
+//! fixtures (`tests/`, `docs/benchmark_report.md`), and v0.1 release
+//! preparation (license files, docs.rs metadata, a dependency license
+//! audit — see `tasks/todo.md`'s Phase 9 section). The `chematic-crystal`
 //! adapter remains blocked on that crate's publication, and two
 //! validation findings are documented rather than fixed (see
-//! `tasks/todo.md`'s Phase 8 section).
+//! `tasks/todo.md`'s Phase 8 section). This crate is a v0.1 release
+//! candidate per `AGENTS.md` §29, not yet published or merged to `main`.
 
 #![forbid(unsafe_code)]
 

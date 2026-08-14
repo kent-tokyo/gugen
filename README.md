@@ -8,16 +8,17 @@ solid-state process plans — each with its evidence, assumptions, and
 unresolved conditions kept explicit and machine-readable. It does not
 predict experimental success.
 
-> **Status: early development, v0.1 in progress.** Phases 0-8 of 9 are
-> done (architecture, foundation types, exact reaction balancing, bounded
-> precursor-set search, solid-state process templates, plan scoring and
-> confidence, the end-to-end `Planner`, a CLI, and a validation suite
-> against curated literature fixtures — see
-> [`docs/benchmark_report.md`](docs/benchmark_report.md)). An optional
-> `mikiwame` feature adapts structural diagnostics; the `chematic-crystal`
-> adapter remains blocked on that crate's publication. Not published, not
-> merged to `main`, not ready for use. See
-> [`tasks/todo.md`](tasks/todo.md) for exact phase-by-phase status and
+> **Status: v0.1 release candidate.** All 9 phases are done (architecture,
+> foundation types, exact reaction balancing, bounded precursor-set
+> search, solid-state process templates, plan scoring and confidence, the
+> end-to-end `Planner`, a CLI, a validation suite against curated
+> literature fixtures — see [`docs/benchmark_report.md`](docs/benchmark_report.md)
+> — and v0.1 release prep). An optional `mikiwame` feature adapts
+> structural diagnostics; the `chematic-crystal` adapter remains blocked
+> on that crate's publication. Not published, not merged to `main` — that
+> remains the owner's explicit call, not something reaching candidate
+> status decides on its own. See [`tasks/todo.md`](tasks/todo.md) for
+> exact phase-by-phase status and
 > [the draft PR](https://github.com/kent-tokyo/gugen/pull/1) for what's
 > under review.
 
@@ -116,17 +117,36 @@ $ gugen balance reaction.json
 }
 ```
 
-Output:
+Output (`serde_json::to_string_pretty`, one field per line):
 
 ```json
 [
   {
     "reactants": [
-      { "composition": { "Ba": 1.0, "O": 1.0 }, "coefficient": 1 },
-      { "composition": { "O": 2.0, "Ti": 1.0 }, "coefficient": 1 }
+      {
+        "composition": {
+          "Ba": 1.0,
+          "O": 1.0
+        },
+        "coefficient": 1
+      },
+      {
+        "composition": {
+          "O": 2.0,
+          "Ti": 1.0
+        },
+        "coefficient": 1
+      }
     ],
     "products": [
-      { "composition": { "Ba": 1.0, "O": 3.0, "Ti": 1.0 }, "coefficient": 1 }
+      {
+        "composition": {
+          "Ba": 1.0,
+          "O": 3.0,
+          "Ti": 1.0
+        },
+        "coefficient": 1
+      }
     ]
   }
 ]
@@ -149,6 +169,82 @@ shapes (`TargetSpecification`, a JSON array of `PrecursorCandidate`, and a
 JSON array of `TargetSpecification` respectively) rather than a separate
 CLI-specific format. `gugen batch` plans every target independently — one
 target's failure doesn't abort the rest.
+
+### Worked example: a full synthesis plan
+
+```
+$ gugen plan target.json --catalog precursors.json --format markdown
+```
+
+`target.json` (BaTiO3) and `precursors.json` (the standard BaCO3 + TiO2
+solid-state route to it):
+
+```json
+{
+  "composition": {"Ba": 1.0, "Ti": 1.0, "O": 3.0},
+  "structure": null,
+  "desired_phase": null,
+  "constraints": {"forbidden_elements": []}
+}
+```
+
+```json
+[
+  {"id": "BaCO3", "composition": {"Ba": 1.0, "C": 1.0, "O": 3.0}, "availability": null},
+  {"id": "TiO2", "composition": {"Ti": 1.0, "O": 2.0}, "availability": null}
+]
+```
+
+Output (real, unedited `gugen plan` output; this is also
+`tests/fixtures/batio3_report.md`'s golden snapshot, minus its unresolved-
+conditions list and rejected-candidate section for length — both are in the
+full file):
+
+```markdown
+# Synthesis Planning Report (schema v1)
+
+**Target:** Ba:1, O:3, Ti:1
+
+**Applicability:** PartiallyInDomain -- formula-only target, no structure provided (AGENTS.md §16's own example for this level)
+
+## Plan plan-a702f5b0380d3716 (score 0.062)
+
+- Target: Ba:1, O:3, Ti:1
+- Route family: ConventionalSolidState
+- Reaction: 1x(Ba:1, C:1, O:3) + 1x(O:2, Ti:1) -> 1x(Ba:1, O:3, Ti:1) + 1x(C:1, O:2)
+- Manual review required: true
+- Applicability: PartiallyInDomain -- formula-only target, no structure provided (AGENTS.md §16's own example for this level)
+
+### Steps
+
+- [Required] Weigh: BaCO3 x1, TiO2 x1
+- [Required] Mix (DryMixing)
+- [Required] Grind (MortarAndPestle), duration=unresolved
+- [Optional] Form (UniaxialPressing), pressure=unresolved
+- [Required] Heat (Calcination): temperature=unresolved, duration=unresolved, atmosphere=unresolved, ramp=unresolved
+- [Recommended] Grind (MortarAndPestle), duration=unresolved
+- [Required] Heat (Sintering): temperature=unresolved, duration=unresolved, atmosphere=unresolved, ramp=unresolved
+- [Required] Cool (FurnaceCooling)
+- [Recommended] Characterize (Xrd): verify target-phase formation
+
+### Evidence
+
+- [Weak/ProcessTemplate] weigh/mix/grind/form are the fixed opening sequence of the v0.1 conventional solid-state template
+- [Strong/StoichiometricBalance] balanced reaction releases a byproduct beyond the target, indicating a decomposition (calcination) step is needed before the final firing step
+- [Weak/ProcessTemplate] AGENTS.md §11's template outline places a regrind between calcination and final firing
+
+### Warnings
+
+- [Caution] temperature, duration, ramp rate, and atmosphere are unresolved for every heating step: gugen has no thermodynamic or literature evidence provider wired in yet (AGENTS.md §4.1)
+- [Severe] no hazard or safety data source is wired in yet: safety_penalty carries no real safety information, and this is not a safety clearance (AGENTS.md §15 "unknown hazardを安全と扱わない")
+```
+
+Note the calcination/regrind step: it's there because the balanced reaction
+releases CO2 (see the Evidence entry), not because every plan gets the same
+template — a carbonate-free route to the same target wouldn't have it. The
+full report also carries a per-plan score breakdown, confidence assessment
+(five independent sub-scores, not one blended number), assumptions list, and
+every rejected single-precursor candidate with its reason code.
 
 ## Ecosystem
 
@@ -181,7 +277,11 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo test --workspace --no-default-features
+cargo test --no-default-features --features mikiwame
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
+cargo build --features serde,clap --bin gugen
+cargo check --target wasm32-unknown-unknown
+cargo check --target wasm32-unknown-unknown --features mikiwame
 cargo audit
 ```
 

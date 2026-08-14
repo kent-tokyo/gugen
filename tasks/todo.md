@@ -961,8 +961,205 @@ finding. Neither blocks continuing; both are logged for the record and
 raised to the user explicitly, per §28's intent that this format surface
 findings for judgment, not necessarily halt work.
 
-## Phase 9
+## Phase 9 — v0.1 Release Preparation — DONE (2026-08-14)
 
-Not started. Will be filled in with the same DONE/NOT STARTED tracking
-style as each phase begins; see AGENTS.md §26 for phase content and §29 for
-the v0.1 completion checklist.
+AGENTS.md §26 lists this phase's checklist as: README実例を実出力と同期,
+README_ja, changelog, docs.rs, package内容確認, dependency/license audit,
+schema audit, semver audit, release checklist. Each is addressed below with
+what was actually run, not assumed.
+
+**README実例を実出力と同期 / README_ja.** Ran every documented command
+against its documented input file and diffed the real output against the
+README text, rather than re-reading the existing prose and trusting it:
+
+- `gugen balance reaction.json`'s JSON output block was wrong in both
+  READMEs — hand-formatted as condensed single-line objects
+  (`{ "composition": {...}, "coefficient": 1 }`), but the CLI actually
+  renders via `serde_json::to_string_pretty`, which puts every field on its
+  own line. This had been wrong since Phase 7 introduced the CLI; nobody
+  had diffed the README against a real run since. Fixed in both files.
+- `examples/balance_batio3.rs`'s output line was already correct (verified
+  again).
+- The `gugen plan`/`explain`/`validate-target`/`doctor`/`batch` subcommand
+  usage lines were checked against `gugen <subcommand> --help`'s real
+  `clap`-generated usage strings — all match.
+- Added a new worked-example section to both READMEs: a full `gugen plan
+  --format markdown` run for BaTiO3 (BaCO3 + TiO2), using the same target/
+  catalog as the golden snapshot fixture. The embedded output (title,
+  target, applicability, plan header, steps, evidence, warnings) is a
+  byte-for-byte copy of a real run's stdout, verified two ways: (1)
+  extracting the same line ranges from a fresh `gugen plan` invocation and
+  diffing against what's embedded in the README (only the intentionally-
+  omitted "Score breakdown" heading differs); (2) diffing the *entire* real
+  run's output against `tests/fixtures/batio3_report.md` directly (not
+  just the excerpted lines) — the only difference anywhere in the full
+  file is the trailing `_Generated <timestamp>..._` line, since the golden
+  fixture pins a fixed timestamp and a live run reads the real clock.
+  Confirms the README's claim that the embedded excerpt "is also
+  `tests/fixtures/batio3_report.md`'s golden snapshot" holds for the whole
+  document, not just the lines shown. Added at the user's request to give
+  the library's actual value proposition — evidence-linked, inspectable plans,
+  not a black-box score — visibility to a materials-science reader skimming
+  the README, rather than leaving it undemonstrated behind a subcommand
+  list. The `docs/benchmark_report.md` link already covered the
+  aggregate/quantitative side; this covers the qualitative "what does one
+  plan actually look like" side.
+
+**changelog.** Reviewed for accuracy against the current code (spot-checked
+several claims, not just read for typos). `[Unreleased]` stays
+`[Unreleased]` — AGENTS.md §29 lists "merge/publishしていない" as a v0.1
+*completion* criterion, so this phase prepares for release without cutting
+one. Added a Phase 9 `### Added` entry and two `### Fixed` entries (the
+README JSON mismatch above, and the missing LICENSE files below).
+
+**docs.rs.** `default = []`, and most of the crate's real surface (every
+`serde` impl, the entire `mikiwame_adapter` module) is behind non-default
+features. Without `[package.metadata.docs.rs]`, docs.rs would have built
+gugen's documentation with zero features enabled — a nearly bare crate.
+Added `all-features = true` under that key. Re-verified
+`RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps`
+stays clean.
+
+**package内容確認.** `cargo package --list` review found two real gaps:
+
+1. **`LICENSE-APACHE`/`LICENSE-MIT` did not exist.** `Cargo.toml` declares
+   `license = "MIT OR Apache-2.0"`, both READMEs link `LICENSE-APACHE` and
+   `LICENSE-MIT`, and AGENTS.md's own crate-layout diagram (§ describing
+   Phase 1's `crate初期化`) lists both files — but nobody had ever created
+   them. Added both: `LICENSE-APACHE` is `rust-lang/rust`'s unmodified
+   Apache-2.0 text (the terms only, no filled-in copyright appendix — the
+   same convention `rust-lang/rust` itself uses); `LICENSE-MIT` is the
+   exact text `dtolnay`'s crates (`thiserror`, `syn`, `quote`,
+   `proc-macro2` — already gugen's own dependencies) ship, which omits the
+   optional copyright-holder line. Chose these specific texts by fetching
+   them from their real source repos rather than reconstructing the
+   templates from memory, and matched gugen's own dependency tree's
+   convention rather than picking an arbitrary alternative.
+2. `cargo package --list --allow-dirty` printed `warning: manifest has no
+   documentation, homepage or repository` — fixed by adding `repository`
+   and `documentation` to `Cargo.toml` (see docs.rs, above, for the
+   `[package.metadata.docs.rs]` addition made in the same pass).
+
+Everything else in the package listing (`AGENTS.md`, `tasks/todo.md`,
+`.github/workflows/ci.yml`) is deliberately public — both READMEs already
+link `tasks/todo.md` for phase-by-phase status, so shipping it in the
+package is consistent, not incidental inclusion.
+
+**dependency/license audit.** Queried the crates.io API for the license
+field of all 30 locked dependencies (`Cargo.lock`), at their exact locked
+versions, not the latest version or a name-recognition assumption. All are
+`MIT`, `Apache-2.0`, or `MIT OR Apache-2.0` — compatible with gugen's own
+`MIT OR Apache-2.0` — except:
+
+- `memchr` 2.8.3: `Unlicense OR MIT` (compatible; MIT arm satisfies).
+- `strsim` 0.11.1: `MIT` only (compatible).
+- `unicode-ident` 1.0.24: `(MIT OR Apache-2.0) AND Unicode-3.0` — the
+  `Unicode-3.0` term covers embedded Unicode Consortium data tables. This
+  is a standard, widely-audited combination present in nearly every Rust
+  dependency tree that touches `proc-macro2`/`syn` (which gugen's `clap`
+  and `thiserror` derive macros already pull in); not a new or unusual
+  obligation introduced by gugen's own choices.
+
+No copyleft (GPL/LGPL/AGPL) dependencies anywhere in the tree. `cargo audit`
+re-run clean (no known security advisories).
+
+**schema audit.** `SCHEMA_VERSION: u32 = 1` (report.rs), embedded on every
+`SynthesisPlanningReport`, exercised by `tests/json_roundtrip.rs` alongside
+negative-amount, inverted-temperature-range, and duplicate-JSON-key
+rejection tests, and surfaced directly by `gugen doctor`. No schema change
+in this phase, so the version number is unchanged.
+
+**semver audit.** `cargo semver-checks check-release` was actually run
+(not assumed inapplicable) — it needs a published-crate baseline, and
+`gugen` has never been published, so it fails with "gugen not found in
+registry" rather than producing a meaningful comparison. Confirms rather
+than assumes there is no semver history yet to check. In its place, the
+public API surface (`src/lib.rs`'s `pub use` list) was reviewed by hand:
+every module is declared as private `mod` (never `pub mod`), so the only
+public API is the deliberately curated re-export list — nothing internal
+is accidentally reachable via `gugen::some_module::SomeType`. Version
+stays `0.1.0`.
+
+**release checklist (AGENTS.md §29).** Walked every line item; each was
+verified this phase, not assumed carried over from earlier phases:
+
+- [x] Rust libraryとして公開APIがある — `src/lib.rs`'s `pub use` list.
+- [x] target compositionを受け取れる — `TargetSpecification`.
+- [x] precursor catalogから候補生成できる — `search_precursor_sets`.
+- [x] reaction equationを厳密にbalanceできる — `balance()`, exact-rational.
+- [x] 複数候補planを生成できる — `Planner::plan`.
+- [x] conventional solid-state routeを表現できる —
+      `conventional_solid_state_template`.
+- [x] process stepsが機械可読 — `ProcessStep` (serde-able under `serde`).
+- [x] unknown conditionsをunresolvedとして保持できる — `StepRequirement::
+      Unresolved`, `UnresolvedRequirement`.
+- [x] evidenceとassumptionを分離できる — `PlanningEvidence` vs
+      `PlanningAssumption`, separate fields on `SynthesisPlan`.
+- [x] ranking breakdownを返せる — `PlanScoreBreakdown` (seven named
+      sub-scores, not one collapsed number).
+- [x] scoreを成功確率と表現していない — stated explicitly in both READMEs
+      and every relevant doc comment.
+- [x] confidenceとapplicabilityが分離されている — `ConfidenceAssessment`
+      vs `ApplicabilityAssessment`, distinct types.
+- [x] rejected candidateの理由を返せる — `RejectedCandidate` +
+      `RejectionCode`.
+- [x] safety warningがある — mandatory `Severe` warning alongside every
+      plan (score.rs).
+- [x] manual review requirementがある — `manual_review_required: bool`,
+      always `true` in v0.1.
+- [x] providerが交換可能 — `PrecursorCatalog`/`ThermodynamicProvider`/
+      `ProcessEvidenceProvider` traits.
+- [x] JSON schema versionがある — `SCHEMA_VERSION` (schema audit, above).
+- [x] provenanceがある — `PlanningProvenance`.
+- [x] deterministic — no system-clock or RNG read inside the library core
+      (`execution_timestamp` is caller-supplied); `gugen doctor` reports
+      "deterministic mode: yes"; Phase 8's `planning_is_reproducible_
+      across_repeated_runs` proves it empirically.
+- [x] batch APIとCLIがある — `gugen batch`, per-target failure isolation.
+- [x] known-route validationがある — Phase 8's `tests/validation.rs`
+      (5/5 literature-cited routes recovered exactly).
+- [x] false-confidence auditがある — Phase 8's `every_recovered_plan_
+      still_requires_manual_review...` plus the benchmark report's false-
+      confident-plan-rate metric.
+- [x] out-of-domain inputを棄却できる — `tests/adversarial.rs`'s
+      out-of-domain/contradictory-target cases; benchmark report's
+      abstention-rate metric.
+- [x] chematic-crystal連携境界がある — `TargetMaterialView` trait.
+- [x] mikiwame連携がoptional — feature-gated `mikiwame_adapter`, off by
+      default.
+- [x] README例が実出力と一致 — fixed this phase (see above); re-verified
+      by direct diff, not re-reading.
+- [x] fmt/clippy/test/doc/auditが通る — re-run after every change this
+      phase, across `--all-features`, `--no-default-features`, and
+      `--no-default-features --features mikiwame`; both `wasm32-unknown-
+      unknown` checks (with/without `mikiwame`); `cargo audit`; all green.
+- [x] draft PRがある — verified live via `gh pr view 1`:
+      `isDraft: true`, `state: OPEN`,
+      https://github.com/kent-tokyo/gugen/pull/1.
+- [x] merge/publishしていない — verified: PR state is `OPEN` (not merged);
+      `curl https://crates.io/api/v1/crates/gugen` returns
+      `{"errors":[{"detail":"crate \`gugen\` does not exist"}]}` — checked
+      directly, not inferred from the earlier `cargo semver-checks`
+      registry-index error (that error is about the semver-checks baseline
+      lookup, not a deliberate publish check, and isn't cited as one here).
+- [x] working treeがclean — verified via `git status` before each commit
+      this phase, same as every prior phase.
+
+All 29 items verified true as of 2026-08-14. **This is a v0.1 candidate
+per AGENTS.md §29's definition** — but per §26 ("所有者の明示的許可なく
+publishしないでください") and §29's own "merge/publishしていない"
+criterion, reaching candidate status is not itself permission to merge or
+publish; that remains the owner's explicit call.
+
+**GitHub repo metadata** (outside the git diff, done at the user's
+request): repo description and topics were empty (`gh repo view` returned
+`description: ""`, `repositoryTopics: null`). Set via `gh repo edit` to
+match the new `Cargo.toml` keywords/categories for consistency:
+description "Explainable materials synthesis and process planning, in
+Rust.", topics `rust`, `chemistry`, `materials-science`, `synthesis`,
+`planning`. `cheminformatics` was considered and deliberately left out —
+it conventionally denotes molecular-level tooling (SMILES, QSAR, drug
+discovery), and gugen explicitly positions itself against `renkin`
+(molecular retrosynthesis) as the non-molecular, inorganic-materials
+sibling; tagging it with a molecular-chemistry keyword risks
+miscategorizing it for exactly the audience trying to distinguish the two.

@@ -7,14 +7,15 @@
 （evidence）・仮定（assumption）・未確定条件（unresolved）を明示したまま、
 機械可読な形で返します。実験の成功を保証するものではありません。
 
-> **ステータス：開発初期、v0.1 開発中。** 全9フェーズ中フェーズ0〜8が完了
-> （アーキテクチャ設計、基盤型定義、厳密な反応式バランス、bounded前駆体探索、
-> 固相合成プロセステンプレート、plan scoring・confidence、これらを一気通貫で
-> 統括する`Planner`、CLI、および文献に基づくfixtureによる検証一式 --
-> [`docs/benchmark_report.md`](docs/benchmark_report.md) 参照)。オプションの
-> `mikiwame`機能で構造診断結果を取り込めますが、`chematic-crystal`アダプタは
-> 同クレート未公開のため保留中です。未公開・`main`未マージ・利用不可な状態
-> です。フェーズごとの詳細は
+> **ステータス：v0.1 リリース候補。** 全9フェーズが完了（アーキテクチャ
+> 設計、基盤型定義、厳密な反応式バランス、bounded前駆体探索、固相合成プロ
+> セステンプレート、plan scoring・confidence、これらを一気通貫で統括する
+> `Planner`、CLI、文献に基づくfixtureによる検証一式 --
+> [`docs/benchmark_report.md`](docs/benchmark_report.md) 参照 -- および
+> v0.1リリース準備)。オプションの`mikiwame`機能で構造診断結果を取り込め
+> ますが、`chematic-crystal`アダプタは同クレート未公開のため保留中です。
+> 未公開・`main`未マージです（候補状態に達したこと自体はmerge/publishの
+> 許可を意味せず、それは所有者が明示的に判断します）。フェーズごとの詳細は
 > [`tasks/todo.md`](tasks/todo.md) を、レビュー中の内容は
 > [draft PR](https://github.com/kent-tokyo/gugen/pull/1) を参照してください。
 
@@ -109,17 +110,36 @@ $ gugen balance reaction.json
 }
 ```
 
-出力：
+出力（`serde_json::to_string_pretty`、1フィールド1行）：
 
 ```json
 [
   {
     "reactants": [
-      { "composition": { "Ba": 1.0, "O": 1.0 }, "coefficient": 1 },
-      { "composition": { "O": 2.0, "Ti": 1.0 }, "coefficient": 1 }
+      {
+        "composition": {
+          "Ba": 1.0,
+          "O": 1.0
+        },
+        "coefficient": 1
+      },
+      {
+        "composition": {
+          "O": 2.0,
+          "Ti": 1.0
+        },
+        "coefficient": 1
+      }
     ],
     "products": [
-      { "composition": { "Ba": 1.0, "O": 3.0, "Ti": 1.0 }, "coefficient": 1 }
+      {
+        "composition": {
+          "Ba": 1.0,
+          "O": 3.0,
+          "Ti": 1.0
+        },
+        "coefficient": 1
+      }
     ]
   }
 ]
@@ -142,6 +162,81 @@ gugen自身の公開JSON形式（`TargetSpecification`、`PrecursorCandidate`の
 JSON配列、`TargetSpecification`のJSON配列）をそのまま再利用しています。
 `gugen batch` は各targetを独立に計画し、一件の失敗が残りを止めることは
 ありません。
+
+### 実例：合成計画レポート全体
+
+```
+$ gugen plan target.json --catalog precursors.json --format markdown
+```
+
+`target.json`（BaTiO3）と`precursors.json`（BaCO3 + TiO2という標準的な
+固相合成ルート）：
+
+```json
+{
+  "composition": {"Ba": 1.0, "Ti": 1.0, "O": 3.0},
+  "structure": null,
+  "desired_phase": null,
+  "constraints": {"forbidden_elements": []}
+}
+```
+
+```json
+[
+  {"id": "BaCO3", "composition": {"Ba": 1.0, "C": 1.0, "O": 3.0}, "availability": null},
+  {"id": "TiO2", "composition": {"Ti": 1.0, "O": 2.0}, "availability": null}
+]
+```
+
+出力（実際の`gugen plan`の出力そのもの。`tests/fixtures/batio3_report.md`の
+golden snapshotと同一内容だが、紙面の都合でunresolved一覧とrejected
+candidatesの節を省略。両方とも完全な出力ファイルには含まれる）：
+
+```markdown
+# Synthesis Planning Report (schema v1)
+
+**Target:** Ba:1, O:3, Ti:1
+
+**Applicability:** PartiallyInDomain -- formula-only target, no structure provided (AGENTS.md §16's own example for this level)
+
+## Plan plan-a702f5b0380d3716 (score 0.062)
+
+- Target: Ba:1, O:3, Ti:1
+- Route family: ConventionalSolidState
+- Reaction: 1x(Ba:1, C:1, O:3) + 1x(O:2, Ti:1) -> 1x(Ba:1, O:3, Ti:1) + 1x(C:1, O:2)
+- Manual review required: true
+- Applicability: PartiallyInDomain -- formula-only target, no structure provided (AGENTS.md §16's own example for this level)
+
+### Steps
+
+- [Required] Weigh: BaCO3 x1, TiO2 x1
+- [Required] Mix (DryMixing)
+- [Required] Grind (MortarAndPestle), duration=unresolved
+- [Optional] Form (UniaxialPressing), pressure=unresolved
+- [Required] Heat (Calcination): temperature=unresolved, duration=unresolved, atmosphere=unresolved, ramp=unresolved
+- [Recommended] Grind (MortarAndPestle), duration=unresolved
+- [Required] Heat (Sintering): temperature=unresolved, duration=unresolved, atmosphere=unresolved, ramp=unresolved
+- [Required] Cool (FurnaceCooling)
+- [Recommended] Characterize (Xrd): verify target-phase formation
+
+### Evidence
+
+- [Weak/ProcessTemplate] weigh/mix/grind/form are the fixed opening sequence of the v0.1 conventional solid-state template
+- [Strong/StoichiometricBalance] balanced reaction releases a byproduct beyond the target, indicating a decomposition (calcination) step is needed before the final firing step
+- [Weak/ProcessTemplate] AGENTS.md §11's template outline places a regrind between calcination and final firing
+
+### Warnings
+
+- [Caution] temperature, duration, ramp rate, and atmosphere are unresolved for every heating step: gugen has no thermodynamic or literature evidence provider wired in yet (AGENTS.md §4.1)
+- [Severe] no hazard or safety data source is wired in yet: safety_penalty carries no real safety information, and this is not a safety clearance (AGENTS.md §15 "unknown hazardを安全と扱わない")
+```
+
+仮焼（Calcination）と再粉砕のstepがあるのは、バランス済み反応式がCO2を
+放出しているためです（Evidenceの2番目の項目を参照）。すべてのplanに同じ
+templateが適用されるわけではなく、炭酸塩を経由しないルートにはこのstepは
+付きません。完全なレポートには、plan単位のスコア内訳、confidence評価
+（1つに潰した数値ではなく5つの独立した副指標）、assumptions一覧、却下
+された単一前駆体候補すべてが理由コード付きで含まれます。
 
 ## エコシステム上の位置づけ
 
@@ -172,7 +267,11 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo test --workspace --no-default-features
+cargo test --no-default-features --features mikiwame
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
+cargo build --features serde,clap --bin gugen
+cargo check --target wasm32-unknown-unknown
+cargo check --target wasm32-unknown-unknown --features mikiwame
 cargo audit
 ```
 

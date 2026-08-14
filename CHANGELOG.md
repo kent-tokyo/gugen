@@ -11,6 +11,29 @@ each entry.
 
 ### Added
 
+- **Phase 9 — v0.1 release preparation.** Went through AGENTS.md §29's
+  completion checklist item by item rather than assuming it was already
+  satisfied. Added `LICENSE-APACHE`/`LICENSE-MIT` (present in the crate
+  layout AGENTS.md specifies and linked by both READMEs since Phase 0, but
+  never actually created) — text matches the exact convention already used
+  by gugen's own dependency tree (`rust-lang/rust`'s unmodified
+  Apache-2.0 terms; the copyright-line-free MIT text `thiserror`/`serde`/
+  `syn` ship). Added `repository`/`documentation`/`keywords`/`categories`
+  to `Cargo.toml`, plus `[package.metadata.docs.rs] all-features = true` —
+  without it, docs.rs would build with `default = []` and silently omit
+  every `serde` impl and the whole `mikiwame` adapter module from the
+  published docs. A full dependency license audit (30 locked crates,
+  checked against their exact locked versions via the crates.io API, not
+  assumed from crate name recognition): all MIT/Apache-2.0-compatible, no
+  copyleft; `unicode-ident` additionally carries `Unicode-3.0` for its
+  embedded data tables, a standard, widely-audited combination. Semver
+  audit: no `cargo-semver-checks` baseline exists yet since gugen has never
+  been published (confirmed by running it, not assumed); the public API
+  surface was reviewed by hand instead and is a deliberately curated
+  re-export list with no accidentally-public internals. Added a full
+  worked `gugen plan` example (BaTiO3, the same fixture the golden
+  snapshot tests use) to both READMEs, captured from a real run of the
+  built CLI rather than written from memory.
 - **Phase 8 — validation.** Curated, cited literature fixtures
   (`tests/validation.rs`) spanning perovskite oxide (LaAlO3), spinel oxide
   (MgAl2O4), phosphate (Zn3(PO4)2), simple binary oxide (CaO), and a
@@ -132,6 +155,15 @@ each entry.
 
 ### Fixed
 
+- **README's `gugen balance` JSON output example never matched real
+  output.** Both READMEs showed hand-formatted, condensed single-line
+  objects (`{ "composition": { "Ba": 1.0, "O": 1.0 }, "coefficient": 1 }`);
+  the CLI actually renders via `serde_json::to_string_pretty`, which
+  expands every field onto its own line. Caught by actually running the
+  documented command against the documented input file and diffing the
+  result against the README, per AGENTS.md §26 Phase 9's "README実例を
+  実出力と同期" — not by re-reading the existing text and assuming it was
+  still accurate.
 - `search_precursor_sets` could silently double-accept a precursor set: a
   redundant element source (e.g. a catalog with both BaCO3 and BaO) lets a
   larger combination balance with the redundant precursor's coefficient
