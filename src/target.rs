@@ -1,10 +1,17 @@
 use crate::composition::{Composition, Element};
 use std::collections::BTreeSet;
 
-/// Minimal structural hint about the target, standing in until a
-/// `chematic-crystal` adapter can provide the real `PeriodicStructure`/
-/// `Lattice` types. gugen does not implement its own crystal-structure
-/// representation (AGENTS.md §5, docs/integration.md).
+/// Minimal structural hint about the target: free text, deliberately.
+/// `chematic-crystal` is now published and, with the `chematic_crystal`
+/// feature enabled, `crate::to_mikiwame_structure` can convert a real
+/// `chematic_crystal::PeriodicStructure` into something `mikiwame::analyze`
+/// consumes (Phase 16) -- but that conversion is a standalone,
+/// caller-driven bridge, not a field here. Giving `TargetStructure` itself
+/// a geometry field would need real `Planner`/report-level wiring
+/// decisions (how a report should represent per-target structural
+/// diagnostics) that Phase 16 deliberately left out of scope; see
+/// `docs/integration.md`. gugen does not implement its own crystal-
+/// structure representation either way (AGENTS.md §5).
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TargetStructure {

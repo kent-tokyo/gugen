@@ -16,17 +16,32 @@ categories = ["science"]
 all-features = true
 
 [dependencies]
+chematic-crystal = { version = "0.15.0", default-features = false, optional = true }
 clap = { version = "4.6.6", features = ["derive"], optional = true }
 mikiwame = { version = "0.1.0", default-features = false, optional = true }
 serde = { version = "1.0.229", features = ["derive"], optional = true }
 serde_json = { version = "1.0.151", optional = true }
 thiserror = "2.0.20"
 
+[dev-dependencies]
+# Only for chematic_crystal_adapter.rs's own test fixtures, which construct
+# chematic_crystal::SiteSpecies { element: chematic_core::Element::FE, .. }
+# directly -- naming a foreign type by path requires the crate that defines
+# it to be a direct dependency, even though production code (to_mikiwame_
+# structure itself) never names `chematic_core::Element`, only calls
+# `.symbol()` on a value it already has. Not gated by any feature: dev-
+# dependencies never enter the published dependency graph regardless.
+chematic-core = "0.15.0"
+
 [features]
 default = []
 serde = ["dep:serde", "dep:serde_json"]
 clap = ["dep:clap"]
 mikiwame = ["dep:mikiwame"]
+# The bridge (src/chematic_crystal_adapter.rs) only exists to hand a real
+# structure to mikiwame::analyze, so this feature pulls mikiwame in too --
+# there is nothing useful gugen does with chematic-crystal on its own.
+chematic_crystal = ["dep:chematic-crystal", "mikiwame"]
 # Zero new dependencies: gugen never fetches Materials Project data itself
 # (src/materials_project_adapter.rs takes only pre-fetched, caller-supplied
 # entries) -- this feature exists purely to keep that adapter's types out of

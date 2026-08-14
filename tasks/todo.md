@@ -2483,3 +2483,200 @@ explicit_abstention` pins the abstention path including that
 material_contradicts_does_not_exclude_a_plan_end_to_end` pins the
 `SimilarMaterial` safety condition through the full `Planner::plan` path,
 not just the isolated pure-function unit tests.
+
+## Phase 16 — chematic-crystal -> mikiwame Structure Bridge (v0.3.0) — DONE (2026-08-14)
+
+**Goal**: close the specific gap `mikiwame_adapter.rs` had named since
+Phase 6 -- gugen's own `TargetStructure` is free text, and building a real
+`mikiwame::PeriodicStructureView` "depends on chematic-crystal, which
+remains unpublished." chematic-crystal published its first version,
+0.15.0, on 2026-08-14 (the owner is its author).
+
+**Pre-implementation research, live-verified rather than assumed
+(AGENTS.md §21.3)**: docs.rs summaries for chematic-crystal 0.15.0 and
+mikiwame 0.1.0 gave the general shape but left real gaps (exact
+`FractionalCoord`/`SiteSpecies`/`Occupancy` fields, `Composition`/
+provenance-type existence, `Lattice::matrix()`'s row-vs-column
+convention). The owner (chematic-crystal's author) supplied the exact
+public API and flagged two correctness hazards a plain conversion would
+introduce. Before writing any conversion logic, the real vendored source
+(`~/.cargo/registry/src/**/chematic-crystal-0.15.0/` and
+`mikiwame-0.1.0/`) was read directly to confirm everything the owner
+stated and resolve what neither docs.rs nor the owner's message pinned
+precisely:
+- `chematic_crystal::lattice`'s own module doc confirms row-vector
+  convention (`matrix[0]/[1]/[2]` = a/b/c, `cartesian = fractional .
+  matrix`), matching `mikiwame::structure_view::PeriodicStructureView`'s
+  documented convention exactly -- no transpose mismatch between the two
+  crates.
+- `Lattice::from_matrix` validates degeneracy (`SingularMatrix`/
+  `NearSingularMatrix`) and length, but not determinant sign -- left-
+  handed matrices are accepted, using the *signed* volume so the cached
+  inverse stays algebraically exact even for left-handed input.
+- `Occupancy::SUM_TOLERANCE = 1e-6` confirmed exactly (the docs.rs-sourced
+  guess used while drafting the plan turned out correct, but was verified
+  against source before being cited rather than left as an assumption).
+- `chematic_core::Element::symbol(self) -> &'static str`, `Element` is
+  `Copy` -- confirms `species.element.symbol().to_string()` compiles and
+  needs no `chematic_core` import in production code (method calls on an
+  already-typed value don't require the defining crate to be a direct
+  dependency; only *naming* the type, e.g. `Element::FE` in test
+  fixtures, does -- `chematic-core` was added as a `[dev-dependencies]`
+  entry for exactly that reason, not requested by the owner's Cargo.toml
+  snippet but necessary for it to compile).
+- `mikiwame::diagnostics::separation::check`'s real `SITE_DUPLICATE` logic
+  (exact-element, minimum-image distance `< 1e-6` Angstrom, checked
+  pairwise across *all* sites regardless of origin) confirmed the
+  cross-site-duplicate test (below) would actually trigger a real finding
+  once converted, not just plausibly should.
+
+**Advisor caught one real issue before implementation began**: the
+initial plan's code sketch assumed `Lattice::matrix()` was row-major "by
+analogy to mikiwame" without checking chematic-crystal's own source --
+flagged as load-bearing for the handedness-swap logic (a column-major
+convention would still flip the determinant sign, making the bug
+invisible to a naive test). Resolved by reading the vendored source
+before writing the conversion body (confirmed row-major, matching), and a
+dedicated convention-pinning test
+(`non_orthogonal_lattice_with_asymmetric_rows_is_not_transposed`) was
+added independent of the handedness path specifically so a wrong
+convention reading would still be caught even if the source-reading step
+had been skipped or misread.
+
+**Design**:
+- `Cargo.toml`: `chematic-crystal = { version = "0.15.0", default-features
+  = false, optional = true }`; `chematic_crystal = ["dep:chematic-crystal",
+  "mikiwame"]` (implies `mikiwame` -- chematic-crystal alone has no
+  structural diagnostics of its own, so nothing useful exists behind the
+  feature without it). No `cfg(all(feature = ..., feature = ...))`
+  anywhere as a result -- `src/chematic_crystal_adapter.rs`'s `mod`
+  declaration needs only `#[cfg(feature = "chematic_crystal")]`, matching
+  gugen's existing one-feature-per-dependency convention.
+- `src/chematic_crystal_adapter.rs` (new, flat placement matching
+  `mikiwame_adapter.rs`/`materials_project_adapter.rs` -- not the nested
+  `src/adapters/chematic.rs` path `docs/integration.md`'s Phase 0 sketch
+  guessed before either convention existed): `to_mikiwame_structure(&
+  chematic_crystal::PeriodicStructure) -> mikiwame::OwnedStructure`, plus
+  a small crate-private `determinant` helper. Not a plain field-by-field
+  copy -- two correctness fixes:
+  1. **Same-element consolidation, within one `PeriodicSite` only.**
+     `chematic_crystal::PeriodicSite` allows multiple `SiteSpecies` for
+     the same element at one position (disorder modeling) and occupancy
+     `0.0` is valid; a naive per-species flat-map would produce a
+     false-positive `SITE_DUPLICATE` finding in mikiwame. Species sharing
+     an element *within one `PeriodicSite`* are summed and emitted once,
+     dropped entirely if the sum is exactly `0.0` (exact comparison, no
+     epsilon, no silent renormalization -- the owner's explicit
+     instruction). Species at *different* `PeriodicSite`s are never
+     merged, even at an identical element and position -- proven by
+     `two_periodic_sites_at_the_same_element_and_position_are_kept_
+     distinct_and_mikiwame_still_flags_them`, which converts a genuine
+     cross-site duplicate and asserts real `mikiwame::analyze` still
+     produces `FindingCode::SiteDuplicate` -- the false-positive fix
+     doesn't become a false negative.
+  2. **Lattice handedness.** A left-handed (negative-determinant) input
+     lattice, valid in chematic-crystal but a Critical `InvalidInput` in
+     mikiwame, is corrected by swapping the `b`/`c` lattice rows and the
+     matching fractional `y`/`z` component of every site -- an exact
+     basis change, not a geometry-altering heuristic. Verified by
+     `left_handed_lattice_is_corrected_without_moving_any_site`, which
+     recomputes Cartesian position independently (a standalone
+     `frac_to_cart` written inside the test, not calling into the
+     adapter's own logic) and asserts it's unchanged before/after.
+- `src/lib.rs`: `mod`/`pub use` gated on `chematic_crystal`, mirroring the
+  existing `mikiwame` gating exactly; module doc comment extended
+  alongside the existing Phase 15A/15B sentences.
+- `src/bin/gugen.rs`: `doctor_report()` gained a `chematic-crystal
+  integration status:` line (mirroring the existing `mikiwame_status`
+  pattern) and the known-limitations line's "chematic-crystal not
+  integrated" was replaced with a precise statement that
+  `TargetSpecification` still has no geometry field, so this CLI still
+  can't drive `mikiwame::analyze` automatically even with the feature on.
+
+**Ripple effects, each checked rather than assumed unaffected**:
+- No changes needed to `route_suitability.rs`, `report.rs`, `score.rs`,
+  `planner.rs`'s `plan()`, or any existing test fixture/golden snapshot --
+  this phase adds one new feature-gated module and touches nothing else's
+  runtime behavior. `cargo test --workspace --all-features` and `--no-
+  default-features` both pass unchanged.
+- `Cargo.toml` needed a `[dev-dependencies]` entry for `chematic-core`
+  (not in the owner's original snippet): test fixtures construct
+  `chematic_crystal::SiteSpecies { element: chematic_core::Element::FE,
+  .. }` directly, and naming a foreign type by path requires the defining
+  crate to be a direct dependency even though production code never names
+  `chematic_core::Element` (only calls `.symbol()` on a value it already
+  has). Flagged explicitly in a Cargo.toml comment.
+
+**Explicit non-goals** (all confirmed with the owner before implementation,
+all still true after): no automatic wiring into `Planner::plan`
+(`TargetSpecification` gets no new geometry field); no mapping of
+mikiwame's structural diagnostics into `route_suitability` (mikiwame
+answers "is this structure physically valid," route_suitability answers
+"which route family suits this target" -- conflating them without real
+literature backing would repeat the unsourced-heuristic mistake Phase 15A
+deliberately avoided); no `ApplicabilityLevel::InDomain` promotion (needs
+a bulk-inorganic-vs-MOF/thin-film material-class classifier neither
+mikiwame nor chematic-crystal provides -- `planner.rs`'s
+`assess_applicability` comment naming chematic-crystal as a potential path
+to `InDomain` was written before either crate's real capability was
+confirmed, and stays accurate in spirit, not resolved by this phase); no
+general polymorph-disambiguation mechanism (chematic-crystal 0.15 has no
+symmetry/Niggli reduction, so two representations of the same real
+structure can't be reliably compared by raw geometry -- Phase 15B's Fe2O3
+regression test stays a single documented case); no `curated_records()`
+expansion; occupancy values never clamped or renormalized to force
+agreement between the two crates' differing tolerances.
+
+**Docs updated**: `src/mikiwame_adapter.rs` and `src/target.rs`'s
+`TargetStructure` doc comments (both said chematic-crystal "remains
+unpublished" -- now false); `docs/integration.md` (Status section rewritten
+with verified 0.15.0 facts, the `TargetMaterialView` section corrected to
+describe what actually got built vs. the Phase 0 sketch, a new
+`chematic_crystal` section added, the mikiwame section's "not wired into
+Planner::plan" bullet updated to describe what's now unblocked vs. still
+blocked); `src/lib.rs` module doc comment; `ROADMAP.md` (status, phase
+table +16 row, near-term section, the Phase 6 table row, and the
+"chematic-crystal still unpublished" status note all corrected -- including
+walking back the original roadmap framing that assumed Phase 16 would feed
+`route_suitability`, which turned out not to fit chematic-crystal's real,
+narrower capability); `CHANGELOG.md` (new entry under `[Unreleased]`,
+after the Phase 15B entry).
+
+**Advisor caught one real issue pre-commit**: the module doc comment
+originally claimed `Occupancy::SUM_TOLERANCE` (chematic-crystal's
+occupancy-sum acceptance tolerance) and mikiwame's `SITE_DUPLICATE`
+position tolerance were "the same `1e-6`, not reconciled" -- two unrelated
+constants on unrelated quantities, asserting an interaction that doesn't
+exist. Fixed by identifying and documenting the *real* boundary case: same-
+element consolidation can itself push a summed occupancy just over `1.0`
+(accepted by chematic-crystal within `SUM_TOLERANCE`, but outside
+mikiwame's strict per-site `[0.0, 1.0]` range check, `FindingCode::
+InputInvalidOccupancy` with no tolerance at all) -- unreachable via an
+unconsolidated flat-map, where each species individually stays `<= 1.0`.
+Added a 9th test,
+`consolidation_can_produce_an_occupancy_slightly_above_one` (species at
+`0.5` + `0.5000005`, sum `1.0000005`, inside chematic-crystal's tolerance
+but flagged by real `mikiwame::analyze`), converting the corrected prose
+claim into a checked one rather than just fixing the wording.
+
+**Locally verified, all green**: `cargo fmt --all -- --check`, `cargo
+clippy --workspace --all-targets --all-features -- -D warnings`, `cargo
+clippy --no-default-features --features chematic_crystal --all-targets --
+-D warnings`, `cargo test --workspace --all-features` (154 tests, up from
+145 -- 9 new tests in `chematic_crystal_adapter.rs`), `cargo test
+--no-default-features --features chematic_crystal`, `cargo test
+--workspace --no-default-features`, `cargo test --no-default-features
+--features mikiwame`, `cargo doc --all-features --no-deps`, `cargo build
+--features serde,clap,chematic_crystal --bin gugen`, `cargo check --target
+wasm32-unknown-unknown --features chematic_crystal`. The correctness fixes
+are directly tested, not inferred from an absence of failures:
+`two_periodic_sites_at_the_same_element_and_position_are_kept_distinct_
+and_mikiwame_still_flags_them` pins both halves of the consolidation logic
+at once (false positive avoided, false negative not introduced) by running
+real `mikiwame::analyze` on the converted output; `left_handed_lattice_is_
+corrected_without_moving_any_site` pins the basis change via an
+independently-computed Cartesian-invariance check;
+`non_orthogonal_lattice_with_asymmetric_rows_is_not_transposed` pins the
+row-vector convention independent of the handedness path;
+`consolidation_can_produce_an_occupancy_slightly_above_one` pins the
+advisor-caught boundary case above.

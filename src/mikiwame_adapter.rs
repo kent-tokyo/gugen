@@ -5,11 +5,13 @@
 //! **Not called automatically by [`crate::Planner::plan`].** `mikiwame::
 //! analyze` needs a `mikiwame::PeriodicStructureView` (a real lattice +
 //! site list), and gugen's own `TargetStructure` is still free text --
-//! there is no way to construct one from a `TargetSpecification` yet. That
-//! capability depends on `chematic-crystal`, which remains unpublished
-//! (re-checked when this module was written, 2026-08-14). A caller that
-//! has its own structure data (a `mikiwame::OwnedStructure`, or its own
-//! `PeriodicStructureView` impl) can run `mikiwame::analyze`, pass the
+//! there is no field on `TargetSpecification` to carry real geometry
+//! through the planning pipeline (Phase 16 did not add one; see
+//! `crate::target::TargetStructure`'s own doc comment). A caller that has
+//! its own structure data (a `mikiwame::OwnedStructure`, its own
+//! `PeriodicStructureView` impl, or -- with the `chematic_crystal` feature
+//! enabled -- a `chematic_crystal::PeriodicStructure` converted via
+//! [`crate::to_mikiwame_structure`]) can run `mikiwame::analyze`, pass the
 //! resulting report to [`structural_effects`], and apply the result to a
 //! [`crate::SynthesisPlan`] itself: check `abstain_reason` first (a
 //! `Some` means mikiwame considers the structure invalid or a strong

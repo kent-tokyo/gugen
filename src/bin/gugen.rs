@@ -253,10 +253,16 @@ fn doctor_report() -> String {
     } else {
         "disabled (build with --features mikiwame to enable)"
     };
+    let chematic_crystal_status = if cfg!(feature = "chematic_crystal") {
+        "enabled (chematic_crystal_adapter::to_mikiwame_structure compiled in; a caller-driven \
+        bridge to mikiwame, not auto-wired into Planner::plan -- see docs/integration.md)"
+    } else {
+        "disabled (build with --features chematic_crystal to enable)"
+    };
     format!(
         "gugen version: {}\n\
         schema version: {}\n\
-        chematic-crystal version: not integrated (crate unpublished as of docs/integration.md's last check)\n\
+        chematic-crystal integration status: {chematic_crystal_status}\n\
         mikiwame integration status: {mikiwame_status}\n\
         enabled route families: {:?}\n\
         precursor catalog version: not applicable outside a `plan`/`batch` run (no persistent catalog is configured by this CLI)\n\
@@ -274,8 +280,10 @@ fn doctor_report() -> String {
         uncontested contradicting evidence into a report's not_recommended list, never reorder \
         or rescore the plans that remain; this CLI never configures one, so every applicable \
         route family is still offered here regardless; no hazard/safety database \
-        (manual_review_required is always true); chematic-crystal not integrated; full list in \
-        CHANGELOG.md's \"Known limitations\" section",
+        (manual_review_required is always true); TargetSpecification still has no field for real \
+        geometry, so even with chematic_crystal enabled nothing in this CLI can drive \
+        mikiwame::analyze automatically; full list in CHANGELOG.md's \"Known limitations\" \
+        section",
         env!("CARGO_PKG_VERSION"),
         gugen::SCHEMA_VERSION,
         [
@@ -757,6 +765,7 @@ mod tests {
         let text = doctor_report();
         assert!(text.contains("gugen version:"));
         assert!(text.contains("mikiwame integration status:"));
+        assert!(text.contains("chematic-crystal integration status:"));
         assert!(text.contains("known limitations:"));
     }
 

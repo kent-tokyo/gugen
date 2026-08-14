@@ -18,7 +18,8 @@
 //! fixtures (`tests/`, `docs/benchmark_report.md`), and v0.1 release
 //! preparation (license files, docs.rs metadata, a dependency license
 //! audit — see `tasks/todo.md`'s Phase 9 section). The `chematic-crystal`
-//! adapter remains blocked on that crate's publication, and two
+//! adapter remained blocked on that crate's publication through v0.1
+//! (Phase 16 below addresses part of this), and two
 //! validation findings are documented rather than fixed (see
 //! `tasks/todo.md`'s Phase 8 section). **v0.1.0 is published** (crates.io,
 //! merged to `main`, tagged `v0.1.0`) — see `tasks/todo.md`'s Phase 9
@@ -39,12 +40,20 @@
 //! `SynthesisPlanningReport.not_recommended` (kept, with its findings, not
 //! dropped), and a target where every generated plan is excluded this way
 //! abstains explicitly via `unresolved` rather than returning an empty
-//! success. No numeric score is affected by either phase; see
-//! `tasks/todo.md`'s Phase 15A/15B sections.
+//! success. No numeric score is affected by either phase. Phase 16 added
+//! an optional `chematic_crystal` feature: `to_mikiwame_structure`
+//! converts a caller-supplied `chematic_crystal::PeriodicStructure` (now
+//! published, 0.15.0) into a `mikiwame::OwnedStructure`, closing the
+//! specific conversion gap the mikiwame adapter had named since Phase 6.
+//! Still not auto-wired into `Planner::plan` -- `TargetSpecification` has
+//! no geometry field, so a caller still applies the result themselves. See
+//! `tasks/todo.md`'s Phase 15A/15B/16 sections.
 
 #![forbid(unsafe_code)]
 
 mod balance;
+#[cfg(feature = "chematic_crystal")]
+mod chematic_crystal_adapter;
 mod composition;
 mod config;
 mod error;
@@ -68,6 +77,8 @@ mod score;
 mod target;
 
 pub use balance::{balance, curated_byproducts};
+#[cfg(feature = "chematic_crystal")]
+pub use chematic_crystal_adapter::to_mikiwame_structure;
 pub use composition::{Composition, ELEMENT_SYMBOLS, Element};
 pub use config::{PlanningConfig, SearchBudget};
 pub use error::{GugenError, ProviderError, Result};
