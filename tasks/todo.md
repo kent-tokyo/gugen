@@ -2680,3 +2680,143 @@ independently-computed Cartesian-invariance check;
 row-vector convention independent of the handedness path;
 `consolidation_can_produce_an_occupancy_slightly_above_one` pins the
 advisor-caught boundary case above.
+
+## Phase 17 — Route-Suitability Corpus Audit + Decision-Policy Evaluation (v0.3.0) — DONE (2026-08-14)
+
+**Goal**: the owner's trigger message explicitly warned against the
+obvious framing for this phase -- a "route-family prediction-accuracy
+benchmark on unknown materials" -- as actively misleading, since
+`RouteSuitabilityProvider` is a hand-verified-literature-evidence lookup
+for specific `(target, RouteFamily)` pairs, not a generalizing classifier.
+A holdout of genuinely unknown targets would correctly return
+`InsufficientEvidence` almost everywhere; reporting that as "accuracy"
+would misrepresent the system. Specified instead as two parts: 17A audits
+what literature evidence actually exists to evaluate route suitability at
+all; 17B evaluates the *conservative decision policy*
+(`derive_recommendation`, Phase 15B) against what 17A finds. Explicit
+completion criterion: success is not gated on strong numbers -- a
+mostly-abstaining result on real data is itself valuable (the next need
+is a negative-evidence corpus, not an algorithm change).
+
+**Advisor review (before implementation) changed two things from the
+first plan draft**: (1) dropped a planned re-fetch of the raw 19,488-record
+Kononova dataset to mine an `operations` field for route-family labels --
+classifying "ball milling -> Mechanochemical" from free text would be an
+unsourced heuristic manufacturing fabricated ground truth, the same
+failure mode Phase 15A's literature sourcing avoided; used the
+already-committed, license-verified `benchmarks/data/kononova_sample.jsonl`
+(1500 rows) as-is instead. (2) polymorph-ambiguity reported as an explicit
+**floor** with its reference list named, never as an unqualified rate
+implying completeness.
+
+**Bounded negative-evidence search run before finalizing the plan** (per
+advisor's instruction to ground the holdout count in what's actually
+findable, not a guessed quota): ~6 targeted CrossRef/Semantic
+Scholar/WebSearch queries across two chemistry angles (oxide-ceramic
+mechanochemical-vs-solid-state comparisons, and specific known-difficult
+targets). Found exactly one record meeting the bar of "documents a
+route's own real difficulty for a specific target" with a directly-
+readable open-access abstract: Corrado, Bellcase, Forrester, Dickey,
+Reaney, Jones, "Solid state synthesis of BiFeO3 occurs through the
+intermediate Bi25FeO39 compound," Journal of the American Ceramic Society
+(2024), DOI 10.1111/jace.19702, CC BY, confirmed via Semantic
+Scholar/CrossRef, abstract read directly (not taken from a search-engine
+summary of a paywalled paper -- an earlier candidate, a 2015 Journal of
+Alloys and Compounds comparative study on the same phenomenon, was
+confirmed to exist via CrossRef but its abstract was not accessible
+through any available API, so it was not used as a source). Did not find
+a comparably strong Mechanochemical-side comparative case. The low yield
+(1, not the 2-4 originally estimated as plausible) is itself part of
+17A's finding, not a gap papered over with weaker "route X was used"
+records (`Supports` at most, never usable for the exclusion-precision
+metrics -- the owner's own explicit warning against exactly this).
+
+**17A findings** (`examples/route_suitability_policy_audit.rs`, run
+against the existing `benchmarks/data/kononova_sample.jsonl`, no new
+fetch):
+- 1500 rows, all 1500 representable by gugen's own `Composition` type,
+  1500/1500 carry a non-empty `doi` field.
+- **Headline finding**: route family, success/failure, and
+  comparative-route-rejection are not present in this corpus (confirmed
+  against its actual fields: `doi`/`target_formula`/`target_elements`/
+  `precursors`) and cannot be derived without per-paper reading --
+  deliberately not attempted via any keyword/operations heuristic.
+- Evidence coverage against the shipped `InMemoryRouteSuitabilityProvider`
+  (2 curated records): 4/1500 (near-zero as expected, not exactly zero --
+  `fetch_kononova.py`'s leakage filter excludes exact route matches, not
+  exact target-composition matches at any route).
+- Polymorph-ambiguity floor: 0/1500 against 7 explicitly hand-listed,
+  non-exhaustive well-known systems (Fe2O3, TiO2, ZrO2, Al2O3, SiO2,
+  CaCO3, ZnS). Advisor review caught that the report's first draft
+  explained this zero as "the true fraction is higher, unmeasured" without
+  having checked why -- an assertion, not a measurement. Grepped the
+  corpus directly: none of the 7 systems appears as a `target_formula`,
+  but they appear heavily as *precursor* formulas (156 rows list Fe2O3,
+  270 list TiO2). The real, checked explanation is that
+  `kononova_sample.jsonl` treats these common binary oxides mostly as
+  starting materials rather than synthesis targets, not that polymorph
+  ambiguity is rare in materials science generally. Report text corrected
+  to state the checked cause instead of the unchecked assertion, still
+  framed as a floor, not a rate.
+
+**17B findings**: two real categories, not the three-way dev/threshold/
+holdout split the owner's message described -- `derive_recommendation`'s
+matrix (Phase 15B) was designed from stated principles and never fit
+against real data, so "threshold-reference" is empty in gugen's actual
+history; stated explicitly rather than inventing a third bucket. **dev**
+(BaTiO3+Mechanochemical, Mg(OH)2+ConventionalSolidState) reproduces its
+already-known Phase 15A/15B behavior (`Recommended`/`NotRecommended`) as a
+sanity check, not a discovery. **holdout** (BiFeO3+ConventionalSolidState,
+N=1): `derive_recommendation` -> `NotRecommended`, hand-checked against
+the sourced literature as the correct outcome -->
+`hard_exclusion_precision = 1/1`, `false_exclusion_rate = 0/1` for this
+one record (explicitly not a validated general rate at N=1).
+`conflict_detection_rate`: N/A, no conflicting-evidence holdout case
+found. `abstention_rate`/`evidence_coverage` at scale against the full
+1500-row corpus: 1496/1500 (99.7%) -- the one genuinely large-N number in
+the report, since every other 17B metric is small-sample by construction.
+`phase_ambiguity_rate` restates 17A's floor. `determinism`: a dedicated
+test (`the_holdout_finding_order_does_not_affect_the_derived_
+recommendation`, `tests/route_suitability.rs`), not a report line, per
+advisor's correction -- real-data counterpart to the existing synthetic
+`finding_order_does_not_affect_the_derived_recommendation` test.
+
+**Files touched**:
+- `examples/route_suitability_policy_audit.rs` (new): loads the corpus,
+  computes every 17A/17B statistic listed above, holds the single holdout
+  record locally (never added to `curated_records()`), prints the report.
+  Contains two internal sanity assertions run on every invocation: the
+  holdout target is not the Fe2O3 polymorph trap, and it is not already
+  covered by the shipped curated provider (would mean it isn't a genuine
+  holdout).
+- `tests/route_suitability.rs`: 3 new tests --
+  `the_holdout_finding_order_does_not_affect_the_derived_recommendation`
+  (determinism), `the_holdout_finding_yields_not_recommended` (pins the
+  expected classification), `the_holdout_target_is_not_the_fe2o3_trap_
+  and_is_not_already_curated` (structural sanity, mirrors the example's
+  own assertions independently). The holdout record's data is duplicated
+  between the example and this test file rather than shared via a common
+  module -- matches this project's existing convention
+  (`examples/large_scale_benchmark.rs`/`tests/large_scale_benchmark.rs`
+  each keep an independent `CorpusRow` too).
+- `docs/route_suitability_corpus_audit.md` (new): the example's output,
+  copied verbatim.
+- `Cargo.toml`: new `[[example]]` entry, `required-features = ["serde"]`
+  (matches `large_scale_benchmark`'s own entry).
+- `CHANGELOG.md`, `ROADMAP.md`: new Phase 17 entries.
+- `src/route_suitability.rs` and every other production module:
+  untouched, as planned -- this phase measures, it does not change
+  `derive_recommendation`, `curated_records()`, or any other type.
+
+**Ripple effects, each checked rather than assumed unaffected**: no
+production code touched, so no existing test/fixture/golden-snapshot
+needed updating. `cargo test --workspace --all-features` count increased
+by exactly the 3 new tests above (no other file's test count changed).
+
+**Locally verified, all green**: `cargo fmt --all -- --check`, `cargo
+clippy --workspace --all-targets --all-features -- -D warnings`, `cargo
+test --workspace --all-features`, `cargo test --workspace
+--no-default-features`, `RUSTDOCFLAGS="-D warnings" cargo doc
+--workspace --all-features --no-deps`, `cargo run --example
+route_suitability_policy_audit --features serde` (output diffed against
+the committed report, byte-identical).

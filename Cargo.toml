@@ -69,6 +69,11 @@ name = "large_scale_benchmark"
 path = "examples/large_scale_benchmark.rs"
 required-features = ["serde"]
 
+[[example]]
+name = "route_suitability_policy_audit"
+path = "examples/route_suitability_policy_audit.rs"
+required-features = ["serde"]
+
 [[bin]]
 name = "gugen"
 path = "src/bin/gugen.rs"
