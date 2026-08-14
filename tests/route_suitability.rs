@@ -18,8 +18,9 @@
 use gugen::{
     Composition, Element, EvidenceScope, EvidenceStrength, InMemoryPrecursorCatalog,
     InMemoryRouteSuitabilityProvider, Planner, PlanningConfig, PlanningConstraints,
-    PrecursorCandidate, PrecursorId, ProviderError, RouteFamily, RouteSuitabilityProvider,
-    SuitabilityFinding, SuitabilityVerdict, TargetSpecification,
+    PrecursorCandidate, PrecursorId, ProviderError, RouteFamily, RouteRecommendation,
+    RouteSuitabilityAssessment, RouteSuitabilityProvider, SuitabilityFinding, SuitabilityVerdict,
+    TargetSpecification, derive_recommendation,
 };
 
 fn element(symbol: &str) -> Element {
@@ -436,4 +437,86 @@ fn a_similar_material_contradicts_does_not_exclude_a_plan_end_to_end() {
         report.plans
     );
     assert!(report.not_recommended.is_empty());
+}
+
+// Phase 17: determinism/structural checks over the real hand-verified
+// holdout record (BiFeO3 + ConventionalSolidState, DOI 10.1111/jace.19702)
+// used by `examples/route_suitability_policy_audit.rs`'s corpus audit.
+// Duplicated here rather than shared via a common module, matching this
+// project's existing convention (`examples/large_scale_benchmark.rs` and
+// `tests/large_scale_benchmark.rs` each keep their own independent
+// `CorpusRow` too) -- if this record ever changes, both files' copies
+// must be updated together.
+
+fn holdout_finding() -> SuitabilityFinding {
+    SuitabilityFinding {
+        verdict: SuitabilityVerdict::Contradicts,
+        statement: "Conventional solid-state synthesis of BiFeO3 from Bi2O3 + Fe2O3 starting \
+            oxides is documented to proceed through an intermediate sillenite compound \
+            (Bi25FeO39), with persistent secondary phases reported as a recurring difficulty"
+            .to_string(),
+        source_id: Some("10.1111/jace.19702".to_string()),
+        strength: EvidenceStrength::Moderate,
+        applicable_to: EvidenceScope::ExactTarget,
+        limitations: vec![
+            "see examples/route_suitability_policy_audit.rs for full detail".to_string(),
+        ],
+    }
+}
+
+fn bifeo3() -> Composition {
+    composition(&[("Bi", 1.0), ("Fe", 1.0), ("O", 3.0)])
+}
+
+/// Real-holdout counterpart to `finding_order_does_not_affect_the_
+/// derived_recommendation` (`src/route_suitability.rs`, hand-built
+/// findings) -- pins the same order-invariance property against the
+/// actual literature-sourced Phase 17 holdout finding, not just a
+/// synthetic one.
+#[test]
+fn the_holdout_finding_order_does_not_affect_the_derived_recommendation() {
+    let forward = RouteSuitabilityAssessment {
+        route_family: RouteFamily::ConventionalSolidState,
+        findings: vec![holdout_finding()],
+    };
+    let reversed = RouteSuitabilityAssessment {
+        route_family: RouteFamily::ConventionalSolidState,
+        findings: forward.findings.iter().cloned().rev().collect(),
+    };
+    assert_eq!(
+        derive_recommendation(&forward),
+        derive_recommendation(&reversed)
+    );
+}
+
+#[test]
+fn the_holdout_finding_yields_not_recommended() {
+    let assessment = RouteSuitabilityAssessment {
+        route_family: RouteFamily::ConventionalSolidState,
+        findings: vec![holdout_finding()],
+    };
+    assert_eq!(
+        derive_recommendation(&assessment),
+        RouteRecommendation::NotRecommended
+    );
+}
+
+/// The holdout target must not be the documented Fe2O3 polymorph trap
+/// (`src/route_suitability.rs`'s own regression test), and must not
+/// already be covered by the shipped curated provider -- otherwise it
+/// would not be a genuine holdout.
+#[test]
+fn the_holdout_target_is_not_the_fe2o3_trap_and_is_not_already_curated() {
+    let fe2o3 = composition(&[("Fe", 2.0), ("O", 3.0)]);
+    assert_ne!(bifeo3(), fe2o3);
+
+    let provider = InMemoryRouteSuitabilityProvider::from_curated_records();
+    let findings = provider
+        .assess(&bifeo3(), RouteFamily::ConventionalSolidState)
+        .unwrap();
+    assert!(
+        findings.is_empty(),
+        "BiFeO3 + ConventionalSolidState must not already be in curated_records() -- \
+        it is meant to stay a genuine Phase 17 holdout, never added there"
+    );
 }

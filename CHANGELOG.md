@@ -119,6 +119,49 @@ each entry.
   can't be reliably compared by raw geometry -- Phase 15B's Fe2O3
   regression test stays a single documented case); `curated_records()`
   not expanded.
+- **Phase 17 — route-suitability corpus audit + decision-policy
+  evaluation.** New `examples/route_suitability_policy_audit.rs`,
+  generating `docs/route_suitability_corpus_audit.md`. **Explicitly not a
+  route-family prediction-accuracy benchmark** --
+  `InMemoryRouteSuitabilityProvider` is a lookup over hand-verified
+  literature evidence for specific `(target, RouteFamily)` pairs, not a
+  generalizing classifier, so a holdout of unknown targets correctly
+  returns `InsufficientEvidence` almost everywhere; reporting that as
+  "accuracy" would misrepresent the system. Two parts instead: **17A**
+  audits the existing `benchmarks/data/kononova_sample.jsonl` (1500 rows,
+  already committed from Phase 11, no new fetch) for how much
+  route-suitability-relevant evidence actually exists -- headline finding:
+  route family, success/failure, and comparative-route-rejection are not
+  present in this corpus and can't be derived without per-paper reading
+  (deliberately not attempted via any keyword/operations heuristic, which
+  would fabricate ground truth); evidence coverage against the shipped
+  provider (4/1500) and a polymorph-ambiguity **floor** (against 7
+  explicitly hand-listed, non-exhaustive well-known systems, never
+  reported as a bare rate) are also measured. **17B** evaluates
+  `derive_recommendation`'s conservative decision policy against a real,
+  freshly hand-verified holdout record (BiFeO3 + ConventionalSolidState ->
+  `Contradicts`, DOI 10.1111/jace.19702, open access, abstract read
+  directly) gathered via a bounded literature search that found exactly
+  one record meeting the bar of "documents a route's own real difficulty
+  for a specific target" -- the low yield is itself part of the finding,
+  not padded with weaker "route X was used" records. Two real categories
+  (dev = the 2 existing `curated_records()` entries; holdout = this
+  phase's 1 new record), not the three-way split originally sketched --
+  `derive_recommendation`'s matrix was designed from stated principles,
+  never fit against data, so "threshold-reference" is empty in gugen's
+  actual history. Determinism (finding order does not change
+  `derive_recommendation`'s output for the real holdout record) is a
+  dedicated test in `tests/route_suitability.rs`, not a report line.
+  **Non-goals**: no converting `Supports` counts into a success
+  probability; no interpreting absence of success as `Contradicts`; no
+  generalizing route suitability from composition/material-name alone; no
+  converting chematic-crystal/mikiwame diagnostics into route
+  recommendations without literature backing; no adjusting
+  `derive_recommendation` based on holdout results; holdout record never
+  added to `curated_records()`. Completion is explicitly not gated on
+  strong numbers -- a mostly-abstaining result against real data is itself
+  the valuable finding (what's needed next is a larger hand-verified
+  negative-evidence corpus, not an algorithm change).
 
 ## [0.2.0] - 2026-08-14
 
