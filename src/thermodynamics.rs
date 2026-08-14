@@ -458,38 +458,118 @@ fn most_stable_entry_for<'a>(
         })
 }
 
+/// Sums coefficient-weighted per-element amounts, reactants positive and
+/// products negative, and rejects (Phase 19P.1 Fix 3) if any element's
+/// residual exceeds `COMPOSITION_CONSERVATION_TOLERANCE`. `BalancedReaction::new`
+/// itself only rejects an empty side or a zero coefficient, not an element
+/// imbalance -- this is the runtime check that actually enforces the
+/// conservation `balanced_reaction_delta_ev_per_atom`'s per-atom
+/// normalization relies on, for a hand-constructed reaction that never
+/// went through `balance.rs`'s solver.
+fn check_element_conservation(reaction: &BalancedReaction) -> Result<()> {
+    let mut residual: BTreeMap<Element, f64> = BTreeMap::new();
+    for species in &reaction.reactants {
+        for (element, amount) in species.composition.iter() {
+            *residual.entry(element).or_insert(0.0) += species.coefficient as f64 * amount;
+        }
+    }
+    for species in &reaction.products {
+        for (element, amount) in species.composition.iter() {
+            *residual.entry(element).or_insert(0.0) -= species.coefficient as f64 * amount;
+        }
+    }
+    for (element, imbalance) in residual {
+        if imbalance.abs() > COMPOSITION_CONSERVATION_TOLERANCE {
+            return Err(GugenError::UnbalancedReaction {
+                element: element.symbol().to_string(),
+                imbalance,
+            });
+        }
+    }
+    Ok(())
+}
+
+/// Distinct [`ThermodynamicDatasetIdentity`] values among `entries` whose
+/// composition matches at least one of `compositions` -- deliberately
+/// scoped to the compositions a specific caller-supplied reaction or
+/// assemblage actually needs, not the whole `entries` slice. This means
+/// the same `entries` pool can pass for one reaction and be rejected for
+/// another: a large mixed-provenance pool is only flagged inconsistent
+/// when the compositions relevant to *this* call actually span more than
+/// one dataset, not merely because unrelated entries elsewhere in the
+/// slice happen to.
+fn distinct_datasets_among<'a>(
+    entries: &'a [SolidThermodynamicEntry],
+    compositions: &[&Composition],
+) -> Vec<&'a ThermodynamicDatasetIdentity> {
+    let mut found: Vec<&ThermodynamicDatasetIdentity> = Vec::new();
+    for entry in entries {
+        if compositions.iter().any(|c| **c == entry.composition)
+            && !found.iter().any(|d| **d == entry.dataset)
+        {
+            found.push(&entry.dataset);
+        }
+    }
+    found
+}
+
 /// Products' total `relative_solid_gibbs` minus reactants' total, weighted
 /// by each species' `ReactionSpecies::coefficient` and formula-unit atom
 /// count, normalized per atom of the reactant side (mirrors
 /// `MaterialsProjectSnapshotProvider::reaction_energy`'s exact convention
 /// and doc comment for why the reactant side is used).
 ///
-/// Returns `None` -- never a partial sum -- the moment any participating
+/// `Ok(None)` -- never a partial sum -- the moment any participating
 /// species' exact `Composition` has no matching entry in `entries`. This
 /// is the concrete mechanism that keeps this module gas-free without ever
 /// classifying a species as "gas": a caller who only supplies solid-phase
 /// `SolidThermodynamicEntry` values (the only kind this type can represent
 /// -- it has a crystal volume) simply never has an entry for `CO2`,
 /// `H2O`, `O2`, etc., so any reaction releasing or consuming one abstains
-/// here automatically.
+/// here automatically. This is a legitimate abstention due to missing
+/// data, not invalid input, hence `Ok(None)` rather than `Err`.
 ///
-/// **Precondition, not checked at runtime**: `reaction` must be genuinely
-/// element-balanced (every `balance.rs`-produced `BalancedReaction` is).
-/// `BalancedReaction::new` itself only rejects an empty side or a zero
-/// coefficient, not an element imbalance -- for a hand-constructed,
-/// unbalanced reaction, "normalize per atom of the reactant side" would
-/// silently misrepresent the result, since the per-atom convention (like
-/// `MaterialsProjectSnapshotProvider::reaction_energy`'s identical one)
-/// relies on the reactant- and product-side atom totals being equal by
-/// element conservation.
+/// `Err` (Phase 19P.1) for genuinely invalid caller input instead:
+/// [`GugenError::UnbalancedReaction`] if `reaction`'s reactant- and
+/// product-side element totals don't match (via a `check_element_conservation`
+/// runtime check -- `BalancedReaction::new` does not itself guarantee
+/// this), or [`GugenError::InconsistentThermodynamicDataset`] if the
+/// entries relevant to `reaction`'s species (via a `distinct_datasets_among`
+/// scan) span more than one [`ThermodynamicDatasetIdentity`]. The dataset
+/// check runs *before* entry selection, which is what keeps the
+/// lowest-enthalpy tie-break (`most_stable_entry_for`) from ever being
+/// tempted to compare enthalpies across two different datasets: by the
+/// time selection runs, at most one dataset is present among the relevant
+/// entries.
 pub fn balanced_reaction_delta_ev_per_atom(
     reaction: &BalancedReaction,
     entries: &[SolidThermodynamicEntry],
     temperature: Kelvin,
-) -> Option<f64> {
+) -> Result<Option<f64>> {
+    check_element_conservation(reaction)?;
+
+    let compositions: Vec<&Composition> = reaction
+        .reactants
+        .iter()
+        .chain(&reaction.products)
+        .map(|s| &s.composition)
+        .collect();
+    let datasets = distinct_datasets_among(entries, &compositions);
+    if datasets.len() > 1 {
+        return Err(GugenError::InconsistentThermodynamicDataset(format!(
+            "entries relevant to this reaction span {} distinct dataset identities \
+             (e.g. {:?} vs {:?}) -- refusing to select or mix across them",
+            datasets.len(),
+            datasets[0],
+            datasets[1]
+        )));
+    }
+
     let mut product_total = 0.0;
     for species in &reaction.products {
-        let entry = most_stable_entry_for(entries, &species.composition)?;
+        let Some(entry) = most_stable_entry_for(entries, &species.composition) else {
+            return Ok(None);
+        };
         let atoms: f64 = species.composition.iter().map(|(_, amt)| amt).sum();
         product_total += species.coefficient as f64
             * atoms
@@ -499,7 +579,9 @@ pub fn balanced_reaction_delta_ev_per_atom(
     let mut reactant_total = 0.0;
     let mut reactant_atoms = 0.0;
     for species in &reaction.reactants {
-        let entry = most_stable_entry_for(entries, &species.composition)?;
+        let Some(entry) = most_stable_entry_for(entries, &species.composition) else {
+            return Ok(None);
+        };
         let atoms: f64 = species.composition.iter().map(|(_, amt)| amt).sum();
         reactant_total += species.coefficient as f64
             * atoms
@@ -507,7 +589,7 @@ pub fn balanced_reaction_delta_ev_per_atom(
         reactant_atoms += species.coefficient as f64 * atoms;
     }
 
-    Some((product_total - reactant_total) / reactant_atoms)
+    Ok(Some((product_total - reactant_total) / reactant_atoms))
 }
 
 /// How far apart `atoms`-weighted amounts must sum to still count as "the
@@ -546,23 +628,51 @@ const COMPOSITION_CONSERVATION_TOLERANCE: f64 = 1e-6;
 /// that alternative.
 ///
 /// `alternative_assemblage` is `(entry, amount)` pairs, `amount` being how
-/// many formula units of that phase the assemblage contains. Returns
-/// `None` -- never a best-effort number -- if: any referenced entry
-/// (`target` or any assemblage member) has no `SolidThermodynamicEntry`
-/// data reachable (this function takes entries directly rather than
-/// looking them up, so this only applies to `target` itself needing valid
-/// data, which its type already guarantees); or, the concrete check this
-/// function exists to make, if `alternative_assemblage`'s amount-weighted
-/// total composition does not match `target.composition` element-for-
-/// element within `COMPOSITION_CONSERVATION_TOLERANCE` (`1e-6`) -- an assemblage
-/// that doesn't conserve composition is not a real alternative to
-/// `target` and comparing their energies would not mean what a caller
-/// would assume it means.
+/// many formula units of that phase the assemblage contains.
+///
+/// `Ok(None)` -- a legitimate abstention, not invalid input -- if
+/// `alternative_assemblage`'s amount-weighted total composition does not
+/// match `target.composition` element-for-element within
+/// `COMPOSITION_CONSERVATION_TOLERANCE` (`1e-6`): an assemblage that
+/// doesn't conserve composition is not a real alternative to `target`,
+/// but a caller may legitimately probe several candidate assemblages and
+/// expect the non-conserving ones to quietly not apply, the same way a
+/// missing entry abstains in [`balanced_reaction_delta_ev_per_atom`].
+/// (This is a deliberate asymmetry with that function's own
+/// [`GugenError::UnbalancedReaction`] check: there, an unbalanced
+/// *reaction* is invalid input the caller is expected to never construct
+/// by hand; here, a non-conserving *alternative assemblage* is an
+/// ordinary, expected outcome of comparing a target against several
+/// candidate decompositions.)
+///
+/// `Err` (Phase 19P.1) for genuinely invalid caller input: any
+/// `amount` that is not finite and strictly positive
+/// ([`GugenError::NonFiniteValue`]/[`GugenError::NonPositiveMagnitude`] --
+/// closes a leak where a NaN `amount` would otherwise slip past the
+/// tolerance comparison above and produce `Some(NaN)`), or any assemblage
+/// entry whose [`ThermodynamicDatasetIdentity`] does not exactly match
+/// `target.dataset` ([`GugenError::InconsistentThermodynamicDataset`]).
 pub fn decomposition_margin_ev_per_atom(
     target: &SolidThermodynamicEntry,
     alternative_assemblage: &[(SolidThermodynamicEntry, f64)],
     temperature: Kelvin,
-) -> Option<f64> {
+) -> Result<Option<f64>> {
+    for (entry, amount) in alternative_assemblage {
+        require_finite("amount", *amount)?;
+        if *amount <= 0.0 {
+            return Err(GugenError::NonPositiveMagnitude {
+                field: "amount",
+                value: *amount,
+            });
+        }
+        if entry.dataset != target.dataset {
+            return Err(GugenError::InconsistentThermodynamicDataset(format!(
+                "alternative assemblage entry's dataset {:?} does not match target's dataset {:?}",
+                entry.dataset, target.dataset
+            )));
+        }
+    }
+
     let mut assemblage_composition: BTreeMap<Element, f64> = BTreeMap::new();
     for (entry, amount) in alternative_assemblage {
         for (element, elem_amount) in entry.composition.iter() {
@@ -573,12 +683,14 @@ pub fn decomposition_margin_ev_per_atom(
     let target_composition: BTreeMap<Element, f64> = target.composition.iter().collect();
 
     if assemblage_composition.len() != target_composition.len() {
-        return None;
+        return Ok(None);
     }
     for (element, target_amount) in &target_composition {
-        let assemblage_amount = assemblage_composition.get(element)?;
+        let Some(assemblage_amount) = assemblage_composition.get(element) else {
+            return Ok(None);
+        };
         if (assemblage_amount - target_amount).abs() > COMPOSITION_CONSERVATION_TOLERANCE {
-            return None;
+            return Ok(None);
         }
     }
 
@@ -593,7 +705,7 @@ pub fn decomposition_margin_ev_per_atom(
         })
         .sum();
 
-    Some((assemblage_total - target_total) / target_atoms)
+    Ok(Some((assemblage_total - target_total) / target_atoms))
 }
 
 /// One named alternative assemblage compared against a target, and the
@@ -857,7 +969,9 @@ mod tests {
         .unwrap();
 
         let t = Kelvin::new(900.0).unwrap();
-        let actual = balanced_reaction_delta_ev_per_atom(&reaction, &entries, t).unwrap();
+        let actual = balanced_reaction_delta_ev_per_atom(&reaction, &entries, t)
+            .unwrap()
+            .unwrap();
         let expected = -0.10251961226707129;
 
         assert!(
@@ -888,7 +1002,7 @@ mod tests {
 
         let result =
             balanced_reaction_delta_ev_per_atom(&reaction, &entries, Kelvin::new(900.0).unwrap());
-        assert_eq!(result, None);
+        assert_eq!(result, Ok(None));
     }
 
     #[test]
@@ -919,8 +1033,12 @@ mod tests {
         ];
 
         let t = Kelvin::new(900.0).unwrap();
-        let a = balanced_reaction_delta_ev_per_atom(&reaction, &ascending, t).unwrap();
-        let b = balanced_reaction_delta_ev_per_atom(&reaction, &descending, t).unwrap();
+        let a = balanced_reaction_delta_ev_per_atom(&reaction, &ascending, t)
+            .unwrap()
+            .unwrap();
+        let b = balanced_reaction_delta_ev_per_atom(&reaction, &descending, t)
+            .unwrap()
+            .unwrap();
         assert_eq!(a, b, "must be order-independent regardless of entry order");
     }
 
@@ -963,8 +1081,12 @@ mod tests {
         ];
 
         let t = Kelvin::new(900.0).unwrap();
-        let a = balanced_reaction_delta_ev_per_atom(&reaction, &forward, t).unwrap();
-        let b = balanced_reaction_delta_ev_per_atom(&reaction, &reversed, t).unwrap();
+        let a = balanced_reaction_delta_ev_per_atom(&reaction, &forward, t)
+            .unwrap()
+            .unwrap();
+        let b = balanced_reaction_delta_ev_per_atom(&reaction, &reversed, t)
+            .unwrap()
+            .unwrap();
         assert_eq!(
             a, b,
             "an enthalpy tie must not let entry-list order decide the volume used"
@@ -997,6 +1119,7 @@ mod tests {
             &[(bao_entry.clone(), 1.0), (tio2_entry.clone(), 1.0)],
             t,
         )
+        .unwrap()
         .unwrap();
 
         let g_target = relative_solid_gibbs_ev_per_atom(&target, t) * 5.0; // Ba+Ti+3*O
@@ -1024,7 +1147,7 @@ mod tests {
 
         let t = Kelvin::new(900.0).unwrap();
         let result = decomposition_margin_ev_per_atom(&target, &[(bao_entry, 1.0)], t);
-        assert_eq!(result, None);
+        assert_eq!(result, Ok(None));
     }
 
     /// Sign convention, pinned directly: an alternative assemblage with a
@@ -1048,6 +1171,7 @@ mod tests {
         let t = Kelvin::new(900.0).unwrap();
         let margin =
             decomposition_margin_ev_per_atom(&target, &[(bao_entry, 1.0), (tio2_entry, 1.0)], t)
+                .unwrap()
                 .unwrap();
         assert!(
             margin < 0.0,
@@ -1072,7 +1196,8 @@ mod tests {
         let t = Kelvin::new(900.0).unwrap();
 
         let margin =
-            decomposition_margin_ev_per_atom(&target, &[(bao_entry, 1.0), (tio2_entry, 1.0)], t);
+            decomposition_margin_ev_per_atom(&target, &[(bao_entry, 1.0), (tio2_entry, 1.0)], t)
+                .unwrap();
 
         let assessment = ThermodynamicSelectivityAssessment {
             temperature: t,
@@ -1094,5 +1219,192 @@ mod tests {
                 .margin_ev_per_atom
                 .is_some()
         );
+    }
+
+    /// Phase 19P.1 Fix 3: `BalancedReaction::new` only rejects an empty
+    /// side or a zero coefficient (see `reaction.rs`), so a hand-built
+    /// reaction with mismatched reactant/product element totals (1 Fe + 1
+    /// O vs. 2 Fe + 3 O here) is accepted there and must be caught by
+    /// `balanced_reaction_delta_ev_per_atom`'s own runtime conservation
+    /// check instead.
+    #[test]
+    fn balanced_reaction_delta_rejects_element_imbalance() {
+        let feo = composition(&[("Fe", 1.0), ("O", 1.0)]);
+        let fe2o3 = composition(&[("Fe", 2.0), ("O", 3.0)]);
+        let reaction = BalancedReaction::new(
+            vec![ReactionSpecies {
+                composition: feo.clone(),
+                coefficient: 1,
+            }],
+            vec![ReactionSpecies {
+                composition: fe2o3.clone(),
+                coefficient: 1,
+            }],
+        )
+        .unwrap();
+
+        let entries = vec![
+            SolidThermodynamicEntry::new(feo, None, -2.0, 12.0, dataset()).unwrap(),
+            SolidThermodynamicEntry::new(fe2o3, None, -8.0, 30.0, dataset()).unwrap(),
+        ];
+
+        let result =
+            balanced_reaction_delta_ev_per_atom(&reaction, &entries, Kelvin::new(900.0).unwrap());
+        assert!(
+            matches!(result, Err(GugenError::UnbalancedReaction { .. })),
+            "expected UnbalancedReaction, got {result:?}"
+        );
+    }
+
+    /// Phase 19P.1 Fix 1: entries whose composition this reaction needs
+    /// must not be drawn from more than one `ThermodynamicDatasetIdentity`
+    /// -- regardless of which single field differs.
+    #[test]
+    fn balanced_reaction_delta_rejects_any_mismatched_dataset_field() {
+        let feo = composition(&[("Fe", 1.0), ("O", 1.0)]);
+        let fe2o2 = composition(&[("Fe", 2.0), ("O", 2.0)]);
+        let reaction = BalancedReaction::new(
+            vec![ReactionSpecies {
+                composition: feo.clone(),
+                coefficient: 2,
+            }],
+            vec![ReactionSpecies {
+                composition: fe2o2.clone(),
+                coefficient: 1,
+            }],
+        )
+        .unwrap();
+
+        let variants = [
+            ThermodynamicDatasetIdentity {
+                source: "other-source".to_string(),
+                ..dataset()
+            },
+            ThermodynamicDatasetIdentity {
+                release: "other-release".to_string(),
+                ..dataset()
+            },
+            ThermodynamicDatasetIdentity {
+                compatibility_scheme: "other-scheme".to_string(),
+                ..dataset()
+            },
+            ThermodynamicDatasetIdentity {
+                snapshot_checksum: "other-checksum".to_string(),
+                ..dataset()
+            },
+        ];
+
+        for other in variants {
+            let entries = vec![
+                SolidThermodynamicEntry::new(feo.clone(), None, -2.0, 12.0, dataset()).unwrap(),
+                SolidThermodynamicEntry::new(fe2o2.clone(), None, -3.0, 20.0, other.clone())
+                    .unwrap(),
+            ];
+            let result = balanced_reaction_delta_ev_per_atom(
+                &reaction,
+                &entries,
+                Kelvin::new(900.0).unwrap(),
+            );
+            assert!(
+                matches!(result, Err(GugenError::InconsistentThermodynamicDataset(_))),
+                "expected rejection for differing dataset {other:?}, got {result:?}"
+            );
+        }
+    }
+
+    /// Phase 19P.1 Fix 1, selection level: a duplicate-composition
+    /// candidate from a *different* dataset must not win a lowest-
+    /// enthalpy tie-break just because its enthalpy happens to be lower --
+    /// the mismatched-dataset check must reject before selection ever
+    /// gets a chance to compare across datasets.
+    #[test]
+    fn balanced_reaction_delta_does_not_cross_datasets_to_pick_the_lowest_energy_duplicate() {
+        let feo = composition(&[("Fe", 1.0), ("O", 1.0)]);
+        let fe2o2 = composition(&[("Fe", 2.0), ("O", 2.0)]);
+        let reaction = BalancedReaction::new(
+            vec![ReactionSpecies {
+                composition: feo.clone(),
+                coefficient: 2,
+            }],
+            vec![ReactionSpecies {
+                composition: fe2o2.clone(),
+                coefficient: 1,
+            }],
+        )
+        .unwrap();
+
+        let other_dataset = ThermodynamicDatasetIdentity {
+            source: "other-source".to_string(),
+            ..dataset()
+        };
+        // The other-dataset feo entry is far lower in enthalpy than the
+        // same-dataset one -- the entry a naive cross-dataset "lowest
+        // enthalpy wins" rule would (wrongly) pick.
+        let entries = vec![
+            SolidThermodynamicEntry::new(feo.clone(), None, -2.0, 12.0, dataset()).unwrap(),
+            SolidThermodynamicEntry::new(feo, None, -50.0, 12.0, other_dataset).unwrap(),
+            SolidThermodynamicEntry::new(fe2o2, None, -3.0, 20.0, dataset()).unwrap(),
+        ];
+
+        let result =
+            balanced_reaction_delta_ev_per_atom(&reaction, &entries, Kelvin::new(900.0).unwrap());
+        assert!(
+            matches!(result, Err(GugenError::InconsistentThermodynamicDataset(_))),
+            "must reject rather than silently pick the lower-enthalpy cross-dataset entry, got {result:?}"
+        );
+    }
+
+    /// Phase 19P.1 Fix 1: the alternative assemblage's dataset must match
+    /// `target`'s exactly.
+    #[test]
+    fn decomposition_margin_rejects_mismatched_dataset() {
+        let batio3 = composition(&[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)]);
+        let bao = composition(&[("Ba", 1.0), ("O", 1.0)]);
+        let tio2 = composition(&[("Ti", 1.0), ("O", 2.0)]);
+
+        let target = SolidThermodynamicEntry::new(batio3, None, -3.5, 60.0, dataset()).unwrap();
+        let other_dataset = ThermodynamicDatasetIdentity {
+            release: "other-release".to_string(),
+            ..dataset()
+        };
+        let bao_entry = SolidThermodynamicEntry::new(bao, None, -2.0, 20.0, other_dataset).unwrap();
+        let tio2_entry = SolidThermodynamicEntry::new(tio2, None, -3.0, 30.0, dataset()).unwrap();
+
+        let t = Kelvin::new(900.0).unwrap();
+        let result =
+            decomposition_margin_ev_per_atom(&target, &[(bao_entry, 1.0), (tio2_entry, 1.0)], t);
+        assert!(
+            matches!(result, Err(GugenError::InconsistentThermodynamicDataset(_))),
+            "expected rejection, got {result:?}"
+        );
+    }
+
+    /// Phase 19P.1 Fix 2: NaN, +infinity, zero, and negative `amount`
+    /// values must all be rejected -- NaN in particular would otherwise
+    /// slip past the composition-conservation tolerance comparison (`(x -
+    /// y).abs() > tol` is `false` for NaN) and silently produce
+    /// `Ok(Some(NaN))`.
+    #[test]
+    fn decomposition_margin_rejects_invalid_amount() {
+        let batio3 = composition(&[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)]);
+        let bao = composition(&[("Ba", 1.0), ("O", 1.0)]);
+        let tio2 = composition(&[("Ti", 1.0), ("O", 2.0)]);
+
+        let target = SolidThermodynamicEntry::new(batio3, None, -3.5, 60.0, dataset()).unwrap();
+        let bao_entry = SolidThermodynamicEntry::new(bao, None, -2.0, 20.0, dataset()).unwrap();
+        let tio2_entry = SolidThermodynamicEntry::new(tio2, None, -3.0, 30.0, dataset()).unwrap();
+        let t = Kelvin::new(900.0).unwrap();
+
+        for bad_amount in [f64::NAN, f64::INFINITY, 0.0, -1.0] {
+            let result = decomposition_margin_ev_per_atom(
+                &target,
+                &[(bao_entry.clone(), bad_amount), (tio2_entry.clone(), 1.0)],
+                t,
+            );
+            assert!(
+                result.is_err(),
+                "amount {bad_amount} must be rejected, got {result:?}"
+            );
+        }
     }
 }

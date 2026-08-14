@@ -33,6 +33,12 @@ pub enum GugenError {
     EmptyReaction,
     #[error("exact arithmetic overflowed while balancing a reaction")]
     ArithmeticOverflow,
+    #[error(
+        "element {element} is not conserved between reactant and product sides (imbalance {imbalance})"
+    )]
+    UnbalancedReaction { element: String, imbalance: f64 },
+    #[error("inconsistent thermodynamic dataset: {0}")]
+    InconsistentThermodynamicDataset(String),
     /// From the required `PrecursorCatalog` only -- `Planner::plan` cannot
     /// proceed at all without a catalog, unlike the optional
     /// `ThermodynamicProvider`/`ProcessEvidenceProvider`, whose failures are
