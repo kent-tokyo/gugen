@@ -1,167 +1,79 @@
 # Changelog
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
-See [`tasks/todo.md`](tasks/todo.md) for full phase-by-phase detail behind
-each entry.
 
-## [Unreleased]
+## [0.3.0] - 2026-08-14
 
 ### Added
 
-- **Phase 15A — route-suitability evidence model.** New `route_suitability`
-  module: `SuitabilityVerdict` (`Supports`/`Contradicts`/`Unknown`,
-  `#[non_exhaustive]`), `SuitabilityFinding`, and
-  `RouteSuitabilityAssessment` (a `Vec<SuitabilityFinding>` per
-  `(target, RouteFamily)` -- deliberately never an aggregated single
-  verdict, so contradictory findings are never force-merged). New
-  `RouteSuitabilityProvider` trait (`src/provider.rs`), a fourth provider
-  trait following `ProcessEvidenceProvider`'s shape, and
-  `InMemoryRouteSuitabilityProvider` backed by two hand-verified,
-  literature-cited seed records (a `Supports` finding for BaTiO3 +
-  Mechanochemical, DOI 10.3390/chemistry4020042; a `Contradicts` finding
-  for Mg(OH)2 + ConventionalSolidState, DOI
-  10.1080/21870764.2021.2019376, cross-checked against gugen's own
-  already-curated MgAl2O4 firing-temperature record). New
-  `SynthesisPlanningReport.route_suitability` field (report-level, one
-  entry per route family assessed, not per plan) and
-  `Planner::with_route_suitability_provider` constructor. **Deliberately
-  not wired into ranking**: nothing in `score.rs` reads this data, no
-  route is deprecated or reordered by a finding, and `score.rs`'s existing
-  `PlanningAssumption` text about route-family suitability is unchanged --
-  this phase builds the evidence vessel only, per the owner's explicit
-  instruction not to touch any algorithm or score this phase. A dedicated
-  test (`configuring_the_provider_does_not_change_any_plans_score_or_
-  confidence`, `tests/route_suitability.rs`) asserts this directly:
-  wiring the provider in produces byte-identical `score`/`confidence`/
-  `applicability`/`evidence` to an `offline_minimal` run of the same
-  target. Real negative-filtering rules and a broader curated-findings
-  set are left to a future, separately-triggered phase.
-- **Phase 15B — explainable route deprecation.** New `RouteRecommendation`
-  enum (`Recommended`/`NotRecommended`/`InsufficientEvidence`/
-  `ConflictingEvidence`, `#[non_exhaustive]`) and a pure function,
-  `derive_recommendation`, deriving one from a `RouteSuitabilityAssessment`
-  alone (no `Planner`/provider dependency). Decision matrix: any
-  `Supports` and `Contradicts` coexisting -> `ConflictingEvidence` (a
-  weak `Contradicts` is never silently outvoted by a `Supports` finding);
-  a "strong" `Contradicts` (`strength != Weak` **and**
-  `applicable_to == EvidenceScope::ExactTarget` -- an allow-list, not a
-  denylist of weaker scopes, so `SimilarMaterial`/`GeneralRule` can never
-  alone trigger exclusion) with zero counter-evidence -> `NotRecommended`;
-  `Supports` only -> `Recommended` (a label, no ranking bonus); everything
-  else -> `InsufficientEvidence`.
-  `Planner::plan` now acts on `NotRecommended` specifically: a plan whose
-  route family clears that bar is moved out of `plans` into a new
-  `SynthesisPlanningReport.not_recommended: Vec<NotRecommendedPlan>`
-  field, carrying the unmodified plan (same score/confidence/evidence --
-  filtering happens after scoring, not instead of it) plus the specific
-  `Contradicts` findings that triggered exclusion. Filtering runs before
-  the existing rank/truncate step, so `SearchBudget::max_plans_returned`'s
-  overflow message continues to describe only recommendable plans. When
-  every generated plan is excluded this way, the report abstains
-  explicitly via a new `unresolved` entry ("route selection") rather than
-  returning an indistinguishable empty success; `applicability` is left
-  unchanged in that case -- a deliberately different, weaker claim than
-  `abstain()`'s own `ApplicabilityLevel::OutOfDomain` ("gugen built valid
-  chemistry, evidence just contradicts every route tried" vs. "gugen
-  cannot handle this material at all").
-  A new regression test asserts no curated record targets bare `Fe2O3`
-  (the maghemite/hematite polymorph trap from Phase 15A, made permanently
-  checkable). **`score.rs` remains completely untouched**: no numeric
-  score changes anywhere, and `curated_records()` was not expanded beyond
-  Phase 15A's original two entries -- the `SimilarMaterial` safety
-  condition is exercised via hand-built test data
-  (`tests/route_suitability.rs`), not shipped curated content. CLI
-  markdown rendering of `not_recommended` is out of scope (consistent
-  with `route_suitability` itself not being rendered either).
-- **Phase 16 — chematic-crystal -> mikiwame structure bridge.** New
-  optional `chematic_crystal` feature (implies `mikiwame`, since
-  chematic-crystal alone has no structural diagnostics of its own) and
-  `src/chematic_crystal_adapter.rs`: `to_mikiwame_structure(&chematic_
-  crystal::PeriodicStructure) -> mikiwame::OwnedStructure`. Closes the
-  specific gap `mikiwame_adapter.rs` had named since Phase 6 -- gugen's
-  own `TargetStructure` is free text, and building a real structure
-  "depends on chematic-crystal," which published its first version,
-  0.15.0, on 2026-08-14. Verified live against both the docs.rs API and
-  the real vendored source (not guessed, AGENTS.md §21.3) before
-  implementation: chematic-crystal 0.15.0 is pure geometry -- no
-  symmetry/Niggli reduction, no CIF parser, no composition-from-formula
-  prediction, no polymorph identification -- so this phase is
-  deliberately narrower than the route-suitability integration the
-  original roadmap sketch assumed (see Non-goals below). Not a plain
-  field-by-field copy -- two correctness fixes beyond a naive conversion,
-  both confirmed against real source before being handled: (1)
-  same-element `SiteSpecies` are consolidated *within one `PeriodicSite`
-  only* (never across separate sites) and dropped if the summed occupancy
-  is exactly `0.0`, preventing a false-positive `SITE_DUPLICATE` finding
-  that a naive per-species flat-map would produce; (2) a left-handed
-  (negative-determinant) input lattice, which chematic-crystal accepts as
-  physically valid but mikiwame rejects as `InvalidInput`, is corrected
-  via an exact basis change (swap the `b`/`c` lattice rows and the
-  matching fractional `y`/`z` component of every site), verified by a
-  direct Cartesian-invariance test, not a geometry-altering heuristic.
-  9 new tests, including one proving a genuine cross-site duplicate is
-  still caught by real `mikiwame::analyze` after conversion (the
-  false-positive fix doesn't become a false negative), and one pinning
-  that same-element consolidation can itself push a summed occupancy
-  just past `1.0` -- accepted by chematic-crystal's own tolerance but
-  flagged by mikiwame's stricter per-site range check, surfaced rather
-  than silently clamped. **Non-goals**:
-  not wired into `Planner::plan` (`TargetSpecification` still has no
-  geometry field -- same caller-driven boundary as `mikiwame_adapter.rs`
-  since Phase 6); no mapping into `route_suitability` (mikiwame answers
-  "is this structure physically valid," route_suitability answers "which
-  route family suits this target" -- conflating them without real
-  literature backing would repeat the unsourced-heuristic mistake
-  Phase 15A deliberately avoided); no `ApplicabilityLevel::InDomain`
-  promotion (needs a bulk-inorganic-vs-MOF/thin-film classifier neither
-  crate provides); no general polymorph-disambiguation mechanism (no
-  symmetry detection means two representations of the same real structure
-  can't be reliably compared by raw geometry -- Phase 15B's Fe2O3
-  regression test stays a single documented case); `curated_records()`
-  not expanded.
-- **Phase 17 — route-suitability corpus audit + decision-policy
-  evaluation.** New `examples/route_suitability_policy_audit.rs`,
-  generating `docs/route_suitability_corpus_audit.md`. **Explicitly not a
-  route-family prediction-accuracy benchmark** --
-  `InMemoryRouteSuitabilityProvider` is a lookup over hand-verified
-  literature evidence for specific `(target, RouteFamily)` pairs, not a
-  generalizing classifier, so a holdout of unknown targets correctly
-  returns `InsufficientEvidence` almost everywhere; reporting that as
-  "accuracy" would misrepresent the system. Two parts instead: **17A**
-  audits the existing `benchmarks/data/kononova_sample.jsonl` (1500 rows,
-  already committed from Phase 11, no new fetch) for how much
-  route-suitability-relevant evidence actually exists -- headline finding:
-  route family, success/failure, and comparative-route-rejection are not
-  present in this corpus and can't be derived without per-paper reading
-  (deliberately not attempted via any keyword/operations heuristic, which
-  would fabricate ground truth); evidence coverage against the shipped
-  provider (4/1500) and a polymorph-ambiguity **floor** (against 7
-  explicitly hand-listed, non-exhaustive well-known systems, never
-  reported as a bare rate) are also measured. **17B** evaluates
-  `derive_recommendation`'s conservative decision policy against a real,
-  freshly hand-verified holdout record (BiFeO3 + ConventionalSolidState ->
-  `Contradicts`, DOI 10.1111/jace.19702, open access, abstract read
-  directly) gathered via a bounded literature search that found exactly
-  one record meeting the bar of "documents a route's own real difficulty
-  for a specific target" -- the low yield is itself part of the finding,
-  not padded with weaker "route X was used" records. Two real categories
-  (dev = the 2 existing `curated_records()` entries; holdout = this
-  phase's 1 new record), not the three-way split originally sketched --
-  `derive_recommendation`'s matrix was designed from stated principles,
-  never fit against data, so "threshold-reference" is empty in gugen's
-  actual history. Determinism (finding order does not change
-  `derive_recommendation`'s output for the real holdout record) is a
-  dedicated test in `tests/route_suitability.rs`, not a report line.
-  **Non-goals**: no converting `Supports` counts into a success
-  probability; no interpreting absence of success as `Contradicts`; no
-  generalizing route suitability from composition/material-name alone; no
-  converting chematic-crystal/mikiwame diagnostics into route
-  recommendations without literature backing; no adjusting
-  `derive_recommendation` based on holdout results; holdout record never
-  added to `curated_records()`. Completion is explicitly not gated on
-  strong numbers -- a mostly-abstaining result against real data is itself
-  the valuable finding (what's needed next is a larger hand-verified
-  negative-evidence corpus, not an algorithm change).
+- **Route-family suitability evidence.** New `route_suitability` module:
+  `SuitabilityFinding`/`SuitabilityVerdict` (`Supports`/`Contradicts`/
+  `Unknown`) record literature evidence for a specific `(target,
+  RouteFamily)` pair, never force-merged into a single aggregated
+  verdict. New `RouteSuitabilityProvider` trait and
+  `InMemoryRouteSuitabilityProvider`, backed by hand-verified,
+  DOI-cited records. `SynthesisPlanningReport` gains a
+  `route_suitability` field (**breaking change**: `SynthesisPlanningReport`
+  has no `#[non_exhaustive]` and all-public fields, so this breaks any
+  downstream struct-literal construction or exhaustive destructuring of
+  it -- see Changed below for the second new field), listing the evidence
+  considered for each route family. `Planner` gains
+  `with_route_suitability_provider`.
+- **Explainable route recommendations.** New `RouteRecommendation` enum
+  (`Recommended`/`NotRecommended`/`InsufficientEvidence`/
+  `ConflictingEvidence`) and `derive_recommendation`, a pure function
+  turning suitability evidence into a recommendation. Conservative by
+  design: a route is excluded only when contradicting evidence is both
+  non-weak and specific to the exact target; supporting and
+  contradicting evidence coexisting on the same route is reported as
+  `ConflictingEvidence` rather than silently resolved either way.
+- **Optional chematic-crystal structure bridge.** New `chematic_crystal`
+  Cargo feature and `to_mikiwame_structure`, converting a
+  `chematic_crystal::PeriodicStructure` into a `mikiwame::OwnedStructure`
+  for structural-diagnostic checks (same-site occupancy consolidation,
+  left-handed-lattice correction). Off by default, not wired into
+  `Planner::plan`.
+- **Route-suitability corpus audit.**
+  `docs/route_suitability_corpus_audit.md` documents how much literature
+  evidence for route suitability actually exists in a real 1500-record
+  synthesis corpus already used by this crate's benchmarks, and
+  evaluates the new decision policy against a hand-verified holdout
+  record. Not a route-family prediction-accuracy benchmark -- see
+  Known limitations below and the report itself for why.
+
+### Changed
+
+- `SynthesisPlanningReport` gains a `not_recommended: Vec<NotRecommendedPlan>`
+  field (**breaking change**, same reason as `route_suitability` above:
+  `SynthesisPlanningReport` is not `#[non_exhaustive]`, so any downstream
+  code that constructs or exhaustively matches it needs updating). A
+  plan whose route family has strong, uncontested contradicting
+  evidence is moved out of `plans` into this field instead (original
+  score/confidence preserved, alongside the specific findings that
+  triggered exclusion) rather than silently dropped or left mixed in
+  with recommendable plans. When every plan for a target is excluded
+  this way, the report abstains explicitly.
+
+### Known limitations
+
+- `RouteSuitabilityProvider` is a lookup over hand-verified literature
+  findings for specific `(target, route family)` pairs, not a
+  generalizing model -- it does not predict suitability for materials it
+  has no record of, and abstains (`InsufficientEvidence`) rather than
+  guess.
+- gugen's `Composition` type cannot distinguish polymorphs (e.g.
+  hematite vs. maghemite Fe2O3); route-suitability evidence keyed only
+  on composition can be silently wrong for a polymorph-ambiguous target.
+  No general polymorph-disambiguation mechanism exists yet.
+- The chematic-crystal/mikiwame structure bridge and route-suitability
+  evidence are not connected: structural diagnostics (is this geometry
+  physically valid) are never converted into a route recommendation
+  without literature backing.
+- The route-suitability corpus audit measured a 0/1500 polymorph-
+  ambiguity floor in its sampled corpus. This reflects that corpus (its
+  7 listed systems appear there only as precursor formulas, never as
+  synthesis targets) -- not a claim that polymorph ambiguity is rare in
+  synthesis literature generally.
 
 ## [0.2.0] - 2026-08-14
 

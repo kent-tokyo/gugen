@@ -1,5 +1,10 @@
 # gugen（具現）
 
+[![Crates.io](https://img.shields.io/crates/v/gugen.svg)](https://crates.io/crates/gugen)
+[![docs.rs](https://img.shields.io/docsrs/gugen)](https://docs.rs/gugen)
+[![CI](https://github.com/kent-tokyo/gugen/actions/workflows/ci.yml/badge.svg)](https://github.com/kent-tokyo/gugen/actions/workflows/ci.yml)
+[![License](https://img.shields.io/crates/l/gugen.svg)](#ライセンス)
+
 [English](README.md) | **日本語**
 
 説明可能な材料合成・プロセス計画ライブラリ（Rust製）。
@@ -9,20 +14,15 @@
 （evidence）・仮定（assumption）・未確定条件（unresolved）を明示したまま、
 機械可読な形で返します。実験の成功を保証するものではありません。
 
-> **ステータス：v0.1.0 公開済み。**
+> **ステータス：v0.2.0 公開済み**、v0.3.0リリース準備中。
 > [crates.io](https://crates.io/crates/gugen) /
 > [docs.rs](https://docs.rs/gugen) /
-> [v0.1.0リリース](https://github.com/kent-tokyo/gugen/releases/tag/v0.1.0)。
-> 元の全9フェーズが完了（アーキテクチャ設計、基盤型定義、厳密な反応式バラ
-> ンス、bounded前駆体探索、固相合成プロセステンプレート、plan scoring・
-> confidence、これらを一気通貫で統括する`Planner`、CLI、文献に基づく
-> fixtureによる検証一式 -- [`docs/benchmark_report.md`](docs/benchmark_report.md)
-> 参照 -- およびv0.1リリース準備)。オプションの`mikiwame`機能で構造診断
-> 結果を取り込めますが、`chematic-crystal`アダプタは同クレート未公開の
-> ため保留中です。v0.1以降、v0.2.0へ向けた開発が`main`上で進行中です
-> （実文献に基づくprocess condition解決、大規模blind benchmark、第2の
-> route family、thermodynamic provider adapter境界）。フェーズごとの
-> 詳細は[`tasks/todo.md`](tasks/todo.md)を参照してください。
+> [v0.2.0リリース](https://github.com/kent-tokyo/gugen/releases/tag/v0.2.0)。
+> v0.3.0では、根拠を保持したroute-family適合性判定（`route_suitability`）、
+> 保守的な除外フィルタリング（`not_recommended`）、オプションの
+> `chematic-crystal`–`mikiwame`構造ブリッジを追加しました -- 未較正の根拠
+> を数値ランキングの主張に変換することはありません。詳細な一覧と既知の
+> 制限は[`CHANGELOG.md`](CHANGELOG.md)を参照してください。
 
 ## gugenが保証すること・しないこと
 
@@ -320,8 +320,7 @@ cargo check --target wasm32-unknown-unknown --features mikiwame
 cargo audit
 ```
 
-仕様全体：[`AGENTS.md`](AGENTS.md)。設計判断の詳細：[`docs/`](docs/)。
-フェーズごとの進捗：[`tasks/todo.md`](tasks/todo.md)。
+設計判断の詳細：[`docs/`](docs/)。
 
 ## ライセンス
 

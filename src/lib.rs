@@ -4,12 +4,12 @@
 //! structure) into candidate precursor sets, balanced reactions, and
 //! solid-state process plans — each with its evidence, assumptions, and
 //! unresolved conditions kept explicit. It does not predict experimental
-//! success. See `AGENTS.md` for the full specification and
-//! `docs/scientific_scope.md` for what is and is not in scope.
+//! success. See `docs/scientific_scope.md` for what is and is not in
+//! scope, and `CHANGELOG.md` for the user-facing capability list.
 //!
-//! This implements all 9 phases of the roadmap in `AGENTS.md` §26: typed
-//! errors, validated numeric types, composition, target specification, the
-//! public report schema, provenance, provider trait boundaries, exact
+//! This implements typed errors, validated numeric types, composition,
+//! target specification, the public report schema, provenance, provider
+//! trait boundaries, exact
 //! reaction balancing, bounded precursor-set search, a solid-state process
 //! template, plan scoring/confidence, end-to-end orchestration via
 //! `Planner`, an optional `mikiwame` structural-diagnostics adapter, a
@@ -46,8 +46,14 @@
 //! published, 0.15.0) into a `mikiwame::OwnedStructure`, closing the
 //! specific conversion gap the mikiwame adapter had named since Phase 6.
 //! Still not auto-wired into `Planner::plan` -- `TargetSpecification` has
-//! no geometry field, so a caller still applies the result themselves. See
-//! `tasks/todo.md`'s Phase 15A/15B/16 sections.
+//! no geometry field, so a caller still applies the result themselves.
+//! Phase 17 audited how much literature evidence for route suitability
+//! actually exists in a real synthesis corpus, and evaluated
+//! `derive_recommendation` against a hand-verified holdout record --
+//! explicitly not a route-family prediction-accuracy benchmark (see
+//! `docs/route_suitability_corpus_audit.md`); no production code changed.
+//! Phases 15A/15B/16/17 together are v0.3.0's planned development work.
+//! See `CHANGELOG.md` for the user-facing summary.
 
 #![forbid(unsafe_code)]
 
