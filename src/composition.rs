@@ -85,7 +85,13 @@ impl<'de> serde::Deserialize<'de> for Element {
 /// construction from the `f64` a caller supplies — not re-approximated on
 /// every downstream use. `balance.rs` reads the exact form directly rather
 /// than round-tripping back through floats (AGENTS.md §10).
-#[derive(Debug, Clone, PartialEq)]
+/// `Eq`/`Ord` are derivable (unlike most numeric gugen types) because
+/// `amounts` stores exact `Frac` values, not `f64` -- there is no
+/// NaN-like non-total-order hazard here. This lets a `Composition` be used
+/// as a `BTreeSet`/`BTreeMap` key directly (e.g.
+/// `literature_observations.rs`'s order-invariant precursor-set identity),
+/// without a caller needing a separate canonicalization step.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Composition {
     amounts: BTreeMap<Element, Frac>,
 }
