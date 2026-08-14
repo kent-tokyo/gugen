@@ -11,6 +11,28 @@ each entry.
 
 ### Added
 
+- **Phase 8 — validation.** Curated, cited literature fixtures
+  (`tests/validation.rs`) spanning perovskite oxide (LaAlO3), spinel oxide
+  (MgAl2O4), phosphate (Zn3(PO4)2), simple binary oxide (CaO), and a
+  carbonate precursor route (BaTiO3) — four sourced from the Kononova et
+  al. 2019 text-mined dataset (license verified CC BY 4.0 via the
+  figshare API), one independently sourced after finding that dataset has
+  zero simple-binary-oxide-target entries. Known-route recovery (5/5),
+  metamorphic invariance tests (`tests/metamorphic.rs`: target/catalog
+  order, unrelated-precursor addition, provider return order — all
+  confirmed invariant end-to-end through `Planner`), a full AGENTS.md
+  §21.5 provider-failure suite (`tests/provider_failures.rs`: timeout,
+  missing entry, malformed record, partial coverage, duplicated evidence,
+  no unit-consistency check, unavailable provider), adversarial examples
+  (`tests/adversarial.rs`: arithmetic overflow, uncovered target, tight
+  search budget, trivial precursor==target identity, multi-element
+  contradiction), a false-confidence audit, reproducibility tests, golden
+  JSON/markdown snapshots (`tests/fixtures/batio3_report.{json,md}`), and
+  a real, measured benchmark report (`examples/benchmark_report.rs` →
+  `docs/benchmark_report.md`) covering AGENTS.md §22's metric list except
+  differential validation (§23, explicitly "if possible", skipped for
+  lack of a reference implementation) and temperature-specific metrics
+  (undefined in v0.1, since no provider ever populates a temperature).
 - **Phase 7 — CLI and batch.** `gugen plan target.json --catalog
   precursors.json [--output report.json] [--format json|markdown]`,
   `gugen explain report.json --plan plan-001`, `gugen validate-target
@@ -180,3 +202,32 @@ each entry.
   `Debug`) rather than a hand-formatted table — informative and exact, but
   not meant as a stable, parseable text format; use `--format json` (or
   `gugen plan`'s default) for anything that reads the output back.
+- **`Composition` has no equivalent-formula-unit-scale normalization**
+  (AGENTS.md §21.4's "equivalent formula normalization" invariance does
+  not hold): `BaTiO3` and `Ba2Ti2O6` are the same real material but
+  produce different `plan_id`s and reaction coefficients. Not fixable
+  narrowly without breaking the deliberate, tested exact-amount
+  preservation doped/solid-solution formulas need — a real design fork,
+  not a bug; see `tasks/todo.md`'s Phase 8 stop-and-report entry for the
+  full analysis. No fixture or known real usage currently supplies a
+  non-minimal formula-unit scale.
+- **`confidence.overall` is structurally constant at `0.75`** for every
+  plan with a balanced reaction and non-empty evidence, since
+  `process_conditions` is always `0.0` in v0.1 (no provider ever resolves
+  a condition) — each sub-score is individually honest, but the average
+  cannot yet discriminate between plans of genuinely different real
+  uncertainty. Measured across Phase 8's full fixture suite, documented at
+  `ConfidenceAssessment`'s definition (score.rs) and in
+  `tasks/todo.md`'s Phase 8 stop-and-report entry. Same root cause and
+  shape as `total_ranking_score`'s already-documented
+  `process_simplicity`-only discrimination.
+- `ThermodynamicProvider::reaction_energy` has no unit-consistency check:
+  a provider returning wildly wrong-scale values (as if reporting kJ/mol
+  where eV/atom is documented) is accepted identically to a correctly
+  scaled one — proven directly by a dedicated test
+  (`tests/provider_failures.rs`), not just asserted in prose.
+- `ProcessEvidenceProvider` output is not deduplicated: a provider
+  returning the same precedent twice produces two identical entries in a
+  plan's `evidence` list. Cosmetic only (`evidence_strength` aggregates by
+  minimum, so duplicates cannot inflate a score), and deliberately left
+  as-is rather than adding dedup logic Phase 8 wasn't asked to build.

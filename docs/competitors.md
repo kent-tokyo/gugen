@@ -81,12 +81,17 @@ does differently.
   code at
   [github.com/CederGroupHub/text-mined-synthesis_public](https://github.com/CederGroupHub/text-mined-synthesis_public).
   19,488 synthesis entries auto-extracted from 53,538 paragraphs, with
-  target, precursors, operations/conditions, and balanced equations. A
-  candidate source of `CuratedLiteratureRecord` evidence and of validation
-  fixtures for §21.3/§22 — **but its license has not yet been checked** and
-  must not be bundled or treated as curated ground truth until it is
-  (tracked in `tasks/todo.md`; this is a stop-and-report item per AGENTS.md
-  §28 if it blocks Phase 8, not Phase 0).
+  target, precursors, operations/conditions, and balanced equations. Used
+  in Phase 8 as a source of curated, cited validation fixtures
+  (`tests/validation.rs`) — its hosted data
+  (`10.6084/m9.figshare.9722159`) is licensed **CC BY 4.0**, verified via
+  the figshare API on 2026-08-14 (`license.name == "CC BY 4.0"`), not the
+  GitHub code repo (which carries no license). Only a handful of
+  individual cited routes are used, with attribution; the raw dataset is
+  not bundled in this repo. Querying the full dataset also produced a
+  real finding: it contains zero reactions whose target is a plain binary
+  oxide (NiO, Fe2O3, ZnO, ...) — see `tests/validation.rs`'s module doc
+  comment.
 
 - **Reaction-network / thermodynamic-selectivity approaches.** McDermott,
   Dwaraknath, Persson, "A graph-based network for predicting chemical

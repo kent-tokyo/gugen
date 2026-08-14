@@ -7,13 +7,14 @@
 （evidence）・仮定（assumption）・未確定条件（unresolved）を明示したまま、
 機械可読な形で返します。実験の成功を保証するものではありません。
 
-> **ステータス：開発初期、v0.1 開発中。** 全9フェーズ中フェーズ0〜7が完了
+> **ステータス：開発初期、v0.1 開発中。** 全9フェーズ中フェーズ0〜8が完了
 > （アーキテクチャ設計、基盤型定義、厳密な反応式バランス、bounded前駆体探索、
 > 固相合成プロセステンプレート、plan scoring・confidence、これらを一気通貫で
-> 統括する`Planner`、およびCLI）。オプションの`mikiwame`機能で構造診断結果を
-> 取り込めますが、`chematic-crystal`アダプタは同クレート未公開のため保留中
-> です。未公開・`main`未マージ・利用不可な状態です。フェーズごとの
-> 詳細は
+> 統括する`Planner`、CLI、および文献に基づくfixtureによる検証一式 --
+> [`docs/benchmark_report.md`](docs/benchmark_report.md) 参照)。オプションの
+> `mikiwame`機能で構造診断結果を取り込めますが、`chematic-crystal`アダプタは
+> 同クレート未公開のため保留中です。未公開・`main`未マージ・利用不可な状態
+> です。フェーズごとの詳細は
 > [`tasks/todo.md`](tasks/todo.md) を、レビュー中の内容は
 > [draft PR](https://github.com/kent-tokyo/gugen/pull/1) を参照してください。
 

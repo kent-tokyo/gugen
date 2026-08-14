@@ -8,13 +8,15 @@ solid-state process plans — each with its evidence, assumptions, and
 unresolved conditions kept explicit and machine-readable. It does not
 predict experimental success.
 
-> **Status: early development, v0.1 in progress.** Phases 0-7 of 9 are
+> **Status: early development, v0.1 in progress.** Phases 0-8 of 9 are
 > done (architecture, foundation types, exact reaction balancing, bounded
 > precursor-set search, solid-state process templates, plan scoring and
-> confidence, the end-to-end `Planner`, and a CLI). An optional `mikiwame`
-> feature adapts structural diagnostics; the `chematic-crystal` adapter
-> remains blocked on that crate's publication. Not published, not merged
-> to `main`, not ready for use. See
+> confidence, the end-to-end `Planner`, a CLI, and a validation suite
+> against curated literature fixtures — see
+> [`docs/benchmark_report.md`](docs/benchmark_report.md)). An optional
+> `mikiwame` feature adapts structural diagnostics; the `chematic-crystal`
+> adapter remains blocked on that crate's publication. Not published, not
+> merged to `main`, not ready for use. See
 > [`tasks/todo.md`](tasks/todo.md) for exact phase-by-phase status and
 > [the draft PR](https://github.com/kent-tokyo/gugen/pull/1) for what's
 > under review.

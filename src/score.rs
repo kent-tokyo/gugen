@@ -135,6 +135,20 @@ pub fn ranking_weights_digest(weights: &RankingWeights) -> String {
 /// stoichiometrically certain while its process conditions are completely
 /// unresolved ("条件未確定でも反応式が確実なケースがあります。単一
 /// confidenceに潰さないでください").
+///
+/// **`overall` is currently structurally constant at `0.75` for every
+/// plan with a balanced reaction and non-empty evidence** (Phase 8's
+/// false-confidence audit, `tests/validation.rs`,
+/// `confidence_overall_is_measured_not_assumed_to_be_constant`, and
+/// `docs/benchmark_report.md`): it averages four `Score01` values, and
+/// `process_conditions` is always `0.0` in v0.1 (no provider ever resolves
+/// a condition), so `(1 + 1 + 0 + 1) / 4` is the only value this can
+/// currently produce for a successfully planned route. Each sub-score is
+/// individually honest; the constancy just means `overall` cannot yet
+/// discriminate between plans of genuinely different real uncertainty.
+/// Not "fixed" with an invented weighting -- no calibration data exists
+/// to justify one (AGENTS.md §27). See `tasks/todo.md`'s Phase 8
+/// stop-and-report entry for the full analysis.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ConfidenceAssessment {

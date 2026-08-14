@@ -41,11 +41,11 @@ work off.
 clean; chematic-crystal/mikiwame unavailability is the *expected* path
 AGENTS.md §5 already designs for, not an obstacle.
 
-**Open item carried forward (not blocking):** Kononova et al. 2019
-text-mined dataset license must be checked before it's used as a fixture
-source or bundled in any form (Phase 8/§22). If the license turns out to be
-incompatible or unclear, that becomes a real stop-and-report at that point
-(AGENTS.md §28 "使用候補datasetのライセンスが不明").
+**Open item carried forward, resolved in Phase 8:** Kononova et al. 2019
+text-mined dataset license was checked before use (via the figshare API
+the dataset is actually hosted at) -- CC BY 4.0, permitting reuse with
+attribution. See Phase 8's section below for the verification and how it
+was used.
 
 ## Phase 1 — Foundation — DONE (2026-08-13)
 
@@ -700,7 +700,268 @@ above.
 a real correctness fix, not a scope change: no new package name, no new
 license, no new external dependency, no unresolved API divergence.
 
-## Phase 8–9
+## Phase 8 — Validation — DONE
+
+**Kononova et al. 2019 dataset license, resolved.** Carried as an open
+item since Phase 0 (line ~45 above). Checked via the figshare API
+(`GET https://api.figshare.com/v2/articles/9722159`, the DOI the dataset
+is actually hosted at): `license.name == "CC BY 4.0"`. Not assumed, not
+inferred from the GitHub code repo (which has no LICENSE file --
+`license: null` via `gh api`) -- the data and the code are hosted and
+licensed separately, and only the data's license matters for fixture
+sourcing. CC BY 4.0 permits reuse with attribution. Not a stop-and-report
+trigger (AGENTS.md §28's "ライセンスが不明" doesn't apply once it's
+known); resolved by using individual cited routes with attribution, not
+bundling the dataset.
+
+- [x] Curated fixtures (`tests/validation.rs`, AGENTS.md §21.3): 5
+      fixtures spanning the phase's own candidate categories (perovskite
+      oxide, spinel oxide, phosphate, simple binary oxide, carbonate
+      precursor route), none written from memory:
+      - LaAlO3 (perovskite): 0.5 La2O3 + 0.5 Al2O3 -> LaAlO3, cross-checked
+        across 19 independent paper DOIs in the Kononova dataset.
+      - MgAl2O4 (spinel): 1 Al2O3 + 1 MgO -> MgAl2O4, 20 independent DOIs.
+      - Zn3(PO4)2 (phosphate): 3 ZnO + 1 P2O5 -> Zn3(PO4)2, 2 independent
+        DOIs.
+      - CaO (simple binary oxide): CaCO3 -> CaO + CO2 at 900°C. **Not**
+        from Kononova -- querying the full 30,031-reaction dataset for any
+        target matching a plain binary-oxide formula (NiO, Fe2O3, ZnO,
+        CuO, CaO, ...) returns zero results, an empirical finding (that
+        corpus's papers use commodity oxides as precursors, never as the
+        reported synthesis target). Sourced instead from Seesanong et al.,
+        "Low-Cost and Eco-Friendly Calcium Oxide Prepared via Thermal
+        Decompositions of Calcium Carbonate and Calcium Acetate Precursors
+        Derived from Waste Oyster Shells," *Materials* 17(15), 3875
+        (2024), DOI 10.3390/ma17153875.
+      - BaTiO3 (carbonate route): 1 BaCO3 + 1 TiO2 -> BaTiO3 + CO2, the
+        strongest-attested route in the suite (88 independent DOIs) --
+        also the same route this crate's own examples/tests have used
+        since Phase 1, now independently cross-checked against real
+        literature rather than only internal convention.
+      Full dataset (30,031 reactions) fetched and queried locally to
+      select/verify these, not bundled in the repo -- only the individual
+      cited routes (with citations) live in `tests/validation.rs`.
+- [x] Known-route recovery: `every_literature_route_is_recovered_exactly`
+      -- 5/5 cited routes recovered. `a_valid_alternative_precursor_is_...`
+      confirms a genuinely valid alternative (BaO instead of BaCO3) is
+      accepted *alongside* the cited route, not hidden by it. While
+      building the fixtures, a decoy meant to be a non-competing filler
+      (La2(CO3)3 for the LaAlO3 fixture) turned out, on actually running
+      it, to form a third real valid alternative route -- the fixture's
+      comment was corrected to say so rather than left describing
+      behavior that wasn't actually checked.
+- [x] Metamorphic tests (`tests/metamorphic.rs`, AGENTS.md §21.4): target
+      element order, catalog insertion order, unrelated-precursor
+      addition, and provider return order are all confirmed invariant
+      end-to-end through `Planner` (not just at the unit level individual
+      modules already covered). JSON field order is covered by
+      `tests/json_roundtrip.rs` (existing). **Equivalent formula
+      normalization is NOT invariant** -- see the stop-and-report entry
+      below; `formula_unit_scale_is_not_currently_normalized_a_documented_gap`
+      pins the current (non-invariant) behavior as a real regression
+      check, not a TODO comment.
+- [x] Provider failure tests (`tests/provider_failures.rs`, AGENTS.md
+      §21.5's full list), all through `Planner::plan` end-to-end: timeout
+      相当 (`ProviderError::Unavailable` with a timeout message -- no
+      dedicated `Timeout` variant exists, and a timeout and an outage are
+      the same fact from `Planner`'s side), missing entry, malformed
+      record, partial thermodynamic coverage (mixed `Ok(Some)`/`Ok(None)`
+      across two candidates in one report), duplicated evidence (no
+      crash; **not** deduplicated -- documented, not silently fixed, since
+      `evidence_strength`'s min-aggregation makes duplicates structurally
+      inert already), inconsistent units (no dedicated test infrastructure
+      exists for this because **gugen has no unit-consistency check at
+      all** -- `thermodynamic_provider_has_no_unit_consistency_check_a_documented_gap`
+      proves the gap directly: a provider returning an eV/atom-vs-kJ/mol
+      scale error is accepted identically to a correct one), unavailable
+      provider (both providers down at once, multi-candidate).
+- [x] Adversarial examples (`tests/adversarial.rs`): an extreme (10^25)
+      formula-unit target surfaces `GugenError::ArithmeticOverflow`
+      cleanly through `Planner::plan` (confirmed empirically that 10^18
+      still balances exactly and 10^25 does not, rather than guessing a
+      threshold); a catalog covering no target element; a search budget
+      too tight to evaluate every combination, through the full `Planner`
+      (precursor.rs already covered `search_precursor_sets` alone); a
+      precursor identical to the target (trivial 1:1 identity reaction);
+      a target contradictory on *two* elements at once (existing
+      `planner.rs` test only covers one); a target with an unclassified
+      structure re-confirming `assess_applicability` never overclaims
+      `InDomain` (regression pin for the Phase 6 advisor-caught overclaim
+      bug).
+- [x] False-confidence audit (`tests/validation.rs`,
+      `every_recovered_plan_still_requires_manual_review_...`,
+      `confidence_overall_is_measured_not_assumed_to_be_constant`):
+      `manual_review_required` and the accompanying `Severe` warning are
+      present on every plan across the whole fixture suite, no exceptions.
+      See the stop-and-report entry below for the constancy finding this
+      audit surfaced.
+- [x] Reproducibility (`tests/validation.rs`,
+      `planning_is_reproducible_across_repeated_runs`; also
+      `docs/benchmark_report.md`'s own measurement): every fixture produces
+      a byte-for-byte identical `SynthesisPlanningReport` (`PartialEq`)
+      across repeated runs with the same input/timestamp.
+- [x] Snapshot/golden tests (AGENTS.md §21.6): `tests/fixtures/
+      batio3_report.json` and `.md`, checked in from a real run (fixed
+      timestamp, not `now_rfc3339`), compared byte-for-byte in
+      `src/bin/gugen.rs`'s own test module (`json_output_matches_...`,
+      `markdown_output_matches_...`) -- `render_report_markdown` is
+      private to the bin crate, so the test lives there rather than in
+      `tests/`, per advisor guidance to avoid a snapshot-testing
+      dependency neither format needs.
+- [x] Benchmark report (`examples/benchmark_report.rs` ->
+      `docs/benchmark_report.md`, AGENTS.md §22): every metric on §22's
+      list is measured from a real run against the fixture set (not
+      estimated) except two, both explicitly logged as skipped rather than
+      silently omitted:
+      - [ ] §23 differential validation against another implementation:
+            not attempted. §23 says 可能なら ("if possible"); no runnable
+            reference synthesis-planning implementation exists in this
+            workspace, and building one only to compare against would
+            itself need the same literature verification this phase
+            already did, without a clear independent source of truth.
+            Revisit if a real reference implementation becomes available.
+      - [ ] §22 temperature-specific metrics (predicted-range-contains-
+            reference rate, evidence-covered-condition coverage,
+            unsupported-exact-value rate): undefined in v0.1, not zero --
+            `TemperatureRange` is always `None` (no provider ever
+            populates it), so there is no predicted temperature to score
+            against anything. Revisit once a real condition-evidence
+            provider exists.
+- [x] `docs/competitors.md`'s Kononova entry and this file's Phase 0
+      "open item" both updated to reflect the license verification above.
+
+### Stop-and-report: equivalent-formula-unit-scale invariance (AGENTS.md §21.4/§28)
+
+判明した事実 (facts found): `BaTiO3` and `Ba2Ti2O6` are the identical real
+material at a different formula-unit scale. Planning for them today
+produces different `plan_id`s and literally different reactant
+coefficients (1,1,1,1 vs 2,2,1,2) -- confirmed by running both through
+`Planner::plan` (`tests/metamorphic.rs`,
+`formula_unit_scale_is_not_currently_normalized_a_documented_gap`), not
+assumed.
+
+なぜ問題か (why it's a problem): AGENTS.md §21.4 explicitly lists
+"equivalent formula normalization" as a required invariance. It does not
+hold. This traces to a genuine, load-bearing Phase 1 design choice
+(`composition::tests::ordinary_decimal_amounts_round_trip_exactly`):
+`Composition` preserves a caller's exact given amounts rather than
+reducing to canonical GCD-minimal form, because doped/solid-solution
+formulas (e.g. `La0.67Sr0.33MnO3`) need their exact decimal doping level
+preserved -- blindly GCD-reducing every `Composition` at construction
+would rescale those too (checked: for a decimal composition like that
+one, "reducing" means scaling *up* to large integers, not down, since the
+given amounts are already smaller than their GCD-reduced integer form).
+
+最小解決案 (minimal fix): none identified that is actually minimal.
+Reducing `Composition` at construction breaks the tested doped-formula
+guarantee. A narrower fix confined to `balance()`/`derive_plan_id` (solve
+internally against the target's own GCD-reduced ratio, scale back up to
+match the caller's exact composition for the returned `BalancedReaction`)
+is possible in principle but changes what `plan_id` and the reaction's
+coefficients mean, which is a design decision, not a bug fix.
+
+代替案 (alternatives): (a) do nothing, document the gap (current state);
+(b) add a *separate*, decoupled "canonical scale" concept used only for
+`plan_id` derivation, leaving `Composition`/`BalancedReaction` untouched;
+(c) require callers to supply targets in minimal formula-unit form as an
+input contract, enforced by a new validation check that would reject
+`Ba2Ti2O6`-style targets outright.
+
+推奨案 (recommendation): (a) for now. No calibration or usage data exists
+to justify (b)'s specific design, and (c) would be a real, potentially
+surprising input-validation behavior change with no evidence it's needed
+-- no fixture or real target in this phase's suite ever supplies a
+non-minimal formula-unit scale. Revisit if a real caller (Phase 9 CLI
+users, or a future batch workload) actually hits this.
+
+作業量 (effort): (b) is roughly a half-day change plus new tests across
+`balance.rs`/`planner.rs`/`derive_plan_id`; (c) is smaller but has
+input-validation UX implications worth a separate discussion.
+
+影響範囲 (impact scope): `Composition`, `balance()`, `derive_plan_id`,
+every `plan_id` value in every existing report -- touches the crate's
+core identity/determinism story, not a local module.
+
+安全に継続できる作業 (safe to continue): everything else in Phase 8 and
+beyond. No curated fixture in this suite (or any real target seen so far)
+supplies a non-minimal formula-unit scale, so this gap does not affect
+the known-route recovery results, the benchmark numbers, or CLI usage as
+currently exercised.
+
+### Stop-and-report: `confidence.overall` is structurally constant (AGENTS.md §21/§28)
+
+判明した事実 (facts found): across every valid plan produced by this
+phase's entire fixture and adversarial suite (8 plans, 5 fixtures),
+`confidence.overall` is `0.75`, always
+(`confidence_overall_is_measured_not_assumed_to_be_constant`, also
+`docs/benchmark_report.md`'s "false confident plan rate" line: 1 distinct
+value observed). Root cause, in `score.rs`: `overall` averages four
+Score01 dimensions, and `process_conditions` is always exactly `0.0` in
+v0.1 (no provider ever resolves a condition), so for any plan with a
+balanced reaction and non-empty evidence the average is
+`(1 + 1 + 0 + 1) / 4 == 0.75` regardless of how genuinely different two
+plans' real uncertainty is. Same root cause and same shape as Phase 5's
+already-documented `total_ranking_score` finding
+(`process_simplicity`-only discrimination).
+
+なぜ問題か (why it's a problem): AGENTS.md §28 lists "validation
+corpusでfalse confident plansが多い" as a trigger. Measured literally: all
+of them. Whether this counts as *false* confidence is a real question --
+each of the four sub-scores is individually honest (not fabricated,
+correctly computed, and `process_conditions: 0.0` sits right next to
+`overall: 0.75` in the same struct, which is exactly why §16 mandated
+keeping these four separate rather than collapsing to one number) -- but
+the constancy means `confidence.overall` currently cannot discriminate
+between two plans of different real quality, which a reader could
+reasonably expect it to do.
+
+最小解決案 (minimal fix): none that isn't itself an unsourced heuristic.
+The only way to make `overall` vary today would be to invent a
+weighting/threshold not backed by any calibration data -- exactly what
+AGENTS.md §27 forbids ("科学的根拠がないheuristicを追加しない").
+
+代替案 (alternatives): (a) document only (current state); (b) remove
+`overall` from the public schema until it can vary meaningfully; (c) add
+a prominent field-level doc comment/warning already visible wherever
+`overall` is displayed (partially done: `score.rs`'s doc comment already
+states most of this).
+
+推奨案 (recommendation): (a), matching Phase 5's resolution for the analogous
+`total_ranking_score` finding. Removing a field a future condition-evidence
+provider could legitimately make meaningful (b) would be premature.
+Strengthened the doc comment on `ConfidenceAssessment`/`score_plan`
+(see score.rs) so this is stated at the definition site, not only here.
+
+作業量 (effort): documentation only, done as part of this phase.
+
+影響範囲 (impact scope): every `confidence.overall` value gugen has ever
+produced or will produce until a real condition-evidence provider exists
+-- a reporting/expectations issue, not a code defect.
+
+安全に継続できる作業 (safe to continue): everything. No plan claims
+anything the four sub-scores don't individually support, and
+`manual_review_required`/the mandatory `Severe` safety warning already
+prevent `confidence.overall` from being read as a green light.
+
+**Locally verified, all green:** fmt, clippy -D warnings (workspace, all
+features), test under `--all-features` (60 lib + 10 bin + 4 json_roundtrip
++ 6 adversarial + 5 metamorphic + 7 provider_failures + 5 validation = 97
+tests), `--no-default-features` and `--no-default-features --features
+mikiwame` (both green, same counts minus the bin/mikiwame-gated tests as
+appropriate), doc -D warnings, both examples (`balance_batio3`,
+`benchmark_report`), `cargo build --features serde,clap --bin gugen`,
+`cargo check --target wasm32-unknown-unknown` (with and without
+`mikiwame`), cargo audit (0 vulnerabilities, 32 crates, no new
+dependencies this phase).
+
+**Two stop-and-report items filed above**, both resolved as "document,
+don't silently fix" per AGENTS.md §27's unsourced-heuristic rule --
+consistent with how Phase 5 handled the analogous `total_ranking_score`
+finding. Neither blocks continuing; both are logged for the record and
+raised to the user explicitly, per §28's intent that this format surface
+findings for judgment, not necessarily halt work.
+
+## Phase 9
 
 Not started. Will be filled in with the same DONE/NOT STARTED tracking
 style as each phase begins; see AGENTS.md §26 for phase content and §29 for
