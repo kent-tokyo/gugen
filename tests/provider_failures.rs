@@ -11,7 +11,8 @@ use gugen::{
     BalancedReaction, Composition, Element, EvidenceKind, EvidenceStrength,
     InMemoryPrecursorCatalog, Planner, PlanningConfig, PlanningConstraints, PrecursorCandidate,
     PrecursorId, PrecursorSelection, ProcessEvidenceProvider, ProcessPrecedent, ProviderError,
-    ReactionEnergy, TargetSpecification, ThermodynamicConditions, ThermodynamicProvider,
+    ReactionEnergy, RouteFamily, RouteSuitabilityProvider, TargetSpecification,
+    ThermodynamicConditions, ThermodynamicProvider,
 };
 
 fn element(symbol: &str) -> Element {
@@ -454,4 +455,55 @@ fn a_failing_competing_phases_lookup_degrades_to_a_warning_not_a_failure() {
             plan.evidence
         );
     }
+}
+
+/// Phase 15A: `RouteSuitabilityProvider` gets the same failure-mode
+/// coverage as the other two optional providers -- a failure degrades to a
+/// report-level `PlanningWarning`, and that route family is simply left
+/// out of `route_suitability` for this report rather than faked as
+/// empty-with-no-warning.
+struct AlwaysUnavailableSuitability;
+impl RouteSuitabilityProvider for AlwaysUnavailableSuitability {
+    fn assess(
+        &self,
+        _target: &Composition,
+        _route_family: RouteFamily,
+    ) -> std::result::Result<Vec<gugen::SuitabilityFinding>, ProviderError> {
+        Err(ProviderError::Unavailable(
+            "suitability provider offline".to_string(),
+        ))
+    }
+}
+
+#[test]
+fn a_failing_route_suitability_provider_degrades_to_a_report_level_warning() {
+    let report = Planner::with_route_suitability_provider(
+        two_route_catalog(),
+        AlwaysUnavailableSuitability,
+        PlanningConfig::default(),
+    )
+    .plan(&batio3_target(), "2026-08-14T00:00:00Z")
+    .unwrap();
+
+    assert_eq!(
+        report.plans.len(),
+        4,
+        "a failing route-suitability provider must not stop planning at all"
+    );
+    assert!(
+        report
+            .warnings
+            .iter()
+            .filter(|w| w.message.contains("suitability provider offline"))
+            .count()
+            >= 2,
+        "both route families' assess() calls must fail independently and each warn: {:?}",
+        report.warnings
+    );
+    assert!(
+        report.route_suitability.is_empty(),
+        "a route family whose assess() call failed must be omitted from \
+        route_suitability, not present with fabricated empty findings: {:?}",
+        report.route_suitability
+    );
 }

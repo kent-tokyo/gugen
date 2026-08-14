@@ -23,13 +23,16 @@
 //! `tasks/todo.md`'s Phase 8 section). **v0.1.0 is published** (crates.io,
 //! merged to `main`, tagged `v0.1.0`) — see `tasks/todo.md`'s Phase 9
 //! section for the release record. Post-v0.1 development toward v0.2.0
-//! (Phase 10-13 — real literature-sourced process conditions, a
+//! (Phase 10-14 — real literature-sourced process conditions, a
 //! large-scale blind benchmark, a second route family, a thermodynamic-
-//! provider adapter boundary) is tracked from `tasks/todo.md`'s Phase 10
-//! section onward, not `AGENTS.md` §26 (which only defines the original 9
-//! phases). All four are implemented and merged to `main`; **v0.2.0 itself
-//! is not yet published** — that step waits on the owner's separate,
-//! explicit go-ahead, same as v0.1.0's release.
+//! provider adapter boundary, and a validation-fixture citation repair) is
+//! tracked from `tasks/todo.md`'s Phase 10 section onward, not `AGENTS.md`
+//! §26 (which only defines the original 9 phases). **v0.2.0 is published**
+//! (crates.io, tagged `v0.2.0`). Work toward v0.3.0 has begun with Phase
+//! 15A (`route_suitability` module): a report-level evidence model for
+//! whether a route family suits a target (`Supports`/`Contradicts`/
+//! `Unknown` findings, never an aggregated score) -- deliberately not yet
+//! wired into ranking; see `tasks/todo.md`'s Phase 15A section.
 
 #![forbid(unsafe_code)]
 
@@ -52,6 +55,7 @@ mod provider;
 mod reaction;
 mod rejection;
 mod report;
+mod route_suitability;
 mod score;
 mod target;
 
@@ -78,7 +82,9 @@ pub use process::{
     applicable_route_family_templates, conventional_solid_state_template, mechanochemical_template,
 };
 pub use provenance::PlanningProvenance;
-pub use provider::{PrecursorCatalog, ProcessEvidenceProvider, ThermodynamicProvider};
+pub use provider::{
+    PrecursorCatalog, ProcessEvidenceProvider, RouteSuitabilityProvider, ThermodynamicProvider,
+};
 pub use reaction::{
     BalancedReaction, CompetingPhase, ReactionEnergy, ReactionSpecies, ThermodynamicConditions,
 };
@@ -86,6 +92,10 @@ pub use rejection::{RejectedCandidate, RejectionCode};
 pub use report::{
     ApplicabilityAssessment, ApplicabilityLevel, PlanId, PlanningWarning, SCHEMA_VERSION,
     SynthesisPlan, SynthesisPlanningReport, TargetSummary, UnresolvedRequirement, WarningSeverity,
+};
+pub use route_suitability::{
+    CuratedSuitabilityRecord, InMemoryRouteSuitabilityProvider, RouteSuitabilityAssessment,
+    SuitabilityFinding, SuitabilityVerdict,
 };
 pub use score::{
     ConfidenceAssessment, PlanAssessment, PlanScoreBreakdown, PlanningAssumption, RankingWeights,

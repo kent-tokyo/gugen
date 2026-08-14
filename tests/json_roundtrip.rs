@@ -66,6 +66,7 @@ fn sample_report() -> SynthesisPlanningReport {
             desired_phase: None,
         },
         applicability: applicability.clone(),
+        route_suitability: vec![],
         plans: vec![SynthesisPlan {
             plan_id: PlanId("plan-0001".to_string()),
             route_family: template.route_family,

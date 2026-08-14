@@ -2213,3 +2213,138 @@ citation text and fixture identity changed, not test count),
 `tests/validation.rs`'s `every_literature_route_is_recovered_exactly`
 specifically re-run to confirm the new LiFePO4 fixture is actually
 recovered by gugen's real search, not just assumed balanceable.
+
+## Phase 15A — Route-Suitability Evidence Model (v0.3.0) — DONE (2026-08-14)
+
+**Goal** (owner-requested, staged v0.3.0 direction): close part of the
+"no route-suitability classifier" gap Phase 12/ROADMAP.md already
+documented, but deliberately staged rather than as one scoring feature.
+Owner's own framing: "まず数値スコアなしで、ルートごとの診断結果を表現
+します...この段階ではランキングを変えません。証拠を収集して説明できる
+器だけを作るのがよいです" (first represent per-route diagnostic results
+without a numeric score; don't change ranking at this stage; best to
+build only the vessel that can collect and explain evidence). Explicit
+hard constraint: no algorithm or score changes this phase, evidence
+model only. Phase 15B (conservative negative filtering), Phase 16
+(optional `chematic-crystal` adapter, no longer blocked -- published
+`0.15.0` the same day this phase ran), and Phase 17 (literature-holdout
+route-classification benchmark) are each separately triggered future
+work, not started here. Full design plan:
+`/Users/k_tanabe/.claude/plans/typed-sparking-storm.md`.
+
+**Design decisions** (see the plan file for full reasoning): (1)
+`RouteSuitabilityAssessment` lives on `SynthesisPlanningReport`
+(report-level, one entry per `RouteFamily` variant assessed), not folded
+into `SynthesisPlan.evidence` -- that vec already feeds `score_plan`'s
+weakest-link `evidence_strength` aggregate, so appending there would
+silently affect confidence even without a numeric score. (2) Findings
+are `Vec<SuitabilityFinding>`, never an aggregated verdict -- the owner's
+"複数の証拠が矛盾した場合は無理に統合しない" instruction is enforced at
+the type level, not just in a doc comment: there is no aggregate field
+for contradictory findings to collapse into. Empty `findings` means
+`insufficient_evidence`, never "route rejected" (AGENTS.md §13's
+existing "evidenceなしのplanはconfidenceを下げる" rule, applied here).
+(3) New `RouteSuitabilityProvider` trait, curated in-memory
+implementation only, no `score.rs` changes -- `score.rs:522-539`'s
+existing `PlanningAssumption` text about route-family suitability is
+left exactly as-is, a deliberate scope boundary (updating it would
+require threading the assessment into `score_plan`, itself a small step
+toward the algorithm changes this phase explicitly excludes).
+
+**Independent research before implementation** (AGENTS.md §21.3: two
+real, cited worked examples, not invented):
+- **Supports**: Kozma, Lipták, Deák, Rónavári, Kukovecz, Kónya,
+  "Conversion Study on the Formation of Mechanochemically Synthesized
+  BaTiO3," *Chemistry* 4(2), 606-616 (2022), DOI
+  10.3390/chemistry4020042, open access (CC BY) -- title/authors/venue/
+  year confirmed via CrossRef, abstract read directly via Semantic
+  Scholar's API (not just title-matched): states the aim was "the
+  one-step production of BaTiO3 from BaO and TiO2," developing "the
+  preparation of BaTiO3 with a perovskite structure even without
+  subsequent heat treatment." Attached to `(BaTiO3, Mechanochemical)`.
+- **Contradicts**: Hou, Li, Xudong, Xie, An, "Development and
+  Characterization on the Isothermal Kinetics of Mg(OH)2-sol Synthesized
+  by Chemical Method," *Journal of Asian Ceramic Societies* (2021), DOI
+  10.1080/21870764.2021.2019376, open access (CC BY) -- confirmed via
+  CrossRef, abstract read directly: Mg(OH)2 "completely transformed"
+  into cubic MgO at sintering temperatures "higher than 350 C."
+  Cross-referenced against gugen's own already-curated MgAl2O4 record
+  (`literature_conditions.rs`, Phase 10), which cites 1725 K (~1452 C)
+  for conventional solid-state synthesis of a comparable
+  magnesium-oxide-family ceramic -- roughly 1100 C above where Mg(OH)2
+  has already fully decomposed, so a conventional high-temperature
+  firing route cannot reach Mg(OH)2 as a target phase at all. Attached
+  to `(Mg(OH)2, ConventionalSolidState)`.
+- **A third candidate (γ-Fe2O3/maghemite, ConventionalSolidState) was
+  researched and explicitly rejected**: real, well-documented literature
+  exists for maghemite irreversibly converting to hematite (α-Fe2O3)
+  above ~350-500 C (Özdemir & Banerjee, *Geophysical Research Letters*,
+  1984, DOI 10.1029/GL011i003p00161 -- paywalled, not read beyond
+  title/venue confirmation; corroborated by a second, read source, DOI
+  10.1080/21870764.2020.1812838). Not used: maghemite and hematite share
+  the identical `Composition` (Fe2O3) and differ only by polymorph,
+  which gugen's `Composition` type cannot represent -- a finding keyed
+  on bare `Fe2O3` would have wrongly also applied to the common,
+  legitimate hematite-via-conventional-solid-state case. Mg(OH)2 has no
+  such ambiguity (a genuinely different `Composition`, 1:2:2 vs. MgO's
+  1:1), which is why it replaced maghemite as the Contradicts example.
+  This is a real design-relevant finding for any future phase (15B, 16)
+  that curates suitability records: check for same-composition-
+  different-polymorph traps before keying a finding on bare
+  `Composition`.
+
+**Ripple effects, each checked rather than assumed unaffected**:
+- `tests/fixtures/batio3_report.{json,md}` (golden snapshots): the new
+  `route_suitability: []` field appears in the JSON snapshot (regenerated
+  from a real run, not hand-edited, same discipline as every prior golden
+  fixture update); the markdown snapshot is byte-identical -- confirmed
+  `render_report_markdown` does not reference this field at all yet (CLI
+  rendering of route suitability is out of this phase's scope).
+- `tests/json_roundtrip.rs`: its own direct `SynthesisPlanningReport {
+  ... }` construction needed `route_suitability: vec![]` added -- the
+  only other direct struct-literal construction site in the repo besides
+  `planner.rs` itself (checked via `grep -rl "SynthesisPlanningReport {"`
+  across src/tests/examples; every other hit was a function return-type
+  signature that calls `Planner::plan` internally, not a literal).
+- `src/bin/gugen.rs`'s `doctor` command: added a "route suitability
+  provider: none" line matching the existing thermodynamic/process-
+  evidence lines exactly (this CLI always uses `offline_minimal`); the
+  "known limitations" line's route-suitability wording updated from "no
+  per-route-family suitability precedent" (no longer fully true -- the
+  vessel exists) to "findings do not yet affect ranking or which routes
+  are offered" (still true).
+- `tests/provider_failures.rs`: extended with the same
+  timeout/missing-entry/malformed-record-style coverage the other two
+  optional providers already have -- a failing `RouteSuitabilityProvider`
+  degrades to a report-level `PlanningWarning`, and the affected route
+  family is simply omitted from `route_suitability` rather than faked as
+  empty-with-no-warning.
+- `docs/architecture.md`'s "Provider isolation" section: one sentence
+  added noting the fourth provider trait; the older Phase-0 data-flow
+  diagram (which already doesn't name `ThermodynamicProvider`/
+  `ProcessEvidenceProvider` either, and still says `ranking.rs` for what
+  is actually `score.rs`) was left as-is, consistent with how it wasn't
+  kept in lockstep for Phase 10/12/13 either.
+- `AGENTS.md` §8's illustrative "at minimum, consider these provider
+  traits" sketch: deliberately not amended -- it already reads as a floor
+  ("最低限"), not an exhaustive list, and wasn't amended for Phase 13's
+  `competing_phases` addition either.
+
+**Docs updated**: `CHANGELOG.md` (new entry under `[Unreleased]`, since
+v0.3.0 has no version number or date decided yet); `ROADMAP.md` (status,
+phase table, near-term section, and the "No route-suitability
+classifier" known-risk bullet all updated to describe this phase's
+actual, partial scope -- explicitly not marked "resolved"); `src/lib.rs`
+module doc comment.
+
+**Locally verified, all green**: `cargo fmt --all -- --check`, `cargo
+clippy --all-features --all-targets -- -D warnings`, `cargo test
+--all-features` (130 tests, up from 120 -- 4 new unit tests in
+`route_suitability.rs`, 5 new integration tests in
+`tests/route_suitability.rs`, 1 new test in `tests/provider_failures.rs`),
+`cargo doc --all-features --no-deps`. The core Phase 15A guarantee is
+directly tested, not just inferred from an absence of failures:
+`configuring_the_provider_does_not_change_any_plans_score_or_confidence`
+(`tests/route_suitability.rs`) asserts a `with_route_suitability_provider`
+run and an `offline_minimal` run of the same target produce byte-identical
+`score`/`confidence`/`applicability`/`evidence` on every plan.

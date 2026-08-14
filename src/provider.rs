@@ -1,8 +1,9 @@
 use crate::composition::Composition;
 use crate::error::ProviderError;
 use crate::precursor::{PrecursorCandidate, PrecursorSelection};
-use crate::process::ProcessPrecedent;
+use crate::process::{ProcessPrecedent, RouteFamily};
 use crate::reaction::{BalancedReaction, CompetingPhase, ReactionEnergy, ThermodynamicConditions};
+use crate::route_suitability::SuitabilityFinding;
 use crate::target::{PlanningConstraints, TargetSpecification};
 
 /// Source of candidate precursor compounds for a target (AGENTS.md §8).
@@ -49,4 +50,21 @@ pub trait ProcessEvidenceProvider {
         target: &TargetSpecification,
         precursors: &[PrecursorSelection],
     ) -> std::result::Result<Vec<ProcessPrecedent>, ProviderError>;
+}
+
+/// Source of route-suitability findings for a target/route-family
+/// combination (Phase 15A; AGENTS.md §8 sketches providers as a floor, not
+/// an exhaustive list -- Phase 13's `competing_phases` already extended
+/// this pattern once). Deliberately narrower than `ProcessEvidenceProvider`:
+/// suitability depends only on the target and route family, not on a
+/// specific precursor set, since a route family's fitness for a material
+/// (e.g. whether high-temperature firing is even reachable before the
+/// target decomposes) doesn't change with which precursors were chosen to
+/// reach it.
+pub trait RouteSuitabilityProvider {
+    fn assess(
+        &self,
+        target: &Composition,
+        route_family: RouteFamily,
+    ) -> std::result::Result<Vec<SuitabilityFinding>, ProviderError>;
 }

@@ -262,14 +262,16 @@ fn doctor_report() -> String {
         precursor catalog version: not applicable outside a `plan`/`batch` run (no persistent catalog is configured by this CLI)\n\
         thermodynamic provider: none (this CLI builds every `Planner` via `offline_minimal`)\n\
         process evidence provider: none (this CLI builds every `Planner` via `offline_minimal`)\n\
+        route suitability provider: none (this CLI builds every `Planner` via `offline_minimal`)\n\
         ranking config digest: {}\n\
         deterministic mode: yes -- the planning core never reads the system clock; \
         execution_timestamp is supplied by this CLI at the moment each `plan`/`batch` runs\n\
         supported domain: bulk polycrystalline inorganic solids via conventional solid-state \
         or mechanochemical (structural route only, no detailed milling conditions -- \
         AGENTS.md §3) synthesis (see docs/scientific_scope.md for the full scope)\n\
-        known limitations: no per-route-family suitability precedent (every applicable route \
-        family is offered for every accepted precursor set, unranked by real-world fit); no \
+        known limitations: route-family suitability findings (Phase 15A's `route_suitability` \
+        module) do not yet affect ranking or which routes are offered -- every applicable route \
+        family is still offered for every accepted precursor set regardless of findings; no \
         hazard/safety database (manual_review_required is always true); chematic-crystal not \
         integrated; full list in CHANGELOG.md's \"Known limitations\" section",
         env!("CARGO_PKG_VERSION"),

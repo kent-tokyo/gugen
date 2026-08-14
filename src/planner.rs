@@ -5,13 +5,16 @@ use crate::evidence::{EvidenceKind, EvidenceScope, EvidenceStrength, PlanningEvi
 use crate::precursor::{PrecursorId, PrecursorSelection, search_precursor_sets};
 use crate::process::{RouteFamily, applicable_route_family_templates, apply_condition_precedents};
 use crate::provenance::PlanningProvenance;
-use crate::provider::{PrecursorCatalog, ProcessEvidenceProvider, ThermodynamicProvider};
+use crate::provider::{
+    PrecursorCatalog, ProcessEvidenceProvider, RouteSuitabilityProvider, ThermodynamicProvider,
+};
 use crate::reaction::{BalancedReaction, ThermodynamicConditions};
 use crate::rejection::{RejectedCandidate, RejectionCode};
 use crate::report::{
     ApplicabilityAssessment, ApplicabilityLevel, PlanId, PlanningWarning, SCHEMA_VERSION,
     SynthesisPlan, SynthesisPlanningReport, TargetSummary, UnresolvedRequirement, WarningSeverity,
 };
+use crate::route_suitability::RouteSuitabilityAssessment;
 use crate::score::{ranking_weights_digest, score_plan};
 use crate::target::TargetSpecification;
 
@@ -30,6 +33,7 @@ pub struct Planner {
     catalog: Box<dyn PrecursorCatalog>,
     thermodynamic_provider: Option<Box<dyn ThermodynamicProvider>>,
     process_evidence_provider: Option<Box<dyn ProcessEvidenceProvider>>,
+    route_suitability_provider: Option<Box<dyn RouteSuitabilityProvider>>,
     config: PlanningConfig,
 }
 
@@ -45,6 +49,7 @@ impl Planner {
             catalog: Box::new(catalog),
             thermodynamic_provider: Some(Box::new(thermodynamic_provider)),
             process_evidence_provider: Some(Box::new(process_evidence_provider)),
+            route_suitability_provider: None,
             config,
         }
     }
@@ -61,6 +66,7 @@ impl Planner {
             catalog: Box::new(catalog),
             thermodynamic_provider: None,
             process_evidence_provider: None,
+            route_suitability_provider: None,
             config,
         }
     }
@@ -78,6 +84,25 @@ impl Planner {
             catalog: Box::new(catalog),
             thermodynamic_provider: None,
             process_evidence_provider: Some(Box::new(process_evidence_provider)),
+            route_suitability_provider: None,
+            config,
+        }
+    }
+
+    /// Catalog plus a route-suitability provider (e.g.
+    /// `InMemoryRouteSuitabilityProvider`, Phase 15A) -- no thermodynamic or
+    /// process-evidence provider. Mirrors `with_process_evidence_provider`'s
+    /// shape; see `new`/`offline_minimal` for the other combinations.
+    pub fn with_route_suitability_provider(
+        catalog: impl PrecursorCatalog + 'static,
+        route_suitability_provider: impl RouteSuitabilityProvider + 'static,
+        config: PlanningConfig,
+    ) -> Self {
+        Self {
+            catalog: Box::new(catalog),
+            thermodynamic_provider: None,
+            process_evidence_provider: None,
+            route_suitability_provider: Some(Box::new(route_suitability_provider)),
             config,
         }
     }
@@ -119,6 +144,36 @@ impl Planner {
                     .to_string(),
                 severity: WarningSeverity::Caution,
             });
+        }
+
+        // Phase 15A: computed once per report, independent of which
+        // precursor sets get accepted below -- suitability is a
+        // (target, route_family) property, not a per-plan one. Correlate a
+        // specific SynthesisPlan back to its assessment via
+        // SynthesisPlan.route_family. Same two variants
+        // applicable_route_family_templates calls unconditionally
+        // (process.rs); update both together if a third route family is
+        // ever added.
+        let mut route_suitability = Vec::new();
+        if let Some(provider) = &self.route_suitability_provider {
+            for route_family in [
+                RouteFamily::ConventionalSolidState,
+                RouteFamily::Mechanochemical,
+            ] {
+                match provider.assess(composition, route_family) {
+                    Ok(findings) => route_suitability.push(RouteSuitabilityAssessment {
+                        route_family,
+                        findings,
+                    }),
+                    Err(err) => warnings.push(PlanningWarning {
+                        message: format!(
+                            "route suitability provider failed for {route_family:?}, \
+                            continuing without it: {err}"
+                        ),
+                        severity: WarningSeverity::Info,
+                    }),
+                }
+            }
         }
 
         let outcome = search_precursor_sets(
@@ -361,6 +416,7 @@ impl Planner {
                 desired_phase: target.desired_phase.as_ref().map(|p| p.phase_name.clone()),
             },
             applicability,
+            route_suitability,
             plans,
             rejected_candidates,
             unresolved: vec![],
@@ -441,6 +497,9 @@ fn abstain(
                 ever satisfy both"
             )],
         },
+        // Abstained before any route family was ever considered -- no
+        // suitability assessment to report, same reasoning as `plans: []`.
+        route_suitability: vec![],
         plans: vec![],
         rejected_candidates: vec![],
         unresolved: vec![UnresolvedRequirement {
