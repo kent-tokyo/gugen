@@ -1785,7 +1785,7 @@ clippy --workspace --all-targets --all-features -- -D warnings` (one
 `#[allow(clippy::too_many_arguments)]` added to `score_plan`, 8 params,
 each independently meaningful and already documented — not routed around
 via an artificial bundling struct), `cargo test --workspace --all-features`
-(112 tests: 65 lib + 10 bin + 6 adversarial + 4 json_roundtrip + 6
+(113 tests: 66 lib + 10 bin + 6 adversarial + 4 json_roundtrip + 6
 literature_conditions + 3 large_scale_benchmark + 6 metamorphic + 7
 provider_failures + 5 validation), `cargo test --workspace
 --no-default-features` and `--no-default-features --features mikiwame`,
@@ -1794,3 +1794,20 @@ provider_failures + 5 validation), `cargo test --workspace
 `wasm32-unknown-unknown` checks, `cargo audit`,
 `examples/benchmark_report`/`examples/large_scale_benchmark` re-run and
 diffed byte-identical against checked-in output.
+
+**Pre-commit review** (advisor pass) flagged that no test pinned the
+mechanochemical route's own step-bounds boundary end-to-end through
+`score_plan` — only `mechanochemical_template_differs_between_carbonate_
+and_oxide_routes_to_the_same_target` (`src/process.rs`) checked step
+*shape*, not the resulting score. Added
+`score::tests::mechanochemical_process_simplicity_is_scored_against_its_
+own_family_range`, mirroring the existing conventional-route test:
+confirms the oxide-only (4-step, `Mechanochemical`'s own minimum) route
+scores `process_simplicity == 1.0` and the byproduct-releasing (6-step,
+its own maximum) route scores `0.0` — pinning the intended, symmetric
+per-family normalization (each family's simplest achievable route scores
+1.0 *on its own scale*, never compared across families) rather than
+leaving it as an unstated implication of `step_bounds`.
+
+**Shipped**: branch `phase12/mechanochemical-route-family` → PR #5 → CI
+green → squash-merged to `main` at `296ba2c`.
