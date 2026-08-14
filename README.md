@@ -1,5 +1,7 @@
 # gugen (具現)
 
+**English** | [日本語](README_ja.md)
+
 Explainable materials synthesis and process planning, in Rust.
 
 Given a target inorganic composition (and optionally a target structure),
