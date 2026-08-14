@@ -1,5 +1,10 @@
 # gugen (具現)
 
+[![Crates.io](https://img.shields.io/crates/v/gugen.svg)](https://crates.io/crates/gugen)
+[![docs.rs](https://img.shields.io/docsrs/gugen)](https://docs.rs/gugen)
+[![CI](https://github.com/kent-tokyo/gugen/actions/workflows/ci.yml/badge.svg)](https://github.com/kent-tokyo/gugen/actions/workflows/ci.yml)
+[![License](https://img.shields.io/crates/l/gugen.svg)](#license)
+
 **English** | [日本語](README_ja.md)
 
 Explainable materials synthesis and process planning, in Rust.
@@ -10,20 +15,15 @@ solid-state process plans — each with its evidence, assumptions, and
 unresolved conditions kept explicit and machine-readable. It does not
 predict experimental success.
 
-> **Status: v0.1.0 published.** [crates.io](https://crates.io/crates/gugen) /
-> [docs.rs](https://docs.rs/gugen) / [v0.1.0 release](https://github.com/kent-tokyo/gugen/releases/tag/v0.1.0).
-> All 9 original phases are done (architecture, foundation types, exact
-> reaction balancing, bounded precursor-set search, solid-state process
-> templates, plan scoring and confidence, the end-to-end `Planner`, a
-> CLI, a validation suite against curated literature fixtures — see
-> [`docs/benchmark_report.md`](docs/benchmark_report.md) — and v0.1
-> release prep). An optional `mikiwame` feature adapts structural
-> diagnostics; the `chematic-crystal` adapter remains blocked on that
-> crate's publication. Post-v0.1 development toward a v0.2.0 (real
-> literature-sourced process conditions, a large-scale blind benchmark,
-> a second route family, a thermodynamic-provider adapter boundary) is
-> in progress on `main` — see [`tasks/todo.md`](tasks/todo.md) for
-> exact phase-by-phase status.
+> **Status: v0.2.0 published**, v0.3.0 release in progress.
+> [crates.io](https://crates.io/crates/gugen) /
+> [docs.rs](https://docs.rs/gugen) / [v0.2.0 release](https://github.com/kent-tokyo/gugen/releases/tag/v0.2.0).
+> v0.3.0 adds evidence-preserving route-family suitability decisions
+> (`route_suitability`), conservative negative filtering
+> (`not_recommended`), and an optional `chematic-crystal`–`mikiwame`
+> structure bridge, without converting uncalibrated evidence into
+> numeric ranking claims — see [`CHANGELOG.md`](CHANGELOG.md) for the
+> full list and known limitations.
 
 ## What gugen does and doesn't guarantee
 
@@ -327,8 +327,7 @@ cargo check --target wasm32-unknown-unknown --features mikiwame
 cargo audit
 ```
 
-Full spec: [`AGENTS.md`](AGENTS.md). Architecture and design decisions:
-[`docs/`](docs/). Phase-by-phase progress: [`tasks/todo.md`](tasks/todo.md).
+Architecture and design decisions: [`docs/`](docs/).
 
 ## License
 
