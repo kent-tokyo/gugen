@@ -3,7 +3,9 @@ use crate::config::PlanningConfig;
 use crate::error::Result;
 use crate::evidence::{EvidenceKind, EvidenceScope, EvidenceStrength, PlanningEvidence};
 use crate::precursor::{PrecursorId, PrecursorSelection, search_precursor_sets};
-use crate::process::{RouteFamily, applicable_route_family_templates, apply_condition_precedents};
+use crate::process::{
+    ConditionPrecedent, RouteFamily, applicable_route_family_templates, apply_condition_precedents,
+};
 use crate::provenance::PlanningProvenance;
 use crate::provider::{
     PrecursorCatalog, ProcessEvidenceProvider, RouteSuitabilityProvider, ThermodynamicProvider,
@@ -198,6 +200,7 @@ impl Planner {
             for mut template in applicable_route_family_templates(composition, accepted) {
                 let mut evidence = std::mem::take(&mut template.evidence);
                 let mut provider_warnings = Vec::new();
+                let mut condition_conflicts = Vec::new();
                 let process_evidence_provider_consulted = self.process_evidence_provider.is_some();
 
                 if let Some(provider) = &self.thermodynamic_provider {
@@ -306,6 +309,7 @@ impl Planner {
                 if let Some(provider) = &self.process_evidence_provider {
                     match provider.precedents(target, &precursors) {
                         Ok(precedents) => {
+                            let mut all_conditions: Vec<ConditionPrecedent> = Vec::new();
                             for precedent in precedents {
                                 // An empty description means this precedent has nothing
                                 // prose-only to add (Phase 10's literature condition
@@ -325,16 +329,21 @@ impl Planner {
                                         ],
                                     });
                                 }
-                                // Phase 10: splice any structured, cited condition data
-                                // into this template's still-unresolved Heat steps
-                                // before scoring, rather than only ever adding
-                                // free-text evidence that never changes what's
-                                // actually planned.
-                                evidence.extend(apply_condition_precedents(
-                                    &mut template.steps,
-                                    &precedent.conditions,
-                                ));
+                                all_conditions.extend(precedent.conditions);
                             }
+                            // Phase 10: splice any structured, cited condition data into
+                            // this template's still-unresolved Heat steps before scoring,
+                            // rather than only ever adding free-text evidence that never
+                            // changes what's actually planned. Phase 19: every matching
+                            // precedent across every returned ProcessPrecedent is
+                            // collected first and applied in one order-independent call,
+                            // rather than one ProcessPrecedent at a time -- calling this
+                            // once per precedent let whichever one happened to run first
+                            // silently win any field two precedents both supplied.
+                            let (condition_evidence, conflicts) =
+                                apply_condition_precedents(&mut template.steps, &all_conditions);
+                            evidence.extend(condition_evidence);
+                            condition_conflicts.extend(conflicts);
                         }
                         Err(err) => provider_warnings.push(PlanningWarning {
                             message: format!(
@@ -353,6 +362,7 @@ impl Planner {
                     &template.steps,
                     &evidence,
                     process_evidence_provider_consulted,
+                    &condition_conflicts,
                     template.route_family,
                     &self.config.ranking_weights,
                 );

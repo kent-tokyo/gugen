@@ -101,9 +101,9 @@ pub use precursor::{
     PrecursorId, PrecursorSearchOutcome, PrecursorSelection, search_precursor_sets,
 };
 pub use process::{
-    Atmosphere, CharacterizationMethod, ConditionPrecedent, CoolingMode, DurationRange,
-    FormingMethod, GrindingMethod, HeatingPurpose, InertGas, MaterialAmount, MixingMethod,
-    PlannedStep, PressureRange, ProcessPrecedent, ProcessStep, ProcessTemplateResult,
+    Atmosphere, CharacterizationMethod, ConditionConflict, ConditionPrecedent, CoolingMode,
+    DurationRange, FormingMethod, GrindingMethod, HeatingPurpose, InertGas, MaterialAmount,
+    MixingMethod, PlannedStep, PressureRange, ProcessPrecedent, ProcessStep, ProcessTemplateResult,
     RampRateRange, ReducingAgent, RouteFamily, StepRequirement, TemperatureRange,
     applicable_route_family_templates, conventional_solid_state_template, mechanochemical_template,
 };
