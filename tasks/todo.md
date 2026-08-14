@@ -2019,3 +2019,197 @@ green → squash-merged to `main` at `9a121b5`.
 All four v0.2.0 follow-up phases (10-13) are now complete and merged.
 `cargo publish` for 0.2.0 has not been triggered — it waits on the
 owner's separate, explicit go-ahead (see `ROADMAP.md`).
+
+## Phase 14 — Validation Fixture Citation Repair (Release Blocker) — DONE (2026-08-14)
+
+**Goal** (owner-requested, before publishing 0.2.0): `tests/validation.rs`
+carried DOI-attestation counts and a dataset-size claim measured against
+a wrong-provenance corpus (Phase 11 found and deliberately left this
+unfixed, tracked as an open decision — see Phase 11's section above and
+`/Users/k_tanabe/.claude/projects/-Users-k-tanabe-Documents-Documents-
+rd-project-gugen/memory/validation_rs_citation_counts_wrong.md`). This
+phase resolves it: evidence and citation text only, no algorithm or
+scoring change (owner's explicit instruction), as a small, contained PR.
+
+**Independent re-verification, not trusted from memory or the prior
+session's write-up alone (AGENTS.md §21.3)**: live-refetched the
+correctly-licensed figshare corpus (10.6084/m9.figshare.9722159, 19,488
+reactions, license re-checked live) and recounted every route directly
+against it, rather than trusting the already-recorded numbers:
+
+| Route | Prior text | Correct (re-verified this phase) |
+|---|---|---|
+| LaAlO3 (La2O3+Al2O3) | 19 | 10 |
+| MgAl2O4 (Al2O3+MgO) | 20 | 16 |
+| BaTiO3 (BaCO3+TiO2) | 88 | 83 |
+| Zn3(PO4)2 (ZnO+P2O5) | 2 | **0** |
+| Dataset size | 30,031 | 19,488 |
+
+All four counts matched the numbers already recorded in memory,
+`tasks/todo.md`'s Phase 11 section, and `benchmarks/fetch_kononova.py`'s
+own docstring — triple-corroborated, but re-derived from a fresh live
+fetch anyway rather than assumed correct because three prior write-ups
+agreed. Also independently re-verified the module doc comment's "zero
+simple-binary-oxide-target entries" claim still holds against the correct
+corpus (it does — checked directly, not assumed to still be true just
+because the dataset size changed).
+
+**LaAlO3, MgAl2O4**: count-only fixes. Neither representative DOI is a
+content mismatch (LaAlO3's is paywalled but topically correct per Phase
+10's own check; MgAl2O4's was read directly by Phase 10 and confirmed to
+report both the route and real firing conditions) — no DOI swap needed.
+
+**BaTiO3**: count fix (88→83) plus a DOI swap. The original
+representative entry (`10.1111/j.1551-2916.2006.01172.x`) was already
+confirmed, during Phase 10's own research, to be a NaNbO3-BaTiO3
+solid-solution study, not plain BaTiO3 — flagged at the time as "worth
+swapping for something independently re-verified" (ROADMAP.md) but not
+acted on until now. Phase 10 had already found and read a clean
+replacement while sourcing condition data: `10.3390/cryst14040304` (Qi et
+al., *Crystals* 14(4), 304 (2024), open access) — its own text reads
+"TiO2 ... and BaCO3 ... powders were mixed in a molar ratio of 1:1 and
+calcined," an exact match. This phase's contribution was recognizing that
+Phase 10's already-verified replacement could directly become
+`tests/validation.rs`'s new representative entry too, rather than
+independently sourcing a second one. Since this 2024 paper post-dates the
+2019 Kononova corpus, the citation text is explicit that it is *not* one
+of the 83 corpus attestations — a separately, independently verified
+confirmation of the same route, a stronger evidentiary tier than naming
+an unread corpus entry (which is what the original citation style did).
+
+**Zn3(PO4)2**: not a count-correction case — recounting found this exact
+route (3 ZnO + 1 P2O5 -> Zn3(PO4)2) has **zero** independent attestations
+in the correct corpus at all. Its original representative DOI
+(`10.1016/j.jmmm.2015.06.001`) is a confirmed topic mismatch (a Sm-doped
+zinc-phosphate glass paper, melt-quenched, not this reaction — also found
+during Phase 10). Two options existed (per the owner's own framing):
+force-fit a different real precursor route onto the same Zn3(PO4)2
+target (Phase 10's own curated condition record already does exactly
+this, from ZnO + (NH4)2HPO4, but flags its own source `Weak` -- a short
+conference-proceedings paper with an internally inconsistent reported
+space group), or find a genuinely different, well-attested phosphate.
+Took the second, stronger option: queried the correct corpus directly for
+phosphate-target routes ranked by independent-DOI count. Top candidates
+(all real, all checked): Li3V2(PO4)3 (8 DOIs, 3-precursor), LiTi2(PO4)3
+(7 DOIs, 3-precursor), **LiFePO4 via FePO4 + Li2CO3 (6 DOIs, 2-precursor
+-- as simple as this suite's other fixtures)**. Chose LiFePO4: a globally
+significant lithium-ion battery cathode material, not a niche
+solid-electrolyte compound, and a clean 2-precursor route matching the
+existing fixtures' shape.
+
+Before adopting it, **verified gugen's own `balance()` actually recovers
+this route** rather than assuming a real published reaction must be
+representable within gugen's existing curated byproduct allow-list
+(CO2/H2O/O2 only, never widened reactively per AGENTS.md §27): hand-built
+a small scratch example calling `balance()` directly with every
+byproduct-subset combination `search_precursor_sets`' power-set actually
+tries. Confirmed: `4 FePO4 + 2 Li2CO3 -> 4 LiFePO4 + 2 CO2 + O2` balances
+exactly using only the existing CO2+O2 byproducts (a real chemistry fact
+this reaction needs: FePO4's Fe is 3+, LiFePO4's Fe is 2+, so the O2
+release corresponds to the actual required Fe reduction, not an
+arbitrary balancing trick). `every_literature_route_is_recovered_exactly`
+(`tests/validation.rs`) passing with the new fixture confirms this end to
+end, not just at the `balance()` unit level.
+
+Representative DOI for LiFePO4: `10.1021/cm7027993` (Zaghib, Mauger,
+Gendron, Julien, "Surface Effects on the Physical and Electrochemical
+Properties of Thin LiFePO4 Particles," *Chemistry of Materials*, 2008).
+Title/authors/venue/year confirmed via two independent live lookups
+(Semantic Scholar API, CrossRef via the DOI redirect) -- not recalled
+from memory. The paper itself is paywalled (checked Unpaywall for all 6
+of the route's independent DOIs; none are open access) with no accessible
+copy found, so its specific reported conditions were not independently
+read -- disclosed explicitly in the citation text, the same tier of
+verification this suite's own LaAlO3 citation already uses (also
+paywalled, also never claimed to have been read). A title squarely about
+"Thin LiFePO4 Particles" (no glass/solid-solution/different-material red
+flag, unlike the two confirmed-mismatch cases this phase just fixed) was
+judged sufficient corroboration at this tier, consistent with the
+evidentiary bar `tests/validation.rs`'s own existing citations already
+use for a "representative entry" claim (as distinct from the *condition
+precedent* claims in `src/literature_conditions.rs`, which do require a
+directly-read source).
+
+**Correction found before commit**: the citation text above initially
+fused two distinct claims into one sentence -- "reported independently in
+6 paper DOIs ... 4 FePO4 + 2 Li2CO3 -> 4 LiFePO4 + 2 CO2 + O2" -- which
+misread as "6 papers report this reaction releasing O2." The corpus only
+attests the `(target, precursor-set)` pair (all `route_key` matches on);
+the exact coefficients and CO2+O2 byproduct choice are gugen's own
+`balance()` output. Checking all 6 DOIs' titles live via CrossRef found 3
+of 6 (`10.1016/j.electacta.2012.02.102`, `10.1016/j.jallcom.2010.02.173`,
+`10.1016/j.jpowsour.2008.07.032`) explicitly name carbothermal reduction
+or carbon coating -- a real, different Fe3+ -> Fe2+ reduction mechanism
+(carbon-mediated, LiFePO4/C composites) than gugen's O2-release balance,
+which it does not model. Rewrote the citation to split the two claims
+explicitly and disclose this mechanism gap, and swapped the representative
+DOI from `10.1021/cm7027993` (a characterization-focused title) to
+`10.1016/j.electacta.2009.03.063` ("Synthesis and characterization of
+high-density LiFePO4/C composites...", Chang et al., *Electrochimica
+Acta*, 2009) -- an explicitly synthesis-focused paper, no longer awkward
+to cite once the /C detail is honestly disclosed rather than sidestepped.
+Also caught in the same pass: the DOI list and count above (6 DOIs) had
+been re-verified against a stale cached corpus file (30,031 records, the
+same wrong-provenance snapshot Phase 11 already flagged once) before being
+caught and re-run against a fresh, live figshare fetch -- the live fetch
+confirms the same 6 DOIs and count, so no further correction was needed
+beyond the citation text split. See [[verify-cached-data-before-trusting]].
+
+**Ripple effects, each checked rather than assumed unaffected**:
+- `examples/benchmark_report.rs` carries its own hand-duplicated mirror
+  of `tests/validation.rs`'s fixtures (a separate compilation target) --
+  updated to match. `docs/benchmark_report.md` regenerated from a real
+  run and confirmed byte-identical on a second regeneration.
+  Unresolved-condition-rate shifted (100→109 across 16 plans) as an
+  expected, real consequence of LiFePO4's own step/condition shape
+  differing from Zn3(PO4)2's -- not a bug.
+- `src/literature_conditions.rs`'s doc comments (which independently
+  found and recorded these same two DOI mismatches while sourcing Phase
+  10's condition data, before this phase existed) updated to state that
+  Phase 14 later acted on that finding -- the comments previously read as
+  forward-looking ("worth swapping"), now correctly read as historical
+  (already swapped).
+- `tests/fixtures/batio3_report.{json,md}` (golden snapshots): unaffected
+  -- generated purely from `Planner::plan` output, which never embeds
+  `tests/validation.rs`'s citation strings.
+- `docs/large_scale_benchmark_report.md`, `examples/large_scale_
+  benchmark.rs`: unaffected -- neither references the specific fixture
+  targets by name.
+- `benchmarks/fetch_kononova.py`'s `EXCLUDED_ROUTES` and
+  `tests/large_scale_benchmark.rs`'s Rust-side mirror of it: **checked,
+  found to reference the now-removed ZnO+P2O5 route and to be missing the
+  new FePO4+Li2CO3 route, but deliberately NOT regenerated** --
+  recalculated that adding the new route to `EXCLUDED_ROUTES` and
+  re-running `fetch_kononova.py` would reshuffle the *entire* deterministic
+  1500-row sample (a changed eligible-pool size shifts every index a
+  seeded `random.sample()` draws, not just the ~6 newly-excluded rows), a
+  large, unrelated diff out of scope for a small evidence/wording fix the
+  owner explicitly asked to keep contained. Checked directly whether this
+  gap is *currently* live: does the already-committed
+  `kononova_sample.jsonl` contain any row matching the exact FePO4 +
+  Li2CO3 -> LiFePO4 route today? No (confirmed by scanning the file) --
+  4 existing LiFePO4-target rows are all different 3-precursor routes
+  (Fe2O3 or Fe(C2O4)2 + NH4H2PO4 + Li2CO3), none matching the new
+  fixture's exact 2-precursor route_key. Both files updated with an
+  honest note (not a silent gap) flagging this as a known, currently-
+  harmless inconsistency to close the next time the corpus is actually
+  regenerated.
+
+**Docs updated**: `CHANGELOG.md` (new entry under the still-unpublished
+`[0.2.0]` section, not a new version -- nothing has actually shipped
+yet); `ROADMAP.md` (two now-resolved Known-risks bullets rewritten to
+point here rather than continuing to describe an open decision; one
+adjacent, genuinely still-open item -- Phase 10's own ~80/70/44%
+temperature/time/atmosphere coverage figures, also measured against the
+same wrong-provenance file and *not* recounted by this phase -- explicitly
+flagged as out of scope rather than silently left implying "fixed").
+Persistent memory (`validation_rs_citation_counts_wrong.md`) to be
+updated to reflect this is now resolved, not pending.
+
+**Locally verified, all green**: `cargo fmt --all -- --check`, `cargo
+clippy --workspace --all-targets --all-features -- -D warnings`, `cargo
+test --workspace --all-features` (120 tests, same count as before --
+citation text and fixture identity changed, not test count),
+`tests/validation.rs`'s `every_literature_route_is_recovered_exactly`
+specifically re-run to confirm the new LiFePO4 fixture is actually
+recovered by gugen's real search, not just assumed balanceable.

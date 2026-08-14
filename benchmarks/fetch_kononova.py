@@ -33,11 +33,13 @@ per AGENTS.md §27 "benchmarkを見てholdoutへ過適合しない"):
     EXCLUDED_ROUTES below). This is the concrete leakage-prevention
     mechanism. Several of these routes are independently reported by
     dozens of DOIs in this same corpus (LaAlO3: 10, MgAl2O4: 16, BaTiO3:
-    83, recounted directly against this exact corpus -- tests/
-    validation.rs's own citation text states different, higher counts,
-    traced to a different-provenance file; see tasks/todo.md's Phase 11
-    §28 report), so excluding only the one "representative" DOI per route
-    would leave near-duplicate leaked entries in the holdout set. Ratio
+    83, Zn3(PO4)2/ZnO+P2O5: 0 -- recounted directly against this exact
+    corpus during Phase 11; tests/validation.rs's own citation text
+    originally stated different, higher counts, traced to a
+    different-provenance file, corrected in Phase 14; see
+    tasks/todo.md's Phase 11 and Phase 14 sections), so excluding only
+    the one "representative" DOI per route would leave near-duplicate
+    leaked entries in the holdout set. Ratio
     normalization (not raw formula-unit scale) also correctly matches a
     route reported at a different
     formula-unit scale than the one gugen's fixtures happen to use.
@@ -114,12 +116,24 @@ def route_key(target_elements, precursor_elements_list):
     return (target_sig, precursor_sigs)
 
 
-# The 6 routes already used by tests/validation.rs (5 fixtures) and
-# src/literature_conditions.rs (Phase 10's curated records) -- read
-# directly from those files' `composition(&[...])`/`precursor_ids(&[...])`
-# call sites, not retyped from memory. Zn3(PO4)2 appears twice: the
+# The 6 routes used by tests/validation.rs (5 fixtures) and
+# src/literature_conditions.rs (Phase 10's curated records) as of Phase 11,
+# when this corpus was generated -- read directly from those files at that
+# time, not retyped from memory. Zn3(PO4)2 appears twice: the
 # validation.rs route (ZnO + P2O5) and Phase 10's different, also-real
 # substitute route (ZnO + (NH4)2HPO4).
+#
+# NOT kept in sync automatically: Phase 14 replaced tests/validation.rs's
+# Zn3(PO4)2/ZnO+P2O5 fixture with a different target (LiFePO4/FePO4+Li2CO3,
+# 6 independent DOIs in this corpus) without re-running this script or
+# regenerating benchmarks/data/kononova_sample.jsonl (a large-diff,
+# deterministic-reshuffle change out of scope for that phase's small
+# evidence/wording fix). Checked directly that this specific gap is
+# currently harmless -- the committed sample has zero rows matching the
+# new route exactly -- but if this script is ever re-run, add
+# `route_key({"Li":1,"Fe":1,"P":1,"O":4}, [{"Fe":1,"P":1,"O":4},
+# {"Li":2,"C":1,"O":3}])` to EXCLUDED_ROUTES first (and update
+# tests/large_scale_benchmark.rs's own mirror of this list to match).
 EXCLUDED_ROUTES = frozenset(
     [
         route_key({"La": 1, "Al": 1, "O": 3}, [{"La": 2, "O": 3}, {"Al": 2, "O": 3}]),

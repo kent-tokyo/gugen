@@ -57,11 +57,22 @@ fn composition_scale_exact(a: &Composition, b: &Composition) -> bool {
     a == b
 }
 
-/// The 6 routes already excluded by `benchmarks/fetch_kononova.py` --
+/// The 6 routes excluded by `benchmarks/fetch_kononova.py` when
+/// `benchmarks/data/kononova_sample.jsonl` was generated (Phase 11) --
 /// same target/precursor definitions as `tests/validation.rs` and
-/// `src/literature_conditions.rs`, not retyped from memory (both source
-/// files are read directly when authoring this list, matching how
-/// `fetch_kononova.py`'s own `EXCLUDED_ROUTES` was built).
+/// `src/literature_conditions.rs` *at that time*, not retyped from memory.
+/// A fixed snapshot of the exclusion set the checked-in corpus file was
+/// actually built with, not a live mirror kept in sync with
+/// `tests/validation.rs`'s current fixtures -- Phase 14 replaced
+/// `tests/validation.rs`'s Zn3(PO4)2/ZnO+P2O5 fixture with a different
+/// target (LiFePO4/FePO4+Li2CO3) without regenerating this corpus, so
+/// that new route is *not* in this list or in `fetch_kononova.py`'s own
+/// `EXCLUDED_ROUTES`. Checked directly (not assumed) that this specific
+/// gap is currently harmless: the committed `kononova_sample.jsonl` has
+/// zero rows matching the exact FePO4 + Li2CO3 -> LiFePO4 route today.
+/// Update both this list and `fetch_kononova.py`'s before the next time
+/// that corpus is regenerated, to keep the holdout genuinely leak-free
+/// against gugen's then-current fixture set.
 fn excluded_routes() -> Vec<(Composition, Vec<&'static str>)> {
     fn c(pairs: &[(&str, f64)]) -> Composition {
         Composition::new(pairs.iter().map(|&(s, a)| (Element::new(s).unwrap(), a))).unwrap()

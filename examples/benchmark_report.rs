@@ -79,12 +79,16 @@ fn fixtures() -> Vec<LiteratureFixture> {
             ],
         },
         LiteratureFixture {
-            name: "Zn3(PO4)2 (phosphate)",
-            target: composition(&[("Zn", 3.0), ("P", 2.0), ("O", 8.0)]),
-            literature_precursor_ids: BTreeSet::from(["ZnO", "P2O5"]),
+            // Phase 14: replaces a former "Zn3(PO4)2 (phosphate)" fixture
+            // (ZnO + P2O5) -- see tests/validation.rs's module doc comment
+            // for why (that route has zero independent attestations in
+            // the correctly-licensed Kononova corpus).
+            name: "LiFePO4 (phosphate)",
+            target: composition(&[("Li", 1.0), ("Fe", 1.0), ("P", 1.0), ("O", 4.0)]),
+            literature_precursor_ids: BTreeSet::from(["FePO4", "Li2CO3"]),
             catalog: vec![
-                candidate("ZnO", &[("Zn", 1.0), ("O", 1.0)]),
-                candidate("P2O5", &[("P", 2.0), ("O", 5.0)]),
+                candidate("FePO4", &[("Fe", 1.0), ("P", 1.0), ("O", 4.0)]),
+                candidate("Li2CO3", &[("Li", 2.0), ("C", 1.0), ("O", 3.0)]),
                 candidate("NaCl", &[("Na", 1.0), ("Cl", 1.0)]),
             ],
         },

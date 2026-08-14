@@ -103,25 +103,40 @@ fn precursor_ids(ids: &[&str]) -> BTreeSet<PrecursorId> {
 /// this phase, not recalled from training data. For MgAl2O4 and CaO, the
 /// DOI is the same representative citation `tests/validation.rs`'s
 /// corresponding `LiteratureFixture` already uses for precursor-set
-/// recovery. For LaAlO3, Zn3(PO4)2, and BaTiO3, that representative DOI
-/// turned out on inspection to either be inaccessible (LaAlO3) or a
-/// confirmed topic mismatch -- a different material/process than the
-/// fixture's citation text describes (Zn3(PO4)2's DOI is a glass paper
-/// made by melt-quenching; BaTiO3's DOI is a NaNbO3-BaTiO3 solid-solution
-/// study) -- so a different, freely-accessible, independently verified
-/// paper is cited for condition data specifically; the original DOI in
-/// `tests/validation.rs` is left as-is since it's still what the Kononova
-/// dataset attributes the precursor-recovery route to, a separate claim
-/// this doesn't change. Zn3(PO4)2's substitute source also reports a
-/// different precursor route (ZnO + (NH4)2HPO4, not ZnO + P2O5) --
-/// recorded as what the paper actually used, not force-fit to match the
-/// existing fixture; `InMemoryLiteratureConditionProvider` correctly
-/// downgrades this to `EvidenceScope::SimilarMaterial` rather than
-/// `ExactTarget` when queried against a different precursor combination
-/// for the same target. A field left `None` means the source paper
-/// genuinely doesn't state it (e.g. atmosphere, some durations), never a
-/// filled-in "presumably air" guess -- AGENTS.md §4's guardrail 1 applies
-/// here exactly as it does to the generator itself.
+/// recovery. For LaAlO3, that representative DOI turned out to be
+/// inaccessible (fully paywalled, no copy found anywhere), so a
+/// different, freely-accessible, independently verified paper is cited
+/// for condition data specifically here, while `tests/validation.rs`'s
+/// own citation keeps its original DOI (still what the Kononova dataset
+/// attributes the precursor-recovery route to -- an access problem, not
+/// a content mismatch).
+///
+/// For Zn3(PO4)2 and BaTiO3, the DOI `tests/validation.rs` originally
+/// cited turned out on inspection to be a **confirmed topic mismatch** --
+/// a different material/process than the fixture's citation text
+/// described (Zn3(PO4)2's DOI is a glass paper made by melt-quenching;
+/// BaTiO3's DOI is a NaNbO3-BaTiO3 solid-solution study). This finding
+/// (made while sourcing condition data for this phase) directly informed
+/// Phase 14's later fix to `tests/validation.rs` itself: BaTiO3's
+/// representative DOI there now cites this same replacement paper
+/// (10.3390/cryst14040304), and the Zn3(PO4)2 fixture was replaced
+/// entirely with a different, better-attested phosphate target (LiFePO4)
+/// once recounting against the correctly-licensed corpus found the
+/// ZnO + P2O5 route has zero independent attestations there. This curated
+/// record below still keeps its own Zn3(PO4)2 entry (a real, if `Weak`,
+/// condition source for that target) even though `tests/validation.rs`
+/// no longer has a same-named fixture -- the two files serve different
+/// purposes and are not required to name the same targets. Zn3(PO4)2's
+/// condition source here reports a different precursor route (ZnO +
+/// (NH4)2HPO4, not ZnO + P2O5) -- recorded as what the paper actually
+/// used, not force-fit to match any fixture;
+/// `InMemoryLiteratureConditionProvider` correctly downgrades this to
+/// `EvidenceScope::SimilarMaterial` rather than `ExactTarget` when queried
+/// against a different precursor combination for the same target. A field
+/// left `None` means the source paper genuinely doesn't state it (e.g.
+/// atmosphere, some durations), never a filled-in "presumably air" guess
+/// -- AGENTS.md §4's guardrail 1 applies here exactly as it does to the
+/// generator itself.
 fn curated_records() -> Vec<CuratedConditionRecord> {
     vec![
         // MgAl2O4 spinel, MgO + Al2O3 -> MgAl2O4 (no byproduct, so
@@ -297,12 +312,13 @@ fn curated_records() -> Vec<CuratedConditionRecord> {
             ],
         },
         // BaTiO3, BaCO3 + TiO2 -> BaTiO3 + CO2 (releases CO2, both
-        // Calcination and Sintering are reported). tests/validation.rs's
-        // representative DOI (10.1111/j.1551-2916.2006.01172.x) turned
-        // out to be a confirmed topic mismatch (a NaNbO3-BaTiO3
-        // solid-solution study, not plain BaTiO3), so this uses a
-        // different, freely-accessible paper instead, verified
-        // independently -- same precursor route as the existing fixture.
+        // Calcination and Sintering are reported). Originally cited here
+        // because tests/validation.rs's own representative DOI at the time
+        // (10.1111/j.1551-2916.2006.01172.x) turned out to be a confirmed
+        // topic mismatch (a NaNbO3-BaTiO3 solid-solution study, not plain
+        // BaTiO3) -- Phase 14 later adopted this same replacement DOI as
+        // tests/validation.rs's own representative entry too, so the two
+        // files now agree, not just coincidentally match.
         //
         // Qi, Peng, Bi, Zhang, Su, Li, Zhang, Zhang, Zhou, Zhang, Cao,
         // "The Effect of Sputtering Target Density on the Crystal and
