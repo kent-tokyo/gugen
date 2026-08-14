@@ -73,6 +73,52 @@ each entry.
   (`tests/route_suitability.rs`), not shipped curated content. CLI
   markdown rendering of `not_recommended` is out of scope (consistent
   with `route_suitability` itself not being rendered either).
+- **Phase 16 — chematic-crystal -> mikiwame structure bridge.** New
+  optional `chematic_crystal` feature (implies `mikiwame`, since
+  chematic-crystal alone has no structural diagnostics of its own) and
+  `src/chematic_crystal_adapter.rs`: `to_mikiwame_structure(&chematic_
+  crystal::PeriodicStructure) -> mikiwame::OwnedStructure`. Closes the
+  specific gap `mikiwame_adapter.rs` had named since Phase 6 -- gugen's
+  own `TargetStructure` is free text, and building a real structure
+  "depends on chematic-crystal," which published its first version,
+  0.15.0, on 2026-08-14. Verified live against both the docs.rs API and
+  the real vendored source (not guessed, AGENTS.md §21.3) before
+  implementation: chematic-crystal 0.15.0 is pure geometry -- no
+  symmetry/Niggli reduction, no CIF parser, no composition-from-formula
+  prediction, no polymorph identification -- so this phase is
+  deliberately narrower than the route-suitability integration the
+  original roadmap sketch assumed (see Non-goals below). Not a plain
+  field-by-field copy -- two correctness fixes beyond a naive conversion,
+  both confirmed against real source before being handled: (1)
+  same-element `SiteSpecies` are consolidated *within one `PeriodicSite`
+  only* (never across separate sites) and dropped if the summed occupancy
+  is exactly `0.0`, preventing a false-positive `SITE_DUPLICATE` finding
+  that a naive per-species flat-map would produce; (2) a left-handed
+  (negative-determinant) input lattice, which chematic-crystal accepts as
+  physically valid but mikiwame rejects as `InvalidInput`, is corrected
+  via an exact basis change (swap the `b`/`c` lattice rows and the
+  matching fractional `y`/`z` component of every site), verified by a
+  direct Cartesian-invariance test, not a geometry-altering heuristic.
+  9 new tests, including one proving a genuine cross-site duplicate is
+  still caught by real `mikiwame::analyze` after conversion (the
+  false-positive fix doesn't become a false negative), and one pinning
+  that same-element consolidation can itself push a summed occupancy
+  just past `1.0` -- accepted by chematic-crystal's own tolerance but
+  flagged by mikiwame's stricter per-site range check, surfaced rather
+  than silently clamped. **Non-goals**:
+  not wired into `Planner::plan` (`TargetSpecification` still has no
+  geometry field -- same caller-driven boundary as `mikiwame_adapter.rs`
+  since Phase 6); no mapping into `route_suitability` (mikiwame answers
+  "is this structure physically valid," route_suitability answers "which
+  route family suits this target" -- conflating them without real
+  literature backing would repeat the unsourced-heuristic mistake
+  Phase 15A deliberately avoided); no `ApplicabilityLevel::InDomain`
+  promotion (needs a bulk-inorganic-vs-MOF/thin-film classifier neither
+  crate provides); no general polymorph-disambiguation mechanism (no
+  symmetry detection means two representations of the same real structure
+  can't be reliably compared by raw geometry -- Phase 15B's Fe2O3
+  regression test stays a single documented case); `curated_records()`
+  not expanded.
 
 ## [0.2.0] - 2026-08-14
 
