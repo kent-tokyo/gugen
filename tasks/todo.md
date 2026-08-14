@@ -2013,5 +2013,9 @@ publish.yml workflow — with the owner's explicit go-ahead"). **Publishing
 itself (`publish.yml`) was explicitly NOT triggered** — that step waits
 for the owner's separate, explicit go-ahead, same as v0.1.0's release.
 
-**Shipped**: branch `phase13/thermodynamic-provider-adapter` → PR → CI
-green → squash-merged to `main`.
+**Shipped**: branch `phase13/thermodynamic-provider-adapter` → PR #7 → CI
+green → squash-merged to `main` at `9a121b5`.
+
+All four v0.2.0 follow-up phases (10-13) are now complete and merged.
+`cargo publish` for 0.2.0 has not been triggered — it waits on the
+owner's separate, explicit go-ahead (see `ROADMAP.md`).
