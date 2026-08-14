@@ -93,9 +93,11 @@ fn computing_phase_19p_quantities_does_not_change_planning_output() {
     )
     .unwrap();
     let entries = [bao_entry.clone(), tio2_entry.clone()];
-    let _ = balanced_reaction_delta_ev_per_atom(&toy_reaction, &entries, t);
-    let _ =
-        decomposition_margin_ev_per_atom(&target_entry, &[(bao_entry, 1.0), (tio2_entry, 1.0)], t);
+    assert!(balanced_reaction_delta_ev_per_atom(&toy_reaction, &entries, t).is_ok());
+    assert!(
+        decomposition_margin_ev_per_atom(&target_entry, &[(bao_entry, 1.0), (tio2_entry, 1.0)], t)
+            .is_ok()
+    );
 
     let report_after = planner.plan(&target_spec, "2026-08-15T00:00:00Z").unwrap();
 

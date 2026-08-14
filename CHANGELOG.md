@@ -46,6 +46,40 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   step's newly-resolved evidence entries by their own content
   (source/statement/limitations) before appending, rather than by
   precedent input position.
+- **Phase 19P.1 — three correctness gaps in Phase 19P's finite-temperature
+  module (`src/thermodynamics.rs`, PR #19, `fc60d07`), found by the
+  owner's own review of the merged code rather than by either advisor
+  review round during that phase.** (1) Neither
+  `balanced_reaction_delta_ev_per_atom` nor
+  `decomposition_margin_ev_per_atom` checked that the
+  `SolidThermodynamicEntry` values they actually used shared a single
+  `ThermodynamicDatasetIdentity` -- a caller could unknowingly mix
+  entries from two different releases/correction schemes, or (worse) the
+  private lowest-0K-energy tie-break in `most_stable_entry_for` could
+  silently select across two different datasets' entries for the same
+  composition. Both functions now reject (`GugenError::
+  InconsistentThermodynamicDataset`) the moment the entries relevant to
+  the call span more than one dataset identity, checked *before* any
+  entry selection runs, so the tie-break itself is never given the
+  chance to compare across datasets. (2) `decomposition_margin_ev_per_atom`'s
+  `amount: f64` parameter had no validation at all -- a `NaN` amount in
+  particular would silently pass the composition-conservation tolerance
+  comparison (`(x - y).abs() > tol` is `false` for `NaN`) and produce
+  `Some(NaN)`. Amounts are now required finite and strictly positive
+  (`GugenError::NonFiniteValue`/`NonPositiveMagnitude`). (3)
+  `balanced_reaction_delta_ev_per_atom` only documented, as an unchecked
+  doc-comment precondition, that its `reaction` argument must be
+  element-balanced; `BalancedReaction::new` itself only rejects an empty
+  side or a zero coefficient, so a hand-built, unbalanced reaction could
+  previously produce a plausible-but-meaningless per-atom delta. A
+  runtime element-conservation check (reactant-side vs. product-side
+  per-element totals) now rejects any mismatch
+  (`GugenError::UnbalancedReaction`). None of these three gaps were
+  reachable through any code path connecting to `Planner`/`score_plan`
+  (Phase 19P's own ranking-invariance test already proved that
+  boundary), so no plan output was ever affected -- these were latent
+  correctness holes in new, not-yet-released public API, not a bug a
+  user could have hit through the crate's existing planning surface.
 
 ### Added
 
@@ -86,11 +120,29 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (`tests/thermodynamics_ranking_invariance.rs`). `CompetingPhase`
   (`reaction.rs`) is deliberately untouched -- this is new, separate
   API, not an extension of it.
-- **Breaking**: `GugenError::NonPositiveMagnitude { field, value }` is
-  a new variant (`GugenError` has no `#[non_exhaustive]`, so this is a
-  genuine breaking addition, confirmed by `cargo semver-checks
-  --baseline-rev v0.3.0`). Returned by `SolidThermodynamicEntry::new`
-  when `volume_angstrom3_per_atom` is not strictly positive.
+- **Breaking**: three new `GugenError` variants (`GugenError` has no
+  `#[non_exhaustive]`, so each is a genuine breaking addition, confirmed
+  by `cargo semver-checks --baseline-rev v0.3.0`, `enum_variant_added`):
+  `NonPositiveMagnitude { field, value }` (Phase 19P; returned by
+  `SolidThermodynamicEntry::new` when `volume_angstrom3_per_atom` is not
+  strictly positive, and now also by `decomposition_margin_ev_per_atom`
+  for a non-positive `amount`), `UnbalancedReaction { element,
+  imbalance }` and `InconsistentThermodynamicDataset(String)` (both
+  Phase 19P.1, described above).
+- **Breaking**: `balanced_reaction_delta_ev_per_atom` and
+  `decomposition_margin_ev_per_atom` (Phase 19P.1) now return
+  `Result<Option<f64>>` instead of `Option<f64>` -- `Ok(Some(value))` is
+  a successful computation, `Ok(None)` is a legitimate abstention (a
+  required entry simply wasn't supplied, or, for
+  `decomposition_margin_ev_per_atom` only, the alternative assemblage
+  doesn't conserve `target`'s composition), and `Err(...)` is invalid
+  caller input (mixed dataset identity, a non-finite/non-positive
+  `amount`, or a non-conserved reaction). `cargo semver-checks
+  --baseline-rev v0.3.0` does not currently have a lint for a bare
+  return-type signature change like this one (its return-type checks
+  only cover narrower cases, e.g. a function that now returns `()`), so
+  this change is disclosed here rather than machine-verified; every
+  other change in this release is confirmed by the tool as noted.
 
 ### Known limitations
 
@@ -100,6 +152,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   conservative reading, since `TemperatureRange`/`DurationRange`/
   `RampRateRange` have no overlap/subsumption semantics defined and
   designing one was explicitly out of scope for this phase.
+- **Phase 19P.1**: `check_element_conservation`'s tolerance
+  (`COMPOSITION_CONSERVATION_TOLERANCE`, `1e-6`) is an absolute bound on
+  the coefficient-weighted per-element residual, not scaled by
+  coefficient magnitude. It was calibrated against
+  `decomposition_margin_ev_per_atom`'s *unweighted* composition sums; a
+  `balanced_reaction_delta_ev_per_atom` reaction with large integer
+  coefficients and fractional (non-integer) element amounts could in
+  principle accumulate a genuinely-balanced residual past this bound and
+  be rejected as `UnbalancedReaction`. Not reachable today -- nothing in
+  this crate currently calls this function with such a reaction -- but
+  worth revisiting if a future phase feeds `balance.rs` output (integer
+  coefficients paired with literature-derived fractional amounts)
+  through it directly.
 - **Phase 19P**: gas-releasing/consuming reactions (e.g. any
   carbonate-decomposition route) are entirely out of scope -- they
   abstain automatically (a caller never has a `SolidThermodynamicEntry`
