@@ -269,11 +269,13 @@ fn doctor_report() -> String {
         supported domain: bulk polycrystalline inorganic solids via conventional solid-state \
         or mechanochemical (structural route only, no detailed milling conditions -- \
         AGENTS.md §3) synthesis (see docs/scientific_scope.md for the full scope)\n\
-        known limitations: route-family suitability findings (Phase 15A's `route_suitability` \
-        module) do not yet affect ranking or which routes are offered -- every applicable route \
-        family is still offered for every accepted precursor set regardless of findings; no \
-        hazard/safety database (manual_review_required is always true); chematic-crystal not \
-        integrated; full list in CHANGELOG.md's \"Known limitations\" section",
+        known limitations: route-family suitability findings never affect ranking scores -- a \
+        configured RouteSuitabilityProvider (Phase 15B) can only move a plan with strong, \
+        uncontested contradicting evidence into a report's not_recommended list, never reorder \
+        or rescore the plans that remain; this CLI never configures one, so every applicable \
+        route family is still offered here regardless; no hazard/safety database \
+        (manual_review_required is always true); chematic-crystal not integrated; full list in \
+        CHANGELOG.md's \"Known limitations\" section",
         env!("CARGO_PKG_VERSION"),
         gugen::SCHEMA_VERSION,
         [

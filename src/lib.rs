@@ -31,8 +31,16 @@
 //! (crates.io, tagged `v0.2.0`). Work toward v0.3.0 has begun with Phase
 //! 15A (`route_suitability` module): a report-level evidence model for
 //! whether a route family suits a target (`Supports`/`Contradicts`/
-//! `Unknown` findings, never an aggregated score) -- deliberately not yet
-//! wired into ranking; see `tasks/todo.md`'s Phase 15A section.
+//! `Unknown` findings, never an aggregated score). Phase 15B added
+//! `derive_recommendation`, a pure function deriving a discrete
+//! `RouteRecommendation` from that evidence, and wired only its
+//! `NotRecommended` state into `Planner::plan`: a plan with strong,
+//! uncontested contradicting evidence is moved from `plans` into the new
+//! `SynthesisPlanningReport.not_recommended` (kept, with its findings, not
+//! dropped), and a target where every generated plan is excluded this way
+//! abstains explicitly via `unresolved` rather than returning an empty
+//! success. No numeric score is affected by either phase; see
+//! `tasks/todo.md`'s Phase 15A/15B sections.
 
 #![forbid(unsafe_code)]
 
@@ -90,12 +98,13 @@ pub use reaction::{
 };
 pub use rejection::{RejectedCandidate, RejectionCode};
 pub use report::{
-    ApplicabilityAssessment, ApplicabilityLevel, PlanId, PlanningWarning, SCHEMA_VERSION,
-    SynthesisPlan, SynthesisPlanningReport, TargetSummary, UnresolvedRequirement, WarningSeverity,
+    ApplicabilityAssessment, ApplicabilityLevel, NotRecommendedPlan, PlanId, PlanningWarning,
+    SCHEMA_VERSION, SynthesisPlan, SynthesisPlanningReport, TargetSummary, UnresolvedRequirement,
+    WarningSeverity,
 };
 pub use route_suitability::{
-    CuratedSuitabilityRecord, InMemoryRouteSuitabilityProvider, RouteSuitabilityAssessment,
-    SuitabilityFinding, SuitabilityVerdict,
+    CuratedSuitabilityRecord, InMemoryRouteSuitabilityProvider, RouteRecommendation,
+    RouteSuitabilityAssessment, SuitabilityFinding, SuitabilityVerdict, derive_recommendation,
 };
 pub use score::{
     ConfidenceAssessment, PlanAssessment, PlanScoreBreakdown, PlanningAssumption, RankingWeights,

@@ -485,6 +485,7 @@
       "manual_review_required": true
     }
   ],
+  "not_recommended": [],
   "rejected_candidates": [
     {
       "precursors": [

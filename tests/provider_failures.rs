@@ -506,4 +506,15 @@ fn a_failing_route_suitability_provider_degrades_to_a_report_level_warning() {
         route_suitability, not present with fabricated empty findings: {:?}",
         report.route_suitability
     );
+    // Phase 15B: a provider failure must never be treated as grounds to
+    // exclude a plan -- "we couldn't get an answer" is InsufficientEvidence-
+    // shaped, not NotRecommended-shaped. Failure already omits the route
+    // family from `route_suitability` entirely (asserted above), so the
+    // filter step's `.find(..)` naturally returns `None` for it -- this
+    // pins the resulting behavior end to end, not just the lookup.
+    assert!(
+        report.not_recommended.is_empty(),
+        "a provider failure must never move a plan into not_recommended: {:?}",
+        report.not_recommended
+    );
 }

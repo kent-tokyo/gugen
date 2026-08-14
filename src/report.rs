@@ -5,7 +5,7 @@ use crate::process::{PlannedStep, RouteFamily};
 use crate::provenance::PlanningProvenance;
 use crate::reaction::BalancedReaction;
 use crate::rejection::RejectedCandidate;
-use crate::route_suitability::RouteSuitabilityAssessment;
+use crate::route_suitability::{RouteSuitabilityAssessment, SuitabilityFinding};
 use crate::score::{ConfidenceAssessment, PlanScoreBreakdown, PlanningAssumption};
 
 pub const SCHEMA_VERSION: u32 = 1;
@@ -94,6 +94,20 @@ pub struct SynthesisPlan {
     pub manual_review_required: bool,
 }
 
+/// A plan excluded from the recommended list by route-suitability findings
+/// (Phase 15B) -- `plan` is unchanged from what would otherwise have
+/// appeared in `SynthesisPlanningReport.plans` (same score/confidence/
+/// evidence, since filtering happens after scoring, not instead of it);
+/// `contradicting_findings` is just the `Contradicts` findings that
+/// triggered exclusion (not the full assessment, which may also carry
+/// `Supports`/`Unknown` findings for other purposes).
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct NotRecommendedPlan {
+    pub plan: SynthesisPlan,
+    pub contradicting_findings: Vec<SuitabilityFinding>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SynthesisPlanningReport {
@@ -109,6 +123,14 @@ pub struct SynthesisPlanningReport {
     /// no ranking weight in this phase; nothing in `score.rs` reads it.
     pub route_suitability: Vec<RouteSuitabilityAssessment>,
     pub plans: Vec<SynthesisPlan>,
+    /// Plans that were built (valid chemistry, a real balanced reaction and
+    /// process template) but excluded from `plans` because
+    /// `route_suitability::derive_recommendation` returned `NotRecommended`
+    /// for that plan's route family (Phase 15B) -- kept here, with the
+    /// specific findings that triggered exclusion, rather than dropped
+    /// silently. Always empty when no `RouteSuitabilityProvider` is
+    /// configured, or when every assessed route family clears the bar.
+    pub not_recommended: Vec<NotRecommendedPlan>,
     pub rejected_candidates: Vec<RejectedCandidate>,
     pub unresolved: Vec<UnresolvedRequirement>,
     pub warnings: Vec<PlanningWarning>,
