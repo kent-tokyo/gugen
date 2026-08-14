@@ -285,9 +285,12 @@ fn main() {
         .count();
     out.push_str(&format!(
         "- **Condition evidence coverage:** {plans_with_any_condition_resolved}/{} plans have \
-        any process condition resolved (temperature/duration/atmosphere/ramp/pressure) -- v0.1 \
-        has no thermodynamic/literature provider wired into any fixture here, so this is \
-        honestly 0.\n",
+        any process condition resolved (temperature/duration/atmosphere/ramp/pressure) -- these \
+        fixtures are planned via `Planner::offline_minimal` (no provider configured), matching \
+        `tests/validation.rs`'s own false-confidence audit fixtures, so this is honestly 0. \
+        Since Phase 10, `InMemoryLiteratureConditionProvider` can resolve real, cited \
+        conditions for some targets when configured -- see `tests/literature_conditions.rs`, \
+        not exercised by this offline-only benchmark.\n",
         all_plans.len()
     ));
     out.push_str(&format!(
