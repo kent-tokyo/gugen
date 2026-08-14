@@ -2348,3 +2348,138 @@ directly tested, not just inferred from an absence of failures:
 (`tests/route_suitability.rs`) asserts a `with_route_suitability_provider`
 run and an `offline_minimal` run of the same target produce byte-identical
 `score`/`confidence`/`applicability`/`evidence` on every plan.
+
+## Phase 15B — Explainable Route Deprecation (v0.3.0) — DONE (2026-08-14)
+
+**Goal** (owner-requested, detailed spec given alongside the trigger):
+act on Phase 15A's evidence vessel, conservatively -- exclude a route
+with strong, uncontested contradicting evidence from the recommended
+list, but never silently: keep the excluded plan in the report with its
+real findings, never touch `score.rs`, and abstain explicitly rather than
+returning an empty success when every route is excluded. Owner supplied
+an unusually complete spec: 4-state recommendation, an explicit decision
+matrix, 5 safety conditions, and a 12-item test list. This phase mostly
+formalized that spec against gugen's real code and resolved the handful
+of integration decisions the spec left open (see the approved plan,
+`/Users/k_tanabe/.claude/plans/typed-sparking-storm.md`, for the full
+design-decision writeup).
+
+**Pre-implementation research finding, before writing any code**:
+verified via `advisor()` that starting Phase 15B required re-entering
+plan mode (not building directly from the owner's spec), since three
+integration decisions were genuinely open even with that much detail:
+where filtering happens relative to `SearchBudget::max_plans_returned`'s
+sort/truncate, where excluded plans get stored (a new field, not
+`RejectedCandidate`), and how the all-excluded case should abstain
+(not by reusing `abstain()`'s `OutOfDomain`, which means something
+stronger and different). An Explore agent then confirmed, by reading
+every actual construction/consumption site rather than assuming:
+`examples/benchmark_report.rs`, `examples/large_scale_benchmark.rs`, and
+`tests/large_scale_benchmark.rs` never configure a
+`RouteSuitabilityProvider`, so `docs/benchmark_report.md` and
+`docs/large_scale_benchmark_report.md` are unaffected by this phase --
+confirmed, not inferred.
+
+**The decision matrix, implemented exactly as specified** (`src/route_
+suitability.rs`'s `derive_recommendation`, a pure function, no `Planner`/
+provider dependency): any `Supports` + `Contradicts` coexisting ->
+`ConflictingEvidence` (a weak `Contradicts` is never silently outvoted);
+a "strong" `Contradicts` (`strength != Weak` **and**
+`applicable_to == EvidenceScope::ExactTarget`, an allow-list rather than
+a `SimilarMaterial`/`GeneralRule` denylist, so a future `EvidenceScope`
+variant can't silently start counting) with zero counter-evidence ->
+`NotRecommended`; `Supports`-only -> `Recommended` (a label, no ranking
+bonus -- nothing reads it for scoring in this phase); everything else ->
+`InsufficientEvidence`.
+
+**Empirical check before writing the end-to-end tests**: the plan
+originally assumed the real curated Mg(OH)2/ConventionalSolidState
+record from Phase 15A could be used directly for the `NotRecommended`
+end-to-end test. Verified via a throwaway scratch example
+(`examples/_scratch_check.rs`, deleted after use) that a 1-candidate
+`MgO` catalog produces **zero** plans for a Mg(OH)2 target --
+`RejectionCode::MissingTargetElement` (H), not a route-suitability
+effect at all -- confirming gugen's `balance()` has no
+byproduct-consuming mechanism to reach a hydroxide target from an oxide
+precursor alone. Rather than force a synthetic catalog that happens to
+balance, switched to a hand-built `FixedRouteSuitabilityProvider` test
+double (`tests/route_suitability.rs`) paired with the already-proven
+BaTiO3/BaCO3+TiO2 route, isolating the filtering behavior itself from
+curated-data/balance-feasibility questions.
+
+**Wiring** (`src/planner.rs`): filtering runs in `Planner::plan`
+immediately after the per-accepted-set loop builds `plans`, *before* the
+existing `plans.sort_by(...)`/`truncate` block -- so
+`SearchBudget::max_plans_returned`'s overflow message continues to count
+only recommendable plans, never conflating "omitted by budget" with
+"excluded with a stated reason." A route family absent from
+`route_suitability` (no provider configured, or that family's `assess()`
+call failed -- Phase 15A's existing degradation) is treated as
+`InsufficientEvidence` by construction: the filter's `.find(..)` returns
+`None`, so nothing is filtered, identical to pre-15B behavior. The
+all-excluded abstention reuses the *existing* `unresolved:
+Vec<UnresolvedRequirement>` channel `abstain()` already uses for its own
+abstention case, rather than a new type or a warning-based signal;
+`applicability` is left completely unchanged (a deliberately weaker,
+different claim than `abstain()`'s `OutOfDomain`).
+
+**New types** (`src/report.rs`): `NotRecommendedPlan { plan,
+contradicting_findings }` and `SynthesisPlanningReport.not_recommended:
+Vec<NotRecommendedPlan>`. Not reusing `RejectedCandidate`
+(`rejection.rs`): its `RejectionCode` vocabulary is about search/balance
+failures ("couldn't build this"), a different concept from "built it,
+evidence says don't recommend it" -- conflating them would blur exactly
+the distinction this phase exists to draw, and adding a variant would be
+a breaking enum change touching unrelated call sites.
+
+**The maghemite lesson, made permanent**: a new test,
+`no_curated_record_targets_bare_fe2o3_the_documented_polymorph_trap`
+(`src/route_suitability.rs`), asserts no curated record ever targets
+bare `Fe2O3` -- explicitly scoped as a single documented trap case, not
+a general phase-safety checker (real phase-awareness needs structural
+data, Phase 16's job).
+
+**Ripple effects, each checked rather than assumed unaffected**:
+- `src/planner.rs`'s `abstain()` literal and both `SynthesisPlanningReport`
+  construction sites, plus `tests/json_roundtrip.rs`'s own direct literal
+  (the only other one in the repo, same as Phase 15A's ripple): all
+  needed `not_recommended: vec![]` added.
+- `tests/fixtures/batio3_report.{json,md}`: regenerated from real output
+  (same eprintln-dump-then-revert mechanism as Phase 15A). Single-line
+  JSON diff (`"not_recommended": []`); markdown byte-identical, confirmed
+  `render_report_markdown` doesn't render `not_recommended` (deliberately
+  out of scope this phase, consistent with `route_suitability` itself
+  not being rendered there either).
+- `src/bin/gugen.rs`'s `doctor` known-limitations line: updated from "do
+  not yet affect ranking or which routes are offered" (no longer fully
+  true -- a configured provider *can* now exclude a route) to precisely
+  state that route suitability affects *which plans appear*, never
+  scores/ranking -- this CLI itself still never configures a provider.
+- `src/lib.rs` module doc comment: extended to describe Phase 15B's
+  actual behavior alongside 15A's.
+
+**Docs updated**: `CHANGELOG.md` (new entry under `[Unreleased]`,
+alongside the existing Phase 15A entry); `ROADMAP.md` (status, phase
+table, near-term section, and the route-suitability-classifier
+known-risk bullet rewritten to state precisely what's closed --
+behavioral filtering exists now -- vs. what's still open -- ranking
+itself, and a broader curated database, both unaffected).
+
+**Locally verified, all green**: `cargo fmt --all -- --check`, `cargo
+clippy --workspace --all-targets --all-features -- -D warnings`, `cargo
+test --all-features` (145 tests, up from 130 -- 11 new lib unit tests in
+`route_suitability.rs` covering the full decision matrix plus the Fe2O3
+regression guard, 4 new integration tests in `tests/route_suitability.rs`,
+1 extended assertion in `tests/provider_failures.rs`), `cargo test
+--no-default-features`, `cargo test --no-default-features --features
+mikiwame`, `cargo doc --all-features --no-deps`. The core guarantees are
+directly tested, not inferred from an absence of failures:
+`a_strong_exact_target_contradicts_moves_the_plan_to_not_recommended`
+pins the filtering itself; `the_not_recommended_plan_carries_its_real_
+unmodified_score_and_confidence` pins that filtering happens after
+scoring, not instead of it; `all_routes_not_recommended_produces_an_
+explicit_abstention` pins the abstention path including that
+`applicability` stays `PartiallyInDomain`, not `OutOfDomain`; `a_similar_
+material_contradicts_does_not_exclude_a_plan_end_to_end` pins the
+`SimilarMaterial` safety condition through the full `Planner::plan` path,
+not just the isolated pure-function unit tests.

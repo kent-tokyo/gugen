@@ -36,6 +36,43 @@ each entry.
   `applicability`/`evidence` to an `offline_minimal` run of the same
   target. Real negative-filtering rules and a broader curated-findings
   set are left to a future, separately-triggered phase.
+- **Phase 15B — explainable route deprecation.** New `RouteRecommendation`
+  enum (`Recommended`/`NotRecommended`/`InsufficientEvidence`/
+  `ConflictingEvidence`, `#[non_exhaustive]`) and a pure function,
+  `derive_recommendation`, deriving one from a `RouteSuitabilityAssessment`
+  alone (no `Planner`/provider dependency). Decision matrix: any
+  `Supports` and `Contradicts` coexisting -> `ConflictingEvidence` (a
+  weak `Contradicts` is never silently outvoted by a `Supports` finding);
+  a "strong" `Contradicts` (`strength != Weak` **and**
+  `applicable_to == EvidenceScope::ExactTarget` -- an allow-list, not a
+  denylist of weaker scopes, so `SimilarMaterial`/`GeneralRule` can never
+  alone trigger exclusion) with zero counter-evidence -> `NotRecommended`;
+  `Supports` only -> `Recommended` (a label, no ranking bonus); everything
+  else -> `InsufficientEvidence`.
+  `Planner::plan` now acts on `NotRecommended` specifically: a plan whose
+  route family clears that bar is moved out of `plans` into a new
+  `SynthesisPlanningReport.not_recommended: Vec<NotRecommendedPlan>`
+  field, carrying the unmodified plan (same score/confidence/evidence --
+  filtering happens after scoring, not instead of it) plus the specific
+  `Contradicts` findings that triggered exclusion. Filtering runs before
+  the existing rank/truncate step, so `SearchBudget::max_plans_returned`'s
+  overflow message continues to describe only recommendable plans. When
+  every generated plan is excluded this way, the report abstains
+  explicitly via a new `unresolved` entry ("route selection") rather than
+  returning an indistinguishable empty success; `applicability` is left
+  unchanged in that case -- a deliberately different, weaker claim than
+  `abstain()`'s own `ApplicabilityLevel::OutOfDomain` ("gugen built valid
+  chemistry, evidence just contradicts every route tried" vs. "gugen
+  cannot handle this material at all").
+  A new regression test asserts no curated record targets bare `Fe2O3`
+  (the maghemite/hematite polymorph trap from Phase 15A, made permanently
+  checkable). **`score.rs` remains completely untouched**: no numeric
+  score changes anywhere, and `curated_records()` was not expanded beyond
+  Phase 15A's original two entries -- the `SimilarMaterial` safety
+  condition is exercised via hand-built test data
+  (`tests/route_suitability.rs`), not shipped curated content. CLI
+  markdown rendering of `not_recommended` is out of scope (consistent
+  with `route_suitability` itself not being rendered either).
 
 ## [0.2.0] - 2026-08-14
 

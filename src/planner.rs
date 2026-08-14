@@ -11,10 +11,13 @@ use crate::provider::{
 use crate::reaction::{BalancedReaction, ThermodynamicConditions};
 use crate::rejection::{RejectedCandidate, RejectionCode};
 use crate::report::{
-    ApplicabilityAssessment, ApplicabilityLevel, PlanId, PlanningWarning, SCHEMA_VERSION,
-    SynthesisPlan, SynthesisPlanningReport, TargetSummary, UnresolvedRequirement, WarningSeverity,
+    ApplicabilityAssessment, ApplicabilityLevel, NotRecommendedPlan, PlanId, PlanningWarning,
+    SCHEMA_VERSION, SynthesisPlan, SynthesisPlanningReport, TargetSummary, UnresolvedRequirement,
+    WarningSeverity,
 };
-use crate::route_suitability::RouteSuitabilityAssessment;
+use crate::route_suitability::{
+    RouteRecommendation, RouteSuitabilityAssessment, SuitabilityVerdict, derive_recommendation,
+};
 use crate::score::{ranking_weights_digest, score_plan};
 use crate::target::TargetSpecification;
 
@@ -380,6 +383,64 @@ impl Planner {
             }
         }
 
+        // Phase 15B: separate NotRecommended plans out *before* ranking so
+        // SearchBudget::max_plans_returned's overflow message (below) only
+        // ever counts recommendable plans -- it must never describe a plan
+        // that was actually excluded for a stated reason as merely
+        // "omitted by budget." Route families absent from `route_suitability`
+        // (no provider configured, or that family's assess() call failed)
+        // are treated as InsufficientEvidence by construction: `.find(..)`
+        // returns `None`, so nothing is filtered -- identical to pre-15B
+        // behavior whenever no provider is configured.
+        let mut not_recommended = Vec::new();
+        if !route_suitability.is_empty() {
+            let mut kept = Vec::with_capacity(plans.len());
+            for plan in plans {
+                let assessment = route_suitability
+                    .iter()
+                    .find(|a| a.route_family == plan.route_family);
+                match assessment {
+                    Some(assessment)
+                        if derive_recommendation(assessment)
+                            == RouteRecommendation::NotRecommended =>
+                    {
+                        let contradicting_findings = assessment
+                            .findings
+                            .iter()
+                            .filter(|f| f.verdict == SuitabilityVerdict::Contradicts)
+                            .cloned()
+                            .collect();
+                        not_recommended.push(NotRecommendedPlan {
+                            plan,
+                            contradicting_findings,
+                        });
+                    }
+                    _ => kept.push(plan),
+                }
+            }
+            plans = kept;
+        }
+
+        // Explicit abstention (not an empty success) when every generated
+        // plan was excluded above -- `applicability` is deliberately left
+        // untouched (that's a claim about domain fit, not about whether
+        // current evidence favors any specific route), so this uses the
+        // same `unresolved` channel `abstain()` already uses for its own
+        // abstention case, not a new signal.
+        let mut unresolved = Vec::new();
+        if plans.is_empty() && !not_recommended.is_empty() {
+            unresolved.push(UnresolvedRequirement {
+                description: "route selection".to_string(),
+                reason: format!(
+                    "every generated plan ({} total) was excluded as NotRecommended by \
+                    route-suitability findings with strong, uncontested contradicting \
+                    evidence -- see not_recommended for the specific plans and findings; \
+                    an explicit abstention, not an absence of valid chemistry",
+                    not_recommended.len()
+                ),
+            });
+        }
+
         // Deterministic descending rank; ties break on plan_id so ordering
         // never depends on catalog/accepted-set iteration order (AGENTS.md
         // §21.4).
@@ -418,8 +479,9 @@ impl Planner {
             applicability,
             route_suitability,
             plans,
+            not_recommended,
             rejected_candidates,
-            unresolved: vec![],
+            unresolved,
             warnings,
             provenance,
         })
@@ -501,6 +563,7 @@ fn abstain(
         // suitability assessment to report, same reasoning as `plans: []`.
         route_suitability: vec![],
         plans: vec![],
+        not_recommended: vec![],
         rejected_candidates: vec![],
         unresolved: vec![UnresolvedRequirement {
             description: "planning".to_string(),

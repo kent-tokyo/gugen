@@ -53,6 +53,74 @@ pub struct RouteSuitabilityAssessment {
     pub findings: Vec<SuitabilityFinding>,
 }
 
+/// Discrete recommendation derived from a `RouteSuitabilityAssessment`
+/// (Phase 15B) -- never a numeric score. `#[non_exhaustive]`, matching
+/// `SuitabilityVerdict`'s precedent. `Recommended` carries no ranking
+/// weight in this phase: nothing in `score.rs` reads it, and only
+/// `NotRecommended` has a real behavioral effect (`Planner::plan` excludes
+/// that plan from the recommended list -- see `derive_recommendation`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
+pub enum RouteRecommendation {
+    Recommended,
+    NotRecommended,
+    InsufficientEvidence,
+    ConflictingEvidence,
+}
+
+/// Pure function: no `Planner`/provider dependency, safe to unit-test
+/// directly against a hand-built `RouteSuitabilityAssessment`. Order- and
+/// duplicate-invariant by construction (`any`/`iter` over the whole
+/// `findings` slice, not the first match).
+///
+/// Decision matrix (owner-specified, Phase 15B):
+/// - any `Supports` **and** any `Contradicts` present, regardless of
+///   strength/scope -> `ConflictingEvidence`. A weak `Contradicts` still
+///   flags a real conflict rather than being silently outvoted by a
+///   `Supports` finding.
+/// - a "strong" `Contradicts` (see below) with **no** `Supports` finding
+///   at all (not even a weak one) -> `NotRecommended`. Requiring zero
+///   counter-evidence, not just weaker counter-evidence, is the
+///   conservative reading of "反証となる支持証拠が存在しないか."
+/// - `Supports` only (no `Contradicts`) -> `Recommended` -- an
+///   informational label, not a ranking bonus.
+/// - everything else (only `Unknown` findings, only sub-threshold
+///   `Contradicts`, or no findings at all) -> `InsufficientEvidence`.
+///
+/// "Strong" `Contradicts` requires **both** `strength != Weak` and
+/// `applicable_to == EvidenceScope::ExactTarget`. `ExactTarget` is an
+/// allow-list, not a denylist of `SimilarMaterial`/`GeneralRule` --
+/// deliberately so a future `EvidenceScope` variant can't silently start
+/// counting as "strong enough" just because it isn't named in an
+/// exclusion list. This is also the direct enforcement of the owner's
+/// "SimilarMaterialは単独でハードなNotRecommendedを発生させない" rule.
+pub fn derive_recommendation(assessment: &RouteSuitabilityAssessment) -> RouteRecommendation {
+    let has_supports = assessment
+        .findings
+        .iter()
+        .any(|f| f.verdict == SuitabilityVerdict::Supports);
+    let has_contradicts = assessment
+        .findings
+        .iter()
+        .any(|f| f.verdict == SuitabilityVerdict::Contradicts);
+    let has_actionable_contradicts = assessment.findings.iter().any(|f| {
+        f.verdict == SuitabilityVerdict::Contradicts
+            && f.strength != EvidenceStrength::Weak
+            && f.applicable_to == EvidenceScope::ExactTarget
+    });
+
+    if has_supports && has_contradicts {
+        RouteRecommendation::ConflictingEvidence
+    } else if has_actionable_contradicts {
+        RouteRecommendation::NotRecommended
+    } else if has_supports {
+        RouteRecommendation::Recommended
+    } else {
+        RouteRecommendation::InsufficientEvidence
+    }
+}
+
 /// One hand-verified route-suitability record (AGENTS.md §21.3: never
 /// authored from memory). Keyed on `(target, route_family)`, not on a
 /// precursor set -- unlike `CuratedConditionRecord`
@@ -114,11 +182,14 @@ fn composition(pairs: &[(&str, f64)]) -> Composition {
 /// Two hand-verified seed records (AGENTS.md §21.3: fetched/read live this
 /// phase, not recalled from training data), chosen to prove the
 /// `Supports`/`Contradicts` distinction works end to end -- not a
-/// comprehensive suitability database. Real negative-filtering rules
+/// comprehensive suitability database. Phase 15B added `derive_recommendation`
+/// (the logic that actually acts on these findings) but deliberately did
+/// **not** expand this curated set -- the Mg(OH)2 record below is already
+/// `ExactTarget`/`Moderate`, strong enough to exercise `NotRecommended`
+/// end to end, which was enough to prove the filtering wiring honestly.
+/// A broader curated database covering more negative-filtering cases
 /// (volatile precursor + long high-temperature firing, air-sensitive
-/// target + atmospheric processing, etc.) are Phase 15B's job; this phase
-/// deliberately ships only enough curated content to exercise the type
-/// system and wiring honestly.
+/// target + atmospheric processing, etc.) is left to future work.
 ///
 /// **Supports**: Kozma, Lipták, Deák, Rónavári, Kukovecz, Kónya,
 /// "Conversion Study on the Formation of Mechanochemically Synthesized
@@ -238,6 +309,208 @@ mod tests {
                 claiming the same target/route-family makes resolution order-dependent"
             );
         }
+    }
+
+    /// The maghemite (gamma-Fe2O3) vs. hematite (alpha-Fe2O3) lesson from
+    /// this module's own doc comment, made into a permanent, checkable
+    /// regression guard rather than just prose: bare Fe2O3 is a known,
+    /// documented trap where two real polymorphs share one `Composition`
+    /// gugen cannot distinguish, so a Contradicts finding keyed on it alone
+    /// would be misapplied to whichever polymorph the finding doesn't
+    /// actually describe. This is a single documented case, not a general
+    /// phase-safety checker -- real phase-awareness needs structural data
+    /// (Phase 16, `chematic-crystal`), not just a denylist here.
+    #[test]
+    fn no_curated_record_targets_bare_fe2o3_the_documented_polymorph_trap() {
+        let fe2o3 = composition(&[("Fe", 2.0), ("O", 3.0)]);
+        for record in curated_records() {
+            assert_ne!(
+                record.target, fe2o3,
+                "bare Fe2O3 is ambiguous between maghemite and hematite -- see this \
+                module's doc comment for why a suitability finding must not be keyed \
+                on it alone"
+            );
+        }
+    }
+
+    fn finding(
+        verdict: SuitabilityVerdict,
+        strength: EvidenceStrength,
+        applicable_to: EvidenceScope,
+    ) -> SuitabilityFinding {
+        SuitabilityFinding {
+            verdict,
+            statement: "test finding".to_string(),
+            source_id: None,
+            strength,
+            applicable_to,
+            limitations: vec![],
+        }
+    }
+
+    fn assessment(findings: Vec<SuitabilityFinding>) -> RouteSuitabilityAssessment {
+        RouteSuitabilityAssessment {
+            route_family: RouteFamily::ConventionalSolidState,
+            findings,
+        }
+    }
+
+    #[test]
+    fn no_findings_at_all_is_insufficient_evidence() {
+        assert_eq!(
+            derive_recommendation(&assessment(vec![])),
+            RouteRecommendation::InsufficientEvidence
+        );
+    }
+
+    #[test]
+    fn only_unknown_findings_is_insufficient_evidence() {
+        let a = assessment(vec![finding(
+            SuitabilityVerdict::Unknown,
+            EvidenceStrength::Strong,
+            EvidenceScope::ExactTarget,
+        )]);
+        assert_eq!(
+            derive_recommendation(&a),
+            RouteRecommendation::InsufficientEvidence
+        );
+    }
+
+    #[test]
+    fn a_single_strong_exact_target_contradicts_is_not_recommended() {
+        let a = assessment(vec![finding(
+            SuitabilityVerdict::Contradicts,
+            EvidenceStrength::Moderate,
+            EvidenceScope::ExactTarget,
+        )]);
+        assert_eq!(
+            derive_recommendation(&a),
+            RouteRecommendation::NotRecommended
+        );
+    }
+
+    #[test]
+    fn supports_and_contradicts_coexisting_is_conflicting_evidence_not_excluded() {
+        let a = assessment(vec![
+            finding(
+                SuitabilityVerdict::Supports,
+                EvidenceStrength::Weak,
+                EvidenceScope::ExactTarget,
+            ),
+            finding(
+                SuitabilityVerdict::Contradicts,
+                EvidenceStrength::Strong,
+                EvidenceScope::ExactTarget,
+            ),
+        ]);
+        assert_eq!(
+            derive_recommendation(&a),
+            RouteRecommendation::ConflictingEvidence,
+            "a Contradicts finding must not silently win over a coexisting Supports \
+            finding -- conflict must be surfaced, not resolved by fiat"
+        );
+    }
+
+    #[test]
+    fn a_weak_contradicts_alongside_supports_still_flags_conflict_not_recommended() {
+        // Even a Weak-strength Contradicts must not be silently outvoted by
+        // a Supports finding -- ConflictingEvidence, not Recommended.
+        let a = assessment(vec![
+            finding(
+                SuitabilityVerdict::Supports,
+                EvidenceStrength::Strong,
+                EvidenceScope::ExactTarget,
+            ),
+            finding(
+                SuitabilityVerdict::Contradicts,
+                EvidenceStrength::Weak,
+                EvidenceScope::SimilarMaterial,
+            ),
+        ]);
+        assert_eq!(
+            derive_recommendation(&a),
+            RouteRecommendation::ConflictingEvidence
+        );
+    }
+
+    #[test]
+    fn supports_only_is_recommended_as_a_label_only() {
+        let a = assessment(vec![finding(
+            SuitabilityVerdict::Supports,
+            EvidenceStrength::Moderate,
+            EvidenceScope::ExactTarget,
+        )]);
+        assert_eq!(derive_recommendation(&a), RouteRecommendation::Recommended);
+    }
+
+    /// The owner's explicit safety condition: `SimilarMaterial` alone must
+    /// never produce a hard `NotRecommended`, even at `Strong` strength --
+    /// only `ExactTarget` clears the bar. Constructed by hand here, not
+    /// added to shipped `curated_records()` (keeping the seed data at two
+    /// real worked examples).
+    #[test]
+    fn a_similar_material_contradicts_alone_is_not_actionable() {
+        let a = assessment(vec![finding(
+            SuitabilityVerdict::Contradicts,
+            EvidenceStrength::Strong,
+            EvidenceScope::SimilarMaterial,
+        )]);
+        assert_eq!(
+            derive_recommendation(&a),
+            RouteRecommendation::InsufficientEvidence,
+            "SimilarMaterial-scoped evidence, however strong, must not alone exclude a \
+            route -- only ExactTarget does"
+        );
+    }
+
+    #[test]
+    fn a_weak_exact_target_contradicts_alone_is_not_actionable() {
+        let a = assessment(vec![finding(
+            SuitabilityVerdict::Contradicts,
+            EvidenceStrength::Weak,
+            EvidenceScope::ExactTarget,
+        )]);
+        assert_eq!(
+            derive_recommendation(&a),
+            RouteRecommendation::InsufficientEvidence
+        );
+    }
+
+    #[test]
+    fn finding_order_does_not_affect_the_derived_recommendation() {
+        let forward = assessment(vec![
+            finding(
+                SuitabilityVerdict::Unknown,
+                EvidenceStrength::Weak,
+                EvidenceScope::GeneralRule,
+            ),
+            finding(
+                SuitabilityVerdict::Contradicts,
+                EvidenceStrength::Strong,
+                EvidenceScope::ExactTarget,
+            ),
+        ]);
+        let reversed = assessment(forward.findings.iter().cloned().rev().collect());
+        assert_eq!(
+            derive_recommendation(&forward),
+            derive_recommendation(&reversed)
+        );
+    }
+
+    #[test]
+    fn duplicated_findings_do_not_change_the_derived_recommendation() {
+        let single = assessment(vec![finding(
+            SuitabilityVerdict::Contradicts,
+            EvidenceStrength::Strong,
+            EvidenceScope::ExactTarget,
+        )]);
+        let mut duplicated = single.findings.clone();
+        duplicated.extend(single.findings.clone());
+        let duplicated = assessment(duplicated);
+        assert_eq!(
+            derive_recommendation(&single),
+            derive_recommendation(&duplicated)
+        );
     }
 
     #[test]
