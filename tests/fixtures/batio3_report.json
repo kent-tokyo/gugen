@@ -15,6 +15,7 @@
       "formula-only target, no structure provided (AGENTS.md §16's own example for this level)"
     ]
   },
+  "route_suitability": [],
   "plans": [
     {
       "plan_id": "plan-1677d44bfe4dbdc2",

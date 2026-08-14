@@ -5,6 +5,7 @@ use crate::process::{PlannedStep, RouteFamily};
 use crate::provenance::PlanningProvenance;
 use crate::reaction::BalancedReaction;
 use crate::rejection::RejectedCandidate;
+use crate::route_suitability::RouteSuitabilityAssessment;
 use crate::score::{ConfidenceAssessment, PlanScoreBreakdown, PlanningAssumption};
 
 pub const SCHEMA_VERSION: u32 = 1;
@@ -99,6 +100,14 @@ pub struct SynthesisPlanningReport {
     pub schema_version: u32,
     pub target: TargetSummary,
     pub applicability: ApplicabilityAssessment,
+    /// One entry per `RouteFamily` variant a `RouteSuitabilityProvider` was
+    /// asked about (Phase 15A) -- target-level, like `applicability`, not
+    /// per-plan, since suitability doesn't depend on which precursor set a
+    /// given `SynthesisPlan` used. Correlate a specific plan to its
+    /// assessment via `SynthesisPlan.route_family`. Always empty when no
+    /// provider is configured (e.g. `Planner::offline_minimal`) -- carries
+    /// no ranking weight in this phase; nothing in `score.rs` reads it.
+    pub route_suitability: Vec<RouteSuitabilityAssessment>,
     pub plans: Vec<SynthesisPlan>,
     pub rejected_candidates: Vec<RejectedCandidate>,
     pub unresolved: Vec<UnresolvedRequirement>,

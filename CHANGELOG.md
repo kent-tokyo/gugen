@@ -6,6 +6,37 @@ each entry.
 
 ## [Unreleased]
 
+### Added
+
+- **Phase 15A — route-suitability evidence model.** New `route_suitability`
+  module: `SuitabilityVerdict` (`Supports`/`Contradicts`/`Unknown`,
+  `#[non_exhaustive]`), `SuitabilityFinding`, and
+  `RouteSuitabilityAssessment` (a `Vec<SuitabilityFinding>` per
+  `(target, RouteFamily)` -- deliberately never an aggregated single
+  verdict, so contradictory findings are never force-merged). New
+  `RouteSuitabilityProvider` trait (`src/provider.rs`), a fourth provider
+  trait following `ProcessEvidenceProvider`'s shape, and
+  `InMemoryRouteSuitabilityProvider` backed by two hand-verified,
+  literature-cited seed records (a `Supports` finding for BaTiO3 +
+  Mechanochemical, DOI 10.3390/chemistry4020042; a `Contradicts` finding
+  for Mg(OH)2 + ConventionalSolidState, DOI
+  10.1080/21870764.2021.2019376, cross-checked against gugen's own
+  already-curated MgAl2O4 firing-temperature record). New
+  `SynthesisPlanningReport.route_suitability` field (report-level, one
+  entry per route family assessed, not per plan) and
+  `Planner::with_route_suitability_provider` constructor. **Deliberately
+  not wired into ranking**: nothing in `score.rs` reads this data, no
+  route is deprecated or reordered by a finding, and `score.rs`'s existing
+  `PlanningAssumption` text about route-family suitability is unchanged --
+  this phase builds the evidence vessel only, per the owner's explicit
+  instruction not to touch any algorithm or score this phase. A dedicated
+  test (`configuring_the_provider_does_not_change_any_plans_score_or_
+  confidence`, `tests/route_suitability.rs`) asserts this directly:
+  wiring the provider in produces byte-identical `score`/`confidence`/
+  `applicability`/`evidence` to an `offline_minimal` run of the same
+  target. Real negative-filtering rules and a broader curated-findings
+  set are left to a future, separately-triggered phase.
+
 ## [0.2.0] - 2026-08-14
 
 ### Added

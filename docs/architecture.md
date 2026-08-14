@@ -128,3 +128,9 @@ an adapter that only *consumes* pre-fetched, caller-supplied external data
 Only a client that would *fetch* live data itself (query an HTTP API,
 hold credentials, decide when to refresh) stays out of this crate
 entirely.
+
+Phase 15A added a fourth provider trait, `RouteSuitabilityProvider`
+(`src/provider.rs`), following the same in-memory/curated-record shape as
+`ProcessEvidenceProvider` -- AGENTS.md §8's provider list is a floor
+("at minimum"), not exhaustive; nothing about this extension point is
+capped at three traits.
