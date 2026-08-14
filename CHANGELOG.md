@@ -290,6 +290,69 @@ each entry.
   equality, the same convention `InMemoryLiteratureConditionProvider`
   (Phase 10) already uses — no fuzzy or near-composition matching.
 
+### Fixed
+
+- **Phase 14 — validation fixture citation repair (release blocker).**
+  `tests/validation.rs`'s citation text carried DOI-attestation counts and
+  a dataset-size claim measured against a wrong-provenance corpus
+  (discovered but deliberately left unfixed in Phase 11 — see that
+  section's own entry above). Corrected by live-refetching the correctly-
+  licensed figshare corpus (19,488 reactions) and recounting every route
+  directly: LaAlO3 19→10, MgAl2O4 20→16, BaTiO3 88→83 independent DOIs;
+  the module doc comment's "30,031-reaction dataset" corrected to 19,488.
+  Two representative DOIs were confirmed topic mismatches on direct
+  reading (found while sourcing Phase 10's condition data) and replaced,
+  not left standing on a count fix alone:
+  - **BaTiO3**: the original representative DOI
+    (`10.1111/j.1551-2916.2006.01172.x`) is a NaNbO3-BaTiO3 solid-solution
+    study, not plain BaTiO3. Replaced with `10.3390/cryst14040304` (Qi et
+    al., *Crystals* 14(4), 304 (2024), open access) — read directly,
+    confirms exactly this route ("TiO2 ... and BaCO3 ... powders were
+    mixed in a molar ratio of 1:1 and calcined"). This paper post-dates
+    the 2019 Kononova corpus, so it is cited as an independently verified
+    example, not as one of the 83 corpus attestations — a stronger
+    evidentiary tier than naming an unread corpus entry.
+  - **Zn3(PO4)2**: recounting found this route (ZnO + P2O5) has **zero**
+    independent attestations in the correct corpus — not a count
+    correction, a genuinely wrong fixture (its original representative
+    DOI, `10.1016/j.jmmm.2015.06.001`, is a Sm-doped zinc-phosphate glass
+    paper, not this reaction at all). Replaced the fixture entirely
+    (rather than force-fitting a different precursor route onto the same
+    target) with a different, well-attested phosphate found by querying
+    the correct corpus directly: **LiFePO4** (a lithium-ion battery
+    cathode material), route `FePO4 + Li2CO3 -> LiFePO4`, 6 independent
+    DOIs. Verified `balance()` actually recovers this route within
+    gugen's existing curated byproduct allow-list before adopting it
+    (`4 FePO4 + 2 Li2CO3 -> 4 LiFePO4 + 2 CO2 + O2` — no allow-list
+    widening needed). Representative entry: `10.1021/cm7027993` (Zaghib,
+    Mauger, Gendron, Julien, *Chemistry of Materials*, 2008) — title/
+    authors/venue/year confirmed via CrossRef and Semantic Scholar; the
+    paper is paywalled, so (like this suite's existing LaAlO3 citation)
+    its specific conditions were not independently read, only the
+    corpus's attribution of the route to this DOI.
+  - `examples/benchmark_report.rs`'s own duplicated fixture list (a
+    separate compilation target from `tests/validation.rs`, mirroring the
+    same data) updated to match; `docs/benchmark_report.md` regenerated
+    from a real run and confirmed byte-identical on re-run.
+  - `src/literature_conditions.rs`'s doc comments (which independently
+    found and recorded these same two topic mismatches while sourcing
+    Phase 10's condition data) updated to state that Phase 14 later acted
+    on that finding, rather than continuing to describe it as
+    forward-looking.
+  - `benchmarks/fetch_kononova.py`'s `EXCLUDED_ROUTES` and
+    `tests/large_scale_benchmark.rs`'s mirror of it were **not** updated
+    to add the new LiFePO4 route or regenerate
+    `benchmarks/data/kononova_sample.jsonl` — doing so would reshuffle
+    the entire deterministic 1500-row sample (a large, unrelated diff)
+    for a small evidence/wording fix. Checked directly that this is
+    currently harmless (the committed sample has zero rows matching the
+    new route's exact precursor set); flagged in both files as a known
+    gap to close the next time that corpus is actually regenerated, not
+    silently left inconsistent.
+
+  No algorithm, scoring, or planning behavior changed — evidence and
+  citation text only.
+
 ## [0.1.0] - 2026-08-14
 
 Initial release. Published to [crates.io](https://crates.io/crates/gugen)

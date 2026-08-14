@@ -205,11 +205,16 @@ fn batio3_calcination_and_sintering_temperature_resolve_from_the_curated_record(
 
 /// Zn3(PO4)2's curated record was authored from a ZnO + (NH4)2HPO4 route
 /// (the real precursors the source paper used) -- a *different* precursor
-/// combination than `tests/validation.rs`'s ZnO + P2O5 fixture. Planning
-/// that ZnO + P2O5 route must still pick up the record's Sintering
-/// condition (same target material), but scoped `SimilarMaterial`, not
-/// `ExactTarget`, since the precursor set genuinely doesn't match what
-/// the citation reports.
+/// combination than the ZnO + P2O5 route this test constructs directly.
+/// (`tests/validation.rs` used to carry its own named Zn3(PO4)2/ZnO+P2O5
+/// fixture too; Phase 14 replaced it with a different, better-attested
+/// target after finding that specific route has zero independent
+/// attestations in the correctly-licensed corpus -- this test's own
+/// ZnO + P2O5 setup below is independent of that fixture and unaffected.)
+/// Planning that ZnO + P2O5 route must still pick up the record's
+/// Sintering condition (same target material), but scoped
+/// `SimilarMaterial`, not `ExactTarget`, since the precursor set genuinely
+/// doesn't match what the citation reports.
 #[test]
 fn zn3po42_from_a_different_precursor_route_resolves_as_similar_material_not_exact_target() {
     let target_spec = target(composition(&[("Zn", 3.0), ("P", 2.0), ("O", 8.0)]));
