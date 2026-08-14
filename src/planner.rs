@@ -3,7 +3,7 @@ use crate::config::PlanningConfig;
 use crate::error::Result;
 use crate::evidence::{EvidenceKind, EvidenceScope, EvidenceStrength, PlanningEvidence};
 use crate::precursor::{PrecursorId, PrecursorSelection, search_precursor_sets};
-use crate::process::conventional_solid_state_template;
+use crate::process::{apply_condition_precedents, conventional_solid_state_template};
 use crate::provenance::PlanningProvenance;
 use crate::provider::{PrecursorCatalog, ProcessEvidenceProvider, ThermodynamicProvider};
 use crate::reaction::{BalancedReaction, ThermodynamicConditions};
@@ -65,6 +65,23 @@ impl Planner {
         }
     }
 
+    /// Catalog plus a process-evidence provider (e.g.
+    /// `InMemoryLiteratureConditionProvider`, Phase 10) -- no thermodynamic
+    /// provider. The one new two-provider combination Phase 10 needs; see
+    /// `new`/`offline_minimal` for the other two.
+    pub fn with_process_evidence_provider(
+        catalog: impl PrecursorCatalog + 'static,
+        process_evidence_provider: impl ProcessEvidenceProvider + 'static,
+        config: PlanningConfig,
+    ) -> Self {
+        Self {
+            catalog: Box::new(catalog),
+            thermodynamic_provider: None,
+            process_evidence_provider: Some(Box::new(process_evidence_provider)),
+            config,
+        }
+    }
+
     /// Plans for `target`, returning a complete report -- never a partial
     /// or panicking result for well-formed input (AGENTS.md §25).
     ///
@@ -113,9 +130,10 @@ impl Planner {
 
         let mut plans: Vec<SynthesisPlan> = Vec::with_capacity(outcome.accepted.len());
         for accepted in &outcome.accepted {
-            let template = conventional_solid_state_template(composition, accepted);
-            let mut evidence = template.evidence;
+            let mut template = conventional_solid_state_template(composition, accepted);
+            let mut evidence = std::mem::take(&mut template.evidence);
             let mut provider_warnings = Vec::new();
+            let process_evidence_provider_consulted = self.process_evidence_provider.is_some();
 
             if let Some(provider) = &self.thermodynamic_provider {
                 match provider
@@ -163,18 +181,33 @@ impl Planner {
                 match provider.precedents(target, &precursors) {
                     Ok(precedents) => {
                         for precedent in precedents {
-                            evidence.push(PlanningEvidence {
-                                kind: EvidenceKind::UserProvidedPrecedent,
-                                source_id: None,
-                                statement: precedent.description,
-                                strength: EvidenceStrength::Weak,
-                                applicable_to: EvidenceScope::SimilarMaterial,
-                                limitations: vec![
-                                    "ProcessPrecedent has no structured method/condition \
-                                        detail yet"
-                                        .to_string(),
-                                ],
-                            });
+                            // An empty description means this precedent has nothing
+                            // prose-only to add (Phase 10's literature condition
+                            // provider, for one) -- pushing a blank statement as
+                            // evidence would be noise, not information.
+                            if !precedent.description.is_empty() {
+                                evidence.push(PlanningEvidence {
+                                    kind: EvidenceKind::UserProvidedPrecedent,
+                                    source_id: None,
+                                    statement: precedent.description,
+                                    strength: EvidenceStrength::Weak,
+                                    applicable_to: EvidenceScope::SimilarMaterial,
+                                    limitations: vec![
+                                        "this precedent's free-text description alone \
+                                            carries no structured method/condition detail"
+                                            .to_string(),
+                                    ],
+                                });
+                            }
+                            // Phase 10: splice any structured, cited condition data
+                            // into this template's still-unresolved Heat steps
+                            // before scoring, rather than only ever adding
+                            // free-text evidence that never changes what's
+                            // actually planned.
+                            evidence.extend(apply_condition_precedents(
+                                &mut template.steps,
+                                &precedent.conditions,
+                            ));
                         }
                     }
                     Err(err) => provider_warnings.push(PlanningWarning {
@@ -193,6 +226,7 @@ impl Planner {
                 Some(&accepted.reaction),
                 &template.steps,
                 &evidence,
+                process_evidence_provider_consulted,
                 &self.config.ranking_weights,
             );
 

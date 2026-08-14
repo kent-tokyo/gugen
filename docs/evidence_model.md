@@ -26,7 +26,12 @@ cited in `docs/competitors.md` was fetched from crates.io, the GitHub API,
 or live web search on 2026-08-13, not recalled from training data. The same
 discipline applies to `ProcessEvidenceProvider` implementations later —
 a provider that can't verify a source must return no evidence, not a
-plausible-sounding one.
+plausible-sounding one. `EvidenceKind::CuratedLiteratureRecord` (listed
+above since Phase 1) went unused by any generator-produced evidence through
+v0.1.0; Phase 10's `InMemoryLiteratureConditionProvider` is the first real
+source of it, one hand-verified citation per curated condition record —
+see `src/literature_conditions.rs` and `tests/validation.rs`'s fixture
+citations, which the Phase 10 records are built from.
 
 ## Confidence is decomposed, not a single number
 

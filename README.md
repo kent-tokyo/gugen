@@ -10,19 +10,20 @@ solid-state process plans — each with its evidence, assumptions, and
 unresolved conditions kept explicit and machine-readable. It does not
 predict experimental success.
 
-> **Status: v0.1 release candidate.** All 9 phases are done (architecture,
-> foundation types, exact reaction balancing, bounded precursor-set
-> search, solid-state process templates, plan scoring and confidence, the
-> end-to-end `Planner`, a CLI, a validation suite against curated
-> literature fixtures — see [`docs/benchmark_report.md`](docs/benchmark_report.md)
-> — and v0.1 release prep). An optional `mikiwame` feature adapts
-> structural diagnostics; the `chematic-crystal` adapter remains blocked
-> on that crate's publication. Not published, not merged to `main` — that
-> remains the owner's explicit call, not something reaching candidate
-> status decides on its own. See [`tasks/todo.md`](tasks/todo.md) for
-> exact phase-by-phase status and
-> [the draft PR](https://github.com/kent-tokyo/gugen/pull/1) for what's
-> under review.
+> **Status: v0.1.0 published.** [crates.io](https://crates.io/crates/gugen) /
+> [docs.rs](https://docs.rs/gugen) / [v0.1.0 release](https://github.com/kent-tokyo/gugen/releases/tag/v0.1.0).
+> All 9 original phases are done (architecture, foundation types, exact
+> reaction balancing, bounded precursor-set search, solid-state process
+> templates, plan scoring and confidence, the end-to-end `Planner`, a
+> CLI, a validation suite against curated literature fixtures — see
+> [`docs/benchmark_report.md`](docs/benchmark_report.md) — and v0.1
+> release prep). An optional `mikiwame` feature adapts structural
+> diagnostics; the `chematic-crystal` adapter remains blocked on that
+> crate's publication. Post-v0.1 development toward a v0.2.0 (real
+> literature-sourced process conditions, a large-scale blind benchmark,
+> a second route family, a thermodynamic-provider adapter boundary) is
+> in progress on `main` — see [`tasks/todo.md`](tasks/todo.md) for
+> exact phase-by-phase status.
 
 ## What gugen does and doesn't guarantee
 

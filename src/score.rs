@@ -44,25 +44,31 @@ impl<'de> serde::Deserialize<'de> for Score01 {
     }
 }
 
-/// AGENTS.md §13, verbatim. In v0.1 (one route family, no thermodynamic or
-/// literature evidence provider wired in), most of this breakdown is
-/// structurally constant across every plan the crate can currently
-/// produce: `stoichiometric_validity` and `precursor_coverage` are always
-/// `1.0` (reaction balancing is exact and `search_precursor_sets` already
+/// AGENTS.md §13, verbatim. With one route family and no
+/// `ThermodynamicProvider`, most of this breakdown is structurally
+/// constant across every plan the crate can currently produce:
+/// `stoichiometric_validity` and `precursor_coverage` are always `1.0`
+/// (reaction balancing is exact and `search_precursor_sets` already
 /// hard-filters on full element coverage -- both are re-derived defensively
 /// here rather than assumed, but neither can discriminate between plans
 /// yet); `thermodynamic_support` is always `None`; `safety_penalty` is
 /// always `0.0` (no hazard data source exists -- see `manual_review_required`
-/// on [`PlanAssessment`]); `uncertainty_penalty` is always `1.0` (no
-/// condition is ever resolved). With `safety_penalty`/`uncertainty_penalty`
-/// both constant, their weighted-average `penalty_average` is a constant
-/// `0.5` under the default weights. `evidence_strength` uses weakest-link
-/// aggregation (see `strength_value`) and is `0.25` for every plan the
-/// current generator produces, since every route attaches at least one
-/// `Weak` template-default entry. **In practice, `total_ranking_score`
-/// currently varies only with `process_simplicity`** -- i.e. only with
-/// whether the route calcines. This is the true extent of v0.1's ranking
-/// discriminating power; it is not a seven-dimensional judgment yet.
+/// on [`PlanAssessment`]). `uncertainty_penalty` was always `1.0` before
+/// Phase 10 (no condition was ever resolved); with a
+/// `ProcessEvidenceProvider` that actually resolves conditions (e.g.
+/// `InMemoryLiteratureConditionProvider`) wired in, it varies for the
+/// targets that provider has real cited coverage for -- still `1.0`
+/// whenever no condition provider is configured, or when one is configured
+/// but has no matching precedent for this target. `evidence_strength` uses
+/// weakest-link aggregation (see `strength_value`) and is `0.25` for every
+/// plan the current generator produces, since every route attaches at
+/// least one `Weak` template-default entry -- this stays true regardless
+/// of condition resolution, since resolved-condition evidence doesn't
+/// remove the template's own baseline `Weak` entries. **`total_ranking_score`
+/// varies with `process_simplicity` always, and with `uncertainty_penalty`
+/// only for targets a condition provider actually covers.** This is the
+/// true extent of v0.1's ranking discriminating power; it is not a
+/// seven-dimensional judgment yet.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PlanScoreBreakdown {
@@ -136,19 +142,24 @@ pub fn ranking_weights_digest(weights: &RankingWeights) -> String {
 /// unresolved ("条件未確定でも反応式が確実なケースがあります。単一
 /// confidenceに潰さないでください").
 ///
-/// **`overall` is currently structurally constant at `0.75` for every
-/// plan with a balanced reaction and non-empty evidence** (Phase 8's
+/// **`overall` was structurally constant at `0.75` for every plan with a
+/// balanced reaction and non-empty evidence through v0.1** (Phase 8's
 /// false-confidence audit, `tests/validation.rs`,
 /// `confidence_overall_is_measured_not_assumed_to_be_constant`, and
 /// `docs/benchmark_report.md`): it averages four `Score01` values, and
-/// `process_conditions` is always `0.0` in v0.1 (no provider ever resolves
-/// a condition), so `(1 + 1 + 0 + 1) / 4` is the only value this can
-/// currently produce for a successfully planned route. Each sub-score is
-/// individually honest; the constancy just means `overall` cannot yet
-/// discriminate between plans of genuinely different real uncertainty.
-/// Not "fixed" with an invented weighting -- no calibration data exists
-/// to justify one (AGENTS.md §27). See `tasks/todo.md`'s Phase 8
-/// stop-and-report entry for the full analysis.
+/// `process_conditions` was always `0.0` (no provider ever resolved a
+/// condition), so `(1 + 1 + 0 + 1) / 4` was the only value this could
+/// produce for a successfully planned route. Since Phase 10,
+/// `process_conditions` can be nonzero when a `ProcessEvidenceProvider`
+/// resolves a real, cited condition for that specific target -- `overall`
+/// still stays `0.75` for every plan no such provider covers (including
+/// every `Planner::offline_minimal` plan, unconditionally). Each sub-score
+/// is individually honest; where it stays constant, that just means
+/// `overall` cannot discriminate between plans of genuinely different
+/// real uncertainty *for that plan*. Not "fixed" with an invented
+/// weighting -- no calibration data exists to justify one (AGENTS.md §27).
+/// See `tasks/todo.md`'s Phase 8 stop-and-report entry for the original
+/// finding and Phase 10's entry for what changed.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ConfidenceAssessment {
@@ -252,9 +263,26 @@ fn resolved_condition_fraction(steps: &[PlannedStep]) -> Score01 {
         .expect("resolved <= total, so the ratio is within [0, 1]")
 }
 
-fn collect_unresolved(steps: &[PlannedStep]) -> Vec<UnresolvedRequirement> {
+fn collect_unresolved(
+    steps: &[PlannedStep],
+    process_evidence_provider_consulted: bool,
+) -> Vec<UnresolvedRequirement> {
     const NO_PROVIDER_REASON: &str =
         "no thermodynamic or literature evidence provider is wired in yet (AGENTS.md §4.1)";
+    const CONSULTED_NO_MATCH_REASON: &str = "a process evidence provider was consulted but had \
+        no matching precedent for this field";
+    // Phase 10: once a provider is wired in, a still-unresolved field is a
+    // genuinely different fact from "no provider exists at all" -- the old
+    // blanket NO_PROVIDER_REASON text becomes false for that case (the
+    // provider WAS consulted; it simply had nothing for this specific
+    // field). `apply_condition_precedents` only ever fills an unset field,
+    // so if a field is still `None` here after a consulted provider ran,
+    // that provider genuinely had no matching data for it.
+    let reason = if process_evidence_provider_consulted {
+        CONSULTED_NO_MATCH_REASON
+    } else {
+        NO_PROVIDER_REASON
+    };
     let mut unresolved = Vec::new();
     for planned in steps {
         match &planned.step {
@@ -276,7 +304,7 @@ fn collect_unresolved(steps: &[PlannedStep]) -> Vec<UnresolvedRequirement> {
                     if is_unresolved {
                         unresolved.push(UnresolvedRequirement {
                             description: format!("{purpose:?} heating step {field}"),
-                            reason: NO_PROVIDER_REASON.to_string(),
+                            reason: reason.to_string(),
                         });
                     }
                 }
@@ -284,13 +312,13 @@ fn collect_unresolved(steps: &[PlannedStep]) -> Vec<UnresolvedRequirement> {
             ProcessStep::Grind { duration, .. } if duration.is_none() => {
                 unresolved.push(UnresolvedRequirement {
                     description: "grinding duration".to_string(),
-                    reason: NO_PROVIDER_REASON.to_string(),
+                    reason: reason.to_string(),
                 });
             }
             ProcessStep::Form { pressure, .. } if pressure.is_none() => {
                 unresolved.push(UnresolvedRequirement {
                     description: "forming pressure".to_string(),
-                    reason: NO_PROVIDER_REASON.to_string(),
+                    reason: reason.to_string(),
                 });
             }
             _ => {}
@@ -313,12 +341,20 @@ fn collect_unresolved(steps: &[PlannedStep]) -> Vec<UnresolvedRequirement> {
 /// built), so `safety_penalty` staying at `0.0` must not be read as a
 /// safety clearance -- "unknown hazardを安全と扱わない". A `Severe`
 /// warning says so explicitly.
+///
+/// `process_evidence_provider_consulted` (Phase 10) only changes the
+/// *reason text* on any `UnresolvedRequirement` this call still produces --
+/// never which fields end up resolved, which is entirely a function of
+/// `steps` (already mutated by `apply_condition_precedents`, if at all,
+/// before this is called). Pass `false` for `Planner::offline_minimal`, so
+/// its output stays byte-identical to pre-Phase-10 behavior.
 pub fn score_plan(
     target: &Composition,
     target_applicability: &ApplicabilityAssessment,
     balanced_reaction: Option<&BalancedReaction>,
     steps: &[PlannedStep],
     evidence: &[PlanningEvidence],
+    process_evidence_provider_consulted: bool,
     weights: &RankingWeights,
 ) -> PlanAssessment {
     let stoichiometric_validity = if balanced_reaction.is_some() {
@@ -461,7 +497,7 @@ pub fn score_plan(
         confidence,
         applicability: target_applicability.clone(),
         assumptions,
-        unresolved: collect_unresolved(steps),
+        unresolved: collect_unresolved(steps, process_evidence_provider_consulted),
         manual_review_required: true,
         warnings,
     }
@@ -566,6 +602,7 @@ mod tests {
             Some(&routes.oxide_reaction),
             &routes.oxide_steps,
             &routes.oxide_evidence,
+            false,
             &RankingWeights::default(),
         );
         assert_eq!(assessment.score.thermodynamic_support, None);
@@ -586,6 +623,7 @@ mod tests {
             Some(&routes.oxide_reaction),
             &routes.oxide_steps,
             &routes.oxide_evidence,
+            false,
             &RankingWeights::default(),
         );
         let without_evidence = score_plan(
@@ -594,6 +632,7 @@ mod tests {
             Some(&routes.oxide_reaction),
             &routes.oxide_steps,
             &[],
+            false,
             &RankingWeights::default(),
         );
 
@@ -618,6 +657,7 @@ mod tests {
             Some(&routes.oxide_reaction),
             &routes.oxide_steps,
             &routes.oxide_evidence,
+            false,
             &RankingWeights::default(),
         );
         assert!(assessment.manual_review_required);
@@ -641,6 +681,7 @@ mod tests {
             None,
             &routes.oxide_steps,
             &routes.oxide_evidence,
+            false,
             &RankingWeights::default(),
         );
         assert_eq!(assessment.score.stoichiometric_validity, Score01::ZERO);
@@ -661,6 +702,7 @@ mod tests {
             Some(&routes.carbonate_reaction),
             &routes.carbonate_steps,
             &routes.carbonate_evidence,
+            false,
             &RankingWeights::default(),
         );
         // Every condition-bearing step is None in v0.1: 2 Heat steps
@@ -692,6 +734,7 @@ mod tests {
             Some(&routes.carbonate_reaction),
             &routes.carbonate_steps,
             &routes.carbonate_evidence,
+            false,
             &RankingWeights::default(),
         );
         let oxide = score_plan(
@@ -700,6 +743,7 @@ mod tests {
             Some(&routes.oxide_reaction),
             &routes.oxide_steps,
             &routes.oxide_evidence,
+            false,
             &RankingWeights::default(),
         );
         assert!(

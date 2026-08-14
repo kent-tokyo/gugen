@@ -49,7 +49,11 @@ against these before merge:
    only appear in output if it traces to a `PlanningEvidence` entry (route
    template prior, decomposition constraint, user precedent, curated
    literature record). Otherwise the field is `unresolved`, never a
-   plausible-looking default.
+   plausible-looking default. Phase 10's `InMemoryLiteratureConditionProvider`
+   is the first real satisfier of the "curated literature record" case —
+   every value it supplies traces to a real, hand-verified citation
+   (`src/literature_conditions.rs`), and it still leaves a field `None`
+   rather than guess when it has no matching record for a given target.
 2. **`RankingScore` ≠ success probability.** v0.1 score is ordinal, for
    sorting candidates against each other. It is never rendered, documented,
    or reasoned about as "N% likely to succeed."

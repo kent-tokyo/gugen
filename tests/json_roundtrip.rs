@@ -51,6 +51,7 @@ fn sample_report() -> SynthesisPlanningReport {
         Some(&reaction),
         &template.steps,
         &template.evidence,
+        false,
         &RankingWeights::default(),
     );
     let mut warnings = template.warnings;

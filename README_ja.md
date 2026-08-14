@@ -9,17 +9,20 @@
 （evidence）・仮定（assumption）・未確定条件（unresolved）を明示したまま、
 機械可読な形で返します。実験の成功を保証するものではありません。
 
-> **ステータス：v0.1 リリース候補。** 全9フェーズが完了（アーキテクチャ
-> 設計、基盤型定義、厳密な反応式バランス、bounded前駆体探索、固相合成プロ
-> セステンプレート、plan scoring・confidence、これらを一気通貫で統括する
-> `Planner`、CLI、文献に基づくfixtureによる検証一式 --
-> [`docs/benchmark_report.md`](docs/benchmark_report.md) 参照 -- および
-> v0.1リリース準備)。オプションの`mikiwame`機能で構造診断結果を取り込め
-> ますが、`chematic-crystal`アダプタは同クレート未公開のため保留中です。
-> 未公開・`main`未マージです（候補状態に達したこと自体はmerge/publishの
-> 許可を意味せず、それは所有者が明示的に判断します）。フェーズごとの詳細は
-> [`tasks/todo.md`](tasks/todo.md) を、レビュー中の内容は
-> [draft PR](https://github.com/kent-tokyo/gugen/pull/1) を参照してください。
+> **ステータス：v0.1.0 公開済み。**
+> [crates.io](https://crates.io/crates/gugen) /
+> [docs.rs](https://docs.rs/gugen) /
+> [v0.1.0リリース](https://github.com/kent-tokyo/gugen/releases/tag/v0.1.0)。
+> 元の全9フェーズが完了（アーキテクチャ設計、基盤型定義、厳密な反応式バラ
+> ンス、bounded前駆体探索、固相合成プロセステンプレート、plan scoring・
+> confidence、これらを一気通貫で統括する`Planner`、CLI、文献に基づく
+> fixtureによる検証一式 -- [`docs/benchmark_report.md`](docs/benchmark_report.md)
+> 参照 -- およびv0.1リリース準備)。オプションの`mikiwame`機能で構造診断
+> 結果を取り込めますが、`chematic-crystal`アダプタは同クレート未公開の
+> ため保留中です。v0.1以降、v0.2.0へ向けた開発が`main`上で進行中です
+> （実文献に基づくprocess condition解決、大規模blind benchmark、第2の
+> route family、thermodynamic provider adapter境界）。フェーズごとの
+> 詳細は[`tasks/todo.md`](tasks/todo.md)を参照してください。
 
 ## gugenが保証すること・しないこと
 

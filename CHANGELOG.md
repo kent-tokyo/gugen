@@ -6,6 +6,65 @@ each entry.
 
 ## [Unreleased]
 
+### Added
+
+- **Phase 10 — literature condition provider.** `ProcessPrecedent` gains a
+  `conditions: Vec<ConditionPrecedent>` field (breaking change, toward
+  v0.2.0) carrying structured, per-purpose temperature/duration/
+  atmosphere/ramp data with its own citation, evidence kind, and strength
+  — no longer just a free-text `description`. New
+  `InMemoryLiteratureConditionProvider` (`src/literature_conditions.rs`),
+  backed by 5 hand-verified curated records (LaAlO3, MgAl2O4, Zn3(PO4)2,
+  CaO, BaTiO3 — the same targets `tests/validation.rs`'s Phase 8 fixtures
+  use), each traced to a real DOI actually read this phase, not recalled
+  from memory (AGENTS.md §21.3). Two of the five representative DOIs
+  `tests/validation.rs` already cited turned out, on inspection, to be
+  confirmed topic mismatches (Zn3(PO4)2's is a zinc-phosphate glass paper
+  made by melt-quenching; BaTiO3's is a NaNbO3-BaTiO3 solid-solution
+  study) and a third (LaAlO3's) was fully paywalled with no accessible
+  copy — a different, freely-accessible, independently verified paper was
+  substituted for condition data specifically in each case, left
+  documented rather than silently reusing an unreachable or wrong source.
+  Zn3(PO4)2's substitute source used a different precursor combination
+  (ZnO + (NH4)2HPO4, not ZnO + P2O5) than the existing fixture — recorded
+  as the real route the source used; `InMemoryLiteratureConditionProvider`
+  correctly scopes that data `EvidenceScope::SimilarMaterial` rather than
+  `ExactTarget` when applied to a different, same-target precursor route
+  (proven by a dedicated test, not just asserted). New
+  `Planner::with_process_evidence_provider` constructor. New
+  `apply_condition_precedents` (`src/process.rs`) splices resolved
+  conditions into a plan's `Heat` steps before scoring — only ever fills
+  an already-`None` field, never overwrites one some other source set.
+  Fixed a false-claim bug this capability would otherwise introduce:
+  `score.rs`'s `UnresolvedRequirement.reason` text was hardcoded to "no
+  ... provider is wired in yet" for every unresolved field regardless of
+  whether a provider actually existed — now distinguishes "no provider
+  configured" from "a provider was consulted and had nothing for this
+  field," so the reason text stays true once a provider that resolves
+  *some* but not all conditions is wired in. `Planner::offline_minimal`
+  and every fixture/test built on it (including the README's byte-for-
+  byte worked example and both golden snapshots) are explicitly
+  unaffected — new capability is opt-in via the new constructor, never
+  retroactive.
+
+### Known limitations
+
+- `PlanScoreBreakdown.evidence_strength` (plan-level aggregate) stays
+  pinned at `0.25` even for a plan with a resolved, `Moderate`- or
+  `Strong`-strength condition, because it aggregates by weakest link and
+  `conventional_solid_state_template` always attaches its own `Weak`
+  template-default entry alongside any condition evidence. Not "fixed" by
+  changing the aggregation rule — that would be an unsourced heuristic
+  with no calibration data behind it (AGENTS.md §27), same reasoning as
+  every other constant-aggregate finding this project has logged rather
+  than silently patched.
+- The curated condition set covers 5 targets with real, verified data;
+  everything else still plans exactly as it did before Phase 10
+  (conditions unresolved). This is a deliberately small, hand-checked set
+  (AGENTS.md §21.3), not a literature-mining pipeline — a much larger,
+  reproducibly-sourced corpus is Phase 11's job, at a different trust
+  tier.
+
 ## [0.1.0] - 2026-08-14
 
 Initial release. Published to [crates.io](https://crates.io/crates/gugen)

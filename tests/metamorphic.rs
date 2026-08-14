@@ -4,9 +4,10 @@
 //! documented, not silently different.
 
 use gugen::{
-    BalancedReaction, Composition, Element, InMemoryPrecursorCatalog, Planner, PlanningConfig,
+    BalancedReaction, Composition, ConditionPrecedent, Element, EvidenceKind, EvidenceScope,
+    EvidenceStrength, HeatingPurpose, InMemoryPrecursorCatalog, Planner, PlanningConfig,
     PlanningConstraints, PrecursorCandidate, PrecursorId, PrecursorSelection, ProcessPrecedent,
-    ProviderError, TargetSpecification, ThermodynamicConditions,
+    ProviderError, TargetSpecification, TemperatureRange, ThermodynamicConditions,
 };
 
 fn element(symbol: &str) -> Element {
@@ -136,6 +137,7 @@ impl gugen::ProcessEvidenceProvider for OrderedPrecedentProvider {
             .iter()
             .map(|d| ProcessPrecedent {
                 description: d.to_string(),
+                conditions: vec![],
             })
             .collect())
     }
@@ -185,6 +187,94 @@ fn provider_return_order_does_not_affect_score_or_confidence() {
             a.confidence, b.confidence,
             "confidence must not depend on provider return order"
         );
+    }
+}
+
+/// Phase 10: a provider returning multiple `ConditionPrecedent`s in
+/// different orders must resolve the exact same step fields either way.
+/// This is what `InMemoryLiteratureConditionProvider`'s own curated-records
+/// uniqueness test guards structurally (no two records ever claim the same
+/// target/precursor-set/purpose); this test proves the resolver itself
+/// (`apply_condition_precedents`) doesn't silently depend on order even
+/// when nothing enforces uniqueness for it, exercised end to end through
+/// `Planner` rather than as a bare unit test.
+struct OrderedConditionProvider {
+    precedents: Vec<ConditionPrecedent>,
+}
+impl gugen::ProcessEvidenceProvider for OrderedConditionProvider {
+    fn precedents(
+        &self,
+        _target: &TargetSpecification,
+        _precursors: &[PrecursorSelection],
+    ) -> Result<Vec<ProcessPrecedent>, ProviderError> {
+        Ok(vec![ProcessPrecedent {
+            description: String::new(),
+            conditions: self.precedents.clone(),
+        }])
+    }
+}
+
+fn calcination_precedent() -> ConditionPrecedent {
+    ConditionPrecedent {
+        purpose: HeatingPurpose::Calcination,
+        temperature: Some(TemperatureRange::new(900.0, 900.0).unwrap()),
+        duration: None,
+        atmosphere: None,
+        ramp: None,
+        evidence_kind: EvidenceKind::CuratedLiteratureRecord,
+        source_id: Some("10.0000/calcination".to_string()),
+        statement: "calcination precedent".to_string(),
+        strength: EvidenceStrength::Moderate,
+        applicable_to: EvidenceScope::ExactTarget,
+    }
+}
+
+fn sintering_precedent() -> ConditionPrecedent {
+    ConditionPrecedent {
+        purpose: HeatingPurpose::Sintering,
+        temperature: Some(TemperatureRange::new(1300.0, 1300.0).unwrap()),
+        duration: None,
+        atmosphere: None,
+        ramp: None,
+        evidence_kind: EvidenceKind::CuratedLiteratureRecord,
+        source_id: Some("10.0000/sintering".to_string()),
+        statement: "sintering precedent".to_string(),
+        strength: EvidenceStrength::Moderate,
+        applicable_to: EvidenceScope::ExactTarget,
+    }
+}
+
+#[test]
+fn provider_return_order_does_not_affect_resolved_step_conditions() {
+    let target_spec = target(composition(&[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)]));
+
+    let forward = Planner::with_process_evidence_provider(
+        InMemoryPrecursorCatalog::new(barium_titanate_catalog()),
+        OrderedConditionProvider {
+            precedents: vec![calcination_precedent(), sintering_precedent()],
+        },
+        PlanningConfig::default(),
+    )
+    .plan(&target_spec, "2026-08-14T00:00:00Z")
+    .unwrap();
+    let backward = Planner::with_process_evidence_provider(
+        InMemoryPrecursorCatalog::new(barium_titanate_catalog()),
+        OrderedConditionProvider {
+            precedents: vec![sintering_precedent(), calcination_precedent()],
+        },
+        PlanningConfig::default(),
+    )
+    .plan(&target_spec, "2026-08-14T00:00:00Z")
+    .unwrap();
+
+    assert_eq!(forward.plans.len(), backward.plans.len());
+    assert!(!forward.plans.is_empty());
+    for (a, b) in forward.plans.iter().zip(&backward.plans) {
+        assert_eq!(
+            a.steps, b.steps,
+            "resolved step conditions must not depend on provider return order"
+        );
+        assert_eq!(a.confidence, b.confidence);
     }
 }
 

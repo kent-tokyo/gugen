@@ -1163,3 +1163,187 @@ discovery), and gugen explicitly positions itself against `renkin`
 (molecular retrosynthesis) as the non-molecular, inorganic-materials
 sibling; tagging it with a molecular-chemistry keyword risks
 miscategorizing it for exactly the audience trying to distinguish the two.
+
+## Phase 10 — Literature Condition Provider — DONE (2026-08-14)
+
+Not part of AGENTS.md §26's original 9-phase roadmap. Follow-up work
+toward v0.2.0, from an external competitive evaluation of v0.1.0 (see the
+plan file `/Users/k_tanabe/.claude/plans/typed-sparking-storm.md`,
+approved by the owner). Goal: close the evaluation's single largest
+scored gap ("合成計画の機能幅") by resolving real, cited process
+conditions instead of leaving every `Heat`/`Grind`/`Form` step's
+temperature/duration/atmosphere/ramp field `None` unconditionally.
+
+**Preamble**: re-verified `chematic-crystal`'s publish status (same
+method as every prior check) — still does not exist on crates.io.
+`mikiwame` confirmed still at `0.1.0`. No action; out of scope for this
+plan as agreed.
+
+**Type changes** (`src/process.rs`): `ProcessPrecedent` gains
+`conditions: Vec<ConditionPrecedent>` (breaking change, accepted per the
+owner's confirmed single-0.2.0-bump decision). New `ConditionPrecedent`
+struct carries `purpose: HeatingPurpose`, four `Option` condition fields
+reusing the existing validated range types, and its own
+`evidence_kind`/`source_id`/`statement`/`strength`/`applicable_to` — set
+by whichever provider returns it, not assumed by the planner (a
+`ProcessEvidenceProvider` is also the trait a user-supplied lab-precedent
+source implements, per AGENTS.md §7's `UserProvidedPrecedent`, so
+hardcoding `CuratedLiteratureRecord` in the planner would mislabel
+provenance for any other implementation).
+
+**New provider** (`src/literature_conditions.rs`):
+`InMemoryLiteratureConditionProvider`, backed by
+`CuratedConditionRecord`s matched by exact `Composition` equality against
+a target, with `EvidenceScope::ExactTarget` when the queried precursor-ID
+set also matches a record's exactly, `SimilarMaterial` otherwise. A unit
+test (`curated_records_have_no_duplicate_target_precursor_purpose_keys`)
+enforces no two records ever claim the same
+`(target, precursor_ids, purpose)` key, removing order-dependent
+resolution by construction rather than runtime merge logic — backed by a
+new `tests/metamorphic.rs` case
+(`provider_return_order_does_not_affect_resolved_step_conditions`) that
+shuffles a test double's returned precedents and asserts identical
+resolved steps either order (AGENTS.md §21.4).
+
+**Wiring** (`src/process.rs`/`src/planner.rs`): new
+`apply_condition_precedents(steps, precedents) -> Vec<PlanningEvidence>`
+splices resolved conditions into a plan's `Heat` steps — only ever fills
+an already-`None` field, never overwrites one some other source already
+set, so this composes with any future resolution source. Called from
+`Planner::plan` right after `process_evidence_provider.precedents(...)`,
+before `score_plan` runs (the mutation has to land before scoring, not
+after — `score.rs`'s `resolved_condition_fraction` already had the right
+shape to react to this, it was just never fed any resolved data before
+Phase 10). New `Planner::with_process_evidence_provider` constructor
+(catalog + process-evidence provider, no thermodynamic provider — the one
+new two-provider combination this phase needs).
+
+**Real bug found and fixed while wiring this in** (not anticipated at
+plan-writing time, found by actually tracing what "provider consulted but
+partially resolves" means for existing code): `score.rs`'s
+`collect_unresolved` had a single hardcoded `NO_PROVIDER_REASON` constant
+applied to every unresolved field regardless of whether a provider
+existed. Once a provider is wired in and resolves *some* fields (e.g.
+temperature) but not others (e.g. ramp rate), the old text ("no ...
+provider is wired in yet") becomes a false machine-readable claim about
+the still-unresolved field. Fixed by threading a
+`process_evidence_provider_consulted: bool` through `collect_unresolved`
+and `score_plan` (both signatures changed; all 9 call sites across
+`src/score.rs`'s own tests, `tests/json_roundtrip.rs`, and
+`src/planner.rs` updated), branching the reason text so
+`Planner::offline_minimal`'s output stays byte-identical (`false`) while
+a consulted-but-unmatched field gets accurate text. Proven by a dedicated
+test (`a_target_with_no_curated_coverage_still_leaves_every_condition_
+unresolved`, `tests/literature_conditions.rs`) that explicitly asserts
+the reason text *must* differ between an offline and a provider-consulted
+report for the same uncovered target, rather than assuming it wouldn't.
+
+**Curated dataset — real research, not fabrication (AGENTS.md §21.3)**:
+5 records, one per target `tests/validation.rs`'s Phase 8 fixtures
+already cite (LaAlO3, MgAl2O4, Zn3(PO4)2, CaO, BaTiO3). Two research
+passes (an initial pass against the exact representative DOIs
+`tests/validation.rs` already cites, then a follow-up once that pass
+found real problems):
+
+- **MgAl2O4** and **CaO**: the existing representative DOIs
+  (10.1007/s11663-014-0207-8, 10.3390/ma17153875) turned out to be real,
+  accessible papers that also report the actual firing conditions, not
+  just the precursor route — read directly (PMC/institutional open-access
+  copies), condition data extracted from the same citation already in
+  place.
+- **LaAlO3**: the existing representative DOI (10.1149/2.053405jes) is
+  the right paper but fully paywalled with no accessible copy found
+  anywhere (checked Unpaywall, Semantic Scholar, IISc ePrints,
+  ResearchGate, CORE.ac.uk, Wayback Machine). Substituted a different,
+  freely-accessible paper (DOI 10.1039/d3ra03241h, RSC Advances, open
+  access) reporting the same La2O3 + Al2O3 route.
+- **Zn3(PO4)2** and **BaTiO3**: the existing representative DOIs
+  (10.1016/j.jmmm.2015.06.001, 10.1111/j.1551-2916.2006.01172.x) are
+  **confirmed topic mismatches** on inspection — not access problems.
+  The Zn3(PO4)2 DOI is a Sm-doped zinc phosphate *glass* paper made by
+  melt-quenching, not this reaction at all. The BaTiO3 DOI is a
+  NaNbO3-BaTiO3 solid-solution ceramic study, not plain BaTiO3. This is
+  worth stating plainly: the Kononova et al. 2019 text-mining pipeline
+  (or its downstream citation in this repo) attributed these routes to
+  papers that, read directly, don't actually report them. Does not
+  invalidate `tests/validation.rs`'s own claims (which only assert a
+  precursor set was recovered by gugen's search, not that a specific DOI
+  was independently verified for condition data) — but it does mean
+  neither DOI could be used as a condition-data source under its own
+  name. Substituted different, freely-accessible, independently verified
+  papers for condition data specifically (DOI 10.3390/engproc2024067018
+  for Zn3(PO4)2; DOI 10.3390/cryst14040304 for BaTiO3), left documented
+  in `src/literature_conditions.rs`'s own doc comment rather than
+  silently swapped without a trace.
+- Zn3(PO4)2's substitute source used a different real precursor
+  combination than the existing fixture (ZnO + (NH4)2HPO4, not ZnO +
+  P2O5) — recorded as the route the source actually used, not force-fit
+  to match. This exercises the `SimilarMaterial`-vs-`ExactTarget` scoping
+  logic for real (proven by
+  `zn3po42_from_a_different_precursor_route_resolves_as_similar_material_
+  not_exact_target`, not just asserted to work in theory).
+- BaTiO3's sintering condition is recorded as a genuine range (1200-1350
+  C) since the source paper reports two parallel samples at those two
+  temperatures for comparison, not one recommended value — using
+  `TemperatureRange`'s existing min/max shape honestly rather than
+  picking one number arbitrarily. Its sintering duration is not stated in
+  the source and stays `None`, not filled in from a corroborating
+  (but methodologically different, sonochemically-activated) secondary
+  source found during research.
+- Zn3(PO4)2's substitute source is flagged internally as a short (~3
+  page) conference-proceedings-tier paper with an internally
+  inconsistent reported space group (Pnma, the hydrate family, versus the
+  known anhydrous polymorphs) — reflected as `EvidenceStrength::Weak`
+  rather than `Moderate`, not silently treated as equally reliable as the
+  other four records.
+
+**Tests** (`tests/literature_conditions.rs`, new; `tests/metamorphic.rs`,
+extended; `src/process.rs`, extended): every one of the 5 curated
+records' resolution is checked end to end through
+`Planner::with_process_evidence_provider` (exact temperature/duration
+values, real DOI in the resulting evidence, the `SimilarMaterial` scoping
+case, the range-not-point case, the missing-duration-stays-unresolved
+case), plus a targeted unit test for `apply_condition_precedents` itself
+(only fills matching unset fields, ignores a precedent with no matching
+step), plus the provider-return-order metamorphic case. 10 new tests
+total.
+
+**Explicit non-goals, stated up front and held to**:
+`Planner::offline_minimal` and everything built on it (every Phase 8
+fixture, the golden JSON/markdown snapshots, the README's worked example)
+are unchanged — new capability is opt-in via the new constructor only.
+`evidence_strength`'s plan-level aggregate stays pinned at `0.25`
+regardless of condition resolution (weakest-link aggregation, template
+always attaches a `Weak` entry) — not "fixed" with no calibration data to
+justify a different aggregation rule (AGENTS.md §27).
+
+**Docs updated**: `src/score.rs`'s `PlanScoreBreakdown`/
+`ConfidenceAssessment` doc comments (no longer blanket "always" claims —
+scoped to "when no provider resolves a condition"); `docs/evidence_
+model.md` (`CuratedLiteratureRecord` now used); `docs/scientific_scope.md`
+guardrail 1 (names the new provider as the first real satisfier);
+`docs/benchmark_report.md`/`examples/benchmark_report.rs` (regenerated,
+confirmed byte-identical apart from the one updated sentence — the
+benchmark's own fixtures are `offline_minimal`-based and genuinely
+unaffected); `CHANGELOG.md` (`[Unreleased]` entry); `README.md`/
+`README_ja.md` status banners (also corrected two facts that had gone
+stale since Phase 9 wrote them: "not published, not merged to main" was
+no longer true once v0.1.0 actually shipped, and the draft-PR link was
+dead since PR #1 is merged — real staleness caught by reading the
+current banner against reality, not assumed still accurate);
+`src/lib.rs`'s crate doc comment (same correction, plus notes Phase 10
+onward is tracked from `tasks/todo.md`, not `AGENTS.md` §26, which only
+defines the original 9 phases).
+
+**Locally verified, all green**: `cargo fmt --all -- --check`, `cargo
+clippy --workspace --all-targets --all-features -- -D warnings`, `cargo
+test --workspace --all-features` (107 tests: 63 lib + 10 bin + 6
+adversarial + 4 json_roundtrip + 6 literature_conditions + 6 metamorphic
++ 7 provider_failures + 5 validation), `cargo test --workspace
+--no-default-features` and `--no-default-features --features mikiwame`
+(both green, same counts minus the all-features-only bin/json_roundtrip
+suites), `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features
+--no-deps`, `cargo build --features serde,clap --bin gugen`, both
+`wasm32-unknown-unknown` checks, `cargo audit` (0 vulnerabilities),
+`examples/balance_batio3`/`examples/benchmark_report` re-run and diffed
+against checked-in output.

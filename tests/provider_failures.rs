@@ -249,9 +249,11 @@ impl ProcessEvidenceProvider for DuplicatingPrecedentProvider {
         Ok(vec![
             ProcessPrecedent {
                 description: "same precedent".to_string(),
+                conditions: vec![],
             },
             ProcessPrecedent {
                 description: "same precedent".to_string(),
+                conditions: vec![],
             },
         ])
     }

@@ -78,11 +78,41 @@ validated_range!(
     nonneg = true
 );
 
-/// Minimal Phase 1 placeholder for `ProcessEvidenceProvider` outputs.
+/// `ProcessEvidenceProvider` output (AGENTS.md §8). `description` is free
+/// text with no structure -- still valid on its own for a provider that
+/// only has prose precedent to offer. `conditions` (Phase 10) carries
+/// structured, per-purpose temperature/duration/atmosphere/ramp data, each
+/// entry traceable to its own citation; empty for a prose-only precedent.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ProcessPrecedent {
     pub description: String,
+    pub conditions: Vec<ConditionPrecedent>,
+}
+
+/// One provider's structured, citable evidence for how a specific `Heat`
+/// step's conditions should be resolved (Phase 10; AGENTS.md §7/§21.3).
+/// Every field the provider doesn't actually have real, sourced data for
+/// stays `None` -- never fabricated to fill a gap. `evidence_kind`,
+/// `strength`, and `source_id` are set by whichever provider returns this,
+/// not assumed by the planner: `ProcessEvidenceProvider` is also the trait
+/// a user-supplied lab-precedent source implements
+/// (`EvidenceKind::UserProvidedPrecedent`), so a curated-literature-only
+/// assumption in the planner would mislabel provenance for every other
+/// kind of implementation.
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct ConditionPrecedent {
+    pub purpose: HeatingPurpose,
+    pub temperature: Option<TemperatureRange>,
+    pub duration: Option<DurationRange>,
+    pub atmosphere: Option<Atmosphere>,
+    pub ramp: Option<RampRateRange>,
+    pub evidence_kind: EvidenceKind,
+    pub source_id: Option<String>,
+    pub statement: String,
+    pub strength: EvidenceStrength,
+    pub applicable_to: EvidenceScope,
 }
 
 /// AGENTS.md §13: v0.1 supports exactly one route family. Do not
@@ -442,6 +472,82 @@ pub fn conventional_solid_state_template(
     }
 }
 
+/// Splices provider-supplied, cited condition data into `steps`'s `Heat`
+/// fields (Phase 10). Only ever fills an already-`None` slot -- never
+/// overwrites a field some other resolution source already set -- so this
+/// composes with any future resolution source rather than one silently
+/// clobbering another. Returns one `PlanningEvidence` entry per `Heat` step
+/// a precedent actually changed, carrying that precedent's own
+/// `evidence_kind`/`strength`/`source_id`/`applicable_to` rather than a
+/// value this function invents.
+pub(crate) fn apply_condition_precedents(
+    steps: &mut [PlannedStep],
+    precedents: &[ConditionPrecedent],
+) -> Vec<PlanningEvidence> {
+    let mut evidence = Vec::new();
+    for precedent in precedents {
+        for planned in steps.iter_mut() {
+            let ProcessStep::Heat {
+                purpose,
+                temperature,
+                duration,
+                atmosphere,
+                ramp,
+            } = &mut planned.step
+            else {
+                continue;
+            };
+            if *purpose != precedent.purpose {
+                continue;
+            }
+
+            let mut resolved_fields = Vec::new();
+            if temperature.is_none() {
+                if let Some(t) = precedent.temperature {
+                    *temperature = Some(t);
+                    resolved_fields.push("temperature");
+                }
+            }
+            if duration.is_none() {
+                if let Some(d) = precedent.duration {
+                    *duration = Some(d);
+                    resolved_fields.push("duration");
+                }
+            }
+            if atmosphere.is_none() {
+                if let Some(a) = &precedent.atmosphere {
+                    *atmosphere = Some(a.clone());
+                    resolved_fields.push("atmosphere");
+                }
+            }
+            if ramp.is_none() {
+                if let Some(r) = precedent.ramp {
+                    *ramp = Some(r);
+                    resolved_fields.push("ramp rate");
+                }
+            }
+
+            if !resolved_fields.is_empty() {
+                evidence.push(PlanningEvidence {
+                    kind: precedent.evidence_kind,
+                    source_id: precedent.source_id.clone(),
+                    statement: precedent.statement.clone(),
+                    strength: precedent.strength,
+                    applicable_to: precedent.applicable_to,
+                    limitations: vec![format!(
+                        "resolved {} for the {:?} step from this precedent; other \
+                        unresolved fields on this or other steps had no matching \
+                        precedent data",
+                        resolved_fields.join("/"),
+                        purpose,
+                    )],
+                });
+            }
+        }
+    }
+    evidence
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -589,5 +695,116 @@ mod tests {
             "a length mismatch must surface a Severe warning: {:?}",
             result.warnings
         );
+    }
+
+    fn condition_precedent(purpose: HeatingPurpose) -> ConditionPrecedent {
+        ConditionPrecedent {
+            purpose,
+            temperature: Some(TemperatureRange::new(900.0, 900.0).unwrap()),
+            duration: Some(DurationRange::new(2.0, 2.0).unwrap()),
+            atmosphere: Some(Atmosphere::Air),
+            ramp: None,
+            evidence_kind: EvidenceKind::CuratedLiteratureRecord,
+            source_id: Some("10.0000/test".to_string()),
+            statement: "test precedent".to_string(),
+            strength: EvidenceStrength::Moderate,
+            applicable_to: EvidenceScope::ExactTarget,
+        }
+    }
+
+    /// Phase 10: only a step whose `HeatingPurpose` matches the precedent
+    /// gets its fields filled; an already-resolved field is never
+    /// overwritten; a step with no matching purpose is untouched.
+    #[test]
+    fn apply_condition_precedents_only_fills_matching_unset_fields() {
+        let mut steps = vec![
+            PlannedStep {
+                requirement: StepRequirement::Required,
+                step: ProcessStep::Heat {
+                    purpose: HeatingPurpose::Calcination,
+                    temperature: None,
+                    duration: None,
+                    atmosphere: None,
+                    ramp: None,
+                },
+            },
+            PlannedStep {
+                requirement: StepRequirement::Required,
+                step: ProcessStep::Heat {
+                    purpose: HeatingPurpose::Sintering,
+                    // Already resolved by some other source -- must survive
+                    // untouched even though the precedent below also
+                    // targets Sintering.
+                    temperature: Some(TemperatureRange::new(1.0, 1.0).unwrap()),
+                    duration: None,
+                    atmosphere: None,
+                    ramp: None,
+                },
+            },
+        ];
+        let precedents = vec![
+            condition_precedent(HeatingPurpose::Calcination),
+            condition_precedent(HeatingPurpose::Sintering),
+        ];
+
+        let evidence = apply_condition_precedents(&mut steps, &precedents);
+
+        let ProcessStep::Heat {
+            temperature,
+            duration,
+            atmosphere,
+            ..
+        } = &steps[0].step
+        else {
+            panic!("expected Heat step");
+        };
+        assert_eq!(temperature.unwrap().min_celsius, 900.0);
+        assert_eq!(duration.unwrap().min_hours, 2.0);
+        assert!(matches!(atmosphere, Some(Atmosphere::Air)));
+
+        let ProcessStep::Heat { temperature, .. } = &steps[1].step else {
+            panic!("expected Heat step");
+        };
+        assert_eq!(
+            temperature.unwrap().min_celsius,
+            1.0,
+            "an already-resolved field must not be overwritten by a later precedent"
+        );
+
+        assert_eq!(
+            evidence.len(),
+            2,
+            "one evidence entry per step a precedent actually changed: {evidence:?}"
+        );
+        for e in &evidence {
+            assert_eq!(e.kind, EvidenceKind::CuratedLiteratureRecord);
+            assert_eq!(e.source_id.as_deref(), Some("10.0000/test"));
+        }
+    }
+
+    /// A precedent for a purpose no step has (e.g. `Annealing` when only
+    /// `Calcination`/`Sintering` steps exist) must not panic or produce
+    /// evidence -- it simply matches nothing.
+    #[test]
+    fn apply_condition_precedents_ignores_a_precedent_with_no_matching_step() {
+        let mut steps = vec![PlannedStep {
+            requirement: StepRequirement::Required,
+            step: ProcessStep::Heat {
+                purpose: HeatingPurpose::Calcination,
+                temperature: None,
+                duration: None,
+                atmosphere: None,
+                ramp: None,
+            },
+        }];
+        let precedents = vec![condition_precedent(HeatingPurpose::Annealing)];
+
+        let evidence = apply_condition_precedents(&mut steps, &precedents);
+
+        assert!(evidence.is_empty());
+        let ProcessStep::Heat { temperature, .. } = &steps[0].step else {
+            panic!("expected Heat step");
+        };
+        assert!(temperature.is_none());
     }
 }
