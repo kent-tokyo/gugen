@@ -1,8 +1,8 @@
 use gugen::{
     AcceptedPrecursorSet, ApplicabilityAssessment, ApplicabilityLevel, Composition, Element,
-    PlanId, PlanningProvenance, PrecursorId, PrecursorSelection, RankingWeights, RouteFamily,
-    SCHEMA_VERSION, SynthesisPlan, SynthesisPlanningReport, TargetSummary, TemperatureRange,
-    balance, conventional_solid_state_template, score_plan,
+    Kelvin, PlanId, PlanningProvenance, PrecursorId, PrecursorSelection, RankingWeights,
+    RouteFamily, SCHEMA_VERSION, SynthesisPlan, SynthesisPlanningReport, TargetSummary,
+    TemperatureRange, balance, conventional_solid_state_template, score_plan,
 };
 
 fn sample_report() -> SynthesisPlanningReport {
@@ -119,6 +119,17 @@ fn inverted_temperature_range_is_rejected_on_deserialize() {
     let bad = r#"{"min_celsius": 900.0, "max_celsius": 700.0}"#;
     let result: Result<TemperatureRange, _> = serde_json::from_str(bad);
     assert!(result.is_err());
+}
+
+#[test]
+fn kelvin_outside_the_bartel_2018_validated_range_is_rejected_on_deserialize() {
+    let too_hot = "2500.0";
+    let result: Result<Kelvin, _> = serde_json::from_str(too_hot);
+    assert!(result.is_err());
+
+    let in_range = "900.0";
+    let result: Result<Kelvin, _> = serde_json::from_str(in_range);
+    assert!(result.is_ok());
 }
 
 #[test]

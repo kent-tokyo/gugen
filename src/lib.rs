@@ -82,6 +82,7 @@ mod report;
 mod route_suitability;
 mod score;
 mod target;
+mod thermodynamics;
 
 pub use balance::{balance, curated_byproducts};
 #[cfg(feature = "chematic_crystal")]
@@ -130,4 +131,9 @@ pub use score::{
 };
 pub use target::{
     PhaseRequirement, PlanningConstraints, TargetMaterialView, TargetSpecification, TargetStructure,
+};
+pub use thermodynamics::{
+    DecompositionComparison, Kelvin, SolidThermodynamicEntry, ThermodynamicDatasetIdentity,
+    ThermodynamicSelectivityAssessment, balanced_reaction_delta_ev_per_atom,
+    decomposition_margin_ev_per_atom, reduced_mass_amu, relative_solid_gibbs_ev_per_atom,
 };
