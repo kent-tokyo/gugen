@@ -136,11 +136,24 @@ fn a_precursor_identical_to_the_target_plans_as_a_trivial_identity() {
     let planner = Planner::offline_minimal(catalog, PlanningConfig::default());
 
     let report = planner.plan(&target_spec, "2026-08-14T00:00:00Z").unwrap();
-    assert_eq!(report.plans.len(), 1, "{:?}", report.plans);
-    let reaction = report.plans[0].balanced_reaction.as_ref().unwrap();
-    assert_eq!(reaction.reactants.len(), 1);
-    assert_eq!(reaction.reactants[0].coefficient, 1);
-    assert_eq!(reaction.products[0].coefficient, 1);
+    // Since Phase 12, one accepted precursor set yields one plan per
+    // applicable route family (currently 2: ConventionalSolidState and
+    // Mechanochemical) -- both share the same trivial identity reaction.
+    assert_eq!(report.plans.len(), 2, "{:?}", report.plans);
+    for plan in &report.plans {
+        let reaction = plan.balanced_reaction.as_ref().unwrap();
+        assert_eq!(reaction.reactants.len(), 1);
+        assert_eq!(reaction.reactants[0].coefficient, 1);
+        assert_eq!(reaction.products[0].coefficient, 1);
+    }
+    let route_families: std::collections::BTreeSet<_> =
+        report.plans.iter().map(|p| p.route_family).collect();
+    assert_eq!(
+        route_families.len(),
+        2,
+        "the two plans must be distinct route families, not two copies of the same one: {:?}",
+        report.plans
+    );
 }
 
 /// AGENTS.md §26 Phase 6's invalid-target handling, re-checked end to end

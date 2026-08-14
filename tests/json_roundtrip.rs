@@ -1,8 +1,8 @@
 use gugen::{
     AcceptedPrecursorSet, ApplicabilityAssessment, ApplicabilityLevel, Composition, Element,
-    PlanId, PlanningProvenance, PrecursorId, PrecursorSelection, RankingWeights, SCHEMA_VERSION,
-    SynthesisPlan, SynthesisPlanningReport, TargetSummary, TemperatureRange, balance,
-    conventional_solid_state_template, score_plan,
+    PlanId, PlanningProvenance, PrecursorId, PrecursorSelection, RankingWeights, RouteFamily,
+    SCHEMA_VERSION, SynthesisPlan, SynthesisPlanningReport, TargetSummary, TemperatureRange,
+    balance, conventional_solid_state_template, score_plan,
 };
 
 fn sample_report() -> SynthesisPlanningReport {
@@ -52,6 +52,7 @@ fn sample_report() -> SynthesisPlanningReport {
         &template.steps,
         &template.evidence,
         false,
+        RouteFamily::ConventionalSolidState,
         &RankingWeights::default(),
     );
     let mut warnings = template.warnings;

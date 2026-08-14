@@ -69,7 +69,7 @@ pub use process::{
     FormingMethod, GrindingMethod, HeatingPurpose, InertGas, MaterialAmount, MixingMethod,
     PlannedStep, PressureRange, ProcessPrecedent, ProcessStep, ProcessTemplateResult,
     RampRateRange, ReducingAgent, RouteFamily, StepRequirement, TemperatureRange,
-    conventional_solid_state_template,
+    applicable_route_family_templates, conventional_solid_state_template, mechanochemical_template,
 };
 pub use provenance::PlanningProvenance;
 pub use provider::{PrecursorCatalog, ProcessEvidenceProvider, ThermodynamicProvider};

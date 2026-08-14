@@ -333,13 +333,28 @@ fn formula_unit_scale_is_not_currently_normalized_a_documented_gap() {
         .plan(&target(two_units), "2026-08-14T00:00:00Z")
         .unwrap();
 
-    assert_eq!(report_a.plans.len(), 1);
-    assert_eq!(report_b.plans.len(), 1);
+    // Since Phase 12, one accepted precursor set yields one plan per
+    // applicable route family (currently 2) -- this test is about
+    // formula-unit-scale normalization specifically, unrelated to route
+    // families, so it pins down to one family rather than indexing [0]
+    // and accidentally coupling to how many route families exist.
+    let conventional = |report: &gugen::SynthesisPlanningReport| {
+        report
+            .plans
+            .iter()
+            .find(|p| p.route_family == gugen::RouteFamily::ConventionalSolidState)
+            .expect("a ConventionalSolidState plan must exist")
+            .clone()
+    };
+    assert_eq!(report_a.plans.len(), 2);
+    assert_eq!(report_b.plans.len(), 2);
+    let plan_a = conventional(&report_a);
+    let plan_b = conventional(&report_b);
     assert_ne!(
-        report_a.plans[0].plan_id, report_b.plans[0].plan_id,
+        plan_a.plan_id, plan_b.plan_id,
         "documenting current (non-invariant) behavior -- see the doc comment above"
     );
-    let reaction_b = report_b.plans[0].balanced_reaction.as_ref().unwrap();
+    let reaction_b = plan_b.balanced_reaction.as_ref().unwrap();
     assert!(
         reaction_b.reactants.iter().any(|s| s.coefficient == 2),
         "the doubled target forces doubled reactant coefficients rather than being reduced \

@@ -3,7 +3,7 @@ use crate::config::PlanningConfig;
 use crate::error::Result;
 use crate::evidence::{EvidenceKind, EvidenceScope, EvidenceStrength, PlanningEvidence};
 use crate::precursor::{PrecursorId, PrecursorSelection, search_precursor_sets};
-use crate::process::{apply_condition_precedents, conventional_solid_state_template};
+use crate::process::{RouteFamily, applicable_route_family_templates, apply_condition_precedents};
 use crate::provenance::PlanningProvenance;
 use crate::provider::{PrecursorCatalog, ProcessEvidenceProvider, ThermodynamicProvider};
 use crate::reaction::{BalancedReaction, ThermodynamicConditions};
@@ -130,125 +130,138 @@ impl Planner {
 
         let mut plans: Vec<SynthesisPlan> = Vec::with_capacity(outcome.accepted.len());
         for accepted in &outcome.accepted {
-            let mut template = conventional_solid_state_template(composition, accepted);
-            let mut evidence = std::mem::take(&mut template.evidence);
-            let mut provider_warnings = Vec::new();
-            let process_evidence_provider_consulted = self.process_evidence_provider.is_some();
+            // Phase 12: one accepted precursor set can now produce a plan
+            // under more than one route family (e.g. ConventionalSolidState
+            // and Mechanochemical both apply unconditionally). Each gets its
+            // own full pass through provider lookups below -- duplicating a
+            // thermodynamic/process-evidence provider call per route family
+            // sharing the same reaction is a known, accepted inefficiency
+            // (see the plan's cross-phase notes), not a correctness issue.
+            for mut template in applicable_route_family_templates(composition, accepted) {
+                let mut evidence = std::mem::take(&mut template.evidence);
+                let mut provider_warnings = Vec::new();
+                let process_evidence_provider_consulted = self.process_evidence_provider.is_some();
 
-            if let Some(provider) = &self.thermodynamic_provider {
-                match provider
-                    .reaction_energy(&accepted.reaction, &ThermodynamicConditions::default())
-                {
-                    Ok(Some(energy)) => evidence.push(PlanningEvidence {
-                        kind: EvidenceKind::ThermodynamicData,
-                        source_id: None,
-                        statement: format!(
-                            "reaction energy {:.4} eV/atom from the configured \
+                if let Some(provider) = &self.thermodynamic_provider {
+                    match provider
+                        .reaction_energy(&accepted.reaction, &ThermodynamicConditions::default())
+                    {
+                        Ok(Some(energy)) => evidence.push(PlanningEvidence {
+                            kind: EvidenceKind::ThermodynamicData,
+                            source_id: None,
+                            statement: format!(
+                                "reaction energy {:.4} eV/atom from the configured \
                             ThermodynamicProvider",
-                            energy.value_ev_per_atom()
-                        ),
-                        strength: EvidenceStrength::Moderate,
-                        applicable_to: EvidenceScope::ExactTarget,
-                        limitations: vec![
-                            "a raw reaction energy is not converted into a favorability \
+                                energy.value_ev_per_atom()
+                            ),
+                            strength: EvidenceStrength::Moderate,
+                            applicable_to: EvidenceScope::ExactTarget,
+                            limitations: vec![
+                                "a raw reaction energy is not converted into a favorability \
                                 judgment: thermodynamic favorability is not experimental \
                                 likelihood (AGENTS.md §4.3)"
-                                .to_string(),
-                        ],
-                    }),
-                    Ok(None) => {}
-                    Err(err) => provider_warnings.push(PlanningWarning {
-                        message: format!(
-                            "thermodynamic provider failed for this candidate, \
+                                    .to_string(),
+                            ],
+                        }),
+                        Ok(None) => {}
+                        Err(err) => provider_warnings.push(PlanningWarning {
+                            message: format!(
+                                "thermodynamic provider failed for this candidate, \
                             continuing without its data: {err}"
-                        ),
-                        severity: WarningSeverity::Info,
-                    }),
-                }
-            }
-
-            let precursors: Vec<PrecursorSelection> = accepted
-                .precursors
-                .iter()
-                .zip(&accepted.reaction.reactants)
-                .map(|(id, species)| PrecursorSelection {
-                    precursor: id.clone(),
-                    formula_units: species.coefficient,
-                })
-                .collect();
-
-            if let Some(provider) = &self.process_evidence_provider {
-                match provider.precedents(target, &precursors) {
-                    Ok(precedents) => {
-                        for precedent in precedents {
-                            // An empty description means this precedent has nothing
-                            // prose-only to add (Phase 10's literature condition
-                            // provider, for one) -- pushing a blank statement as
-                            // evidence would be noise, not information.
-                            if !precedent.description.is_empty() {
-                                evidence.push(PlanningEvidence {
-                                    kind: EvidenceKind::UserProvidedPrecedent,
-                                    source_id: None,
-                                    statement: precedent.description,
-                                    strength: EvidenceStrength::Weak,
-                                    applicable_to: EvidenceScope::SimilarMaterial,
-                                    limitations: vec![
-                                        "this precedent's free-text description alone \
-                                            carries no structured method/condition detail"
-                                            .to_string(),
-                                    ],
-                                });
-                            }
-                            // Phase 10: splice any structured, cited condition data
-                            // into this template's still-unresolved Heat steps
-                            // before scoring, rather than only ever adding
-                            // free-text evidence that never changes what's
-                            // actually planned.
-                            evidence.extend(apply_condition_precedents(
-                                &mut template.steps,
-                                &precedent.conditions,
-                            ));
-                        }
+                            ),
+                            severity: WarningSeverity::Info,
+                        }),
                     }
-                    Err(err) => provider_warnings.push(PlanningWarning {
-                        message: format!(
-                            "process evidence provider failed for this candidate, \
-                            continuing without its data: {err}"
-                        ),
-                        severity: WarningSeverity::Info,
-                    }),
                 }
+
+                let precursors: Vec<PrecursorSelection> = accepted
+                    .precursors
+                    .iter()
+                    .zip(&accepted.reaction.reactants)
+                    .map(|(id, species)| PrecursorSelection {
+                        precursor: id.clone(),
+                        formula_units: species.coefficient,
+                    })
+                    .collect();
+
+                if let Some(provider) = &self.process_evidence_provider {
+                    match provider.precedents(target, &precursors) {
+                        Ok(precedents) => {
+                            for precedent in precedents {
+                                // An empty description means this precedent has nothing
+                                // prose-only to add (Phase 10's literature condition
+                                // provider, for one) -- pushing a blank statement as
+                                // evidence would be noise, not information.
+                                if !precedent.description.is_empty() {
+                                    evidence.push(PlanningEvidence {
+                                        kind: EvidenceKind::UserProvidedPrecedent,
+                                        source_id: None,
+                                        statement: precedent.description,
+                                        strength: EvidenceStrength::Weak,
+                                        applicable_to: EvidenceScope::SimilarMaterial,
+                                        limitations: vec![
+                                            "this precedent's free-text description alone \
+                                            carries no structured method/condition detail"
+                                                .to_string(),
+                                        ],
+                                    });
+                                }
+                                // Phase 10: splice any structured, cited condition data
+                                // into this template's still-unresolved Heat steps
+                                // before scoring, rather than only ever adding
+                                // free-text evidence that never changes what's
+                                // actually planned.
+                                evidence.extend(apply_condition_precedents(
+                                    &mut template.steps,
+                                    &precedent.conditions,
+                                ));
+                            }
+                        }
+                        Err(err) => provider_warnings.push(PlanningWarning {
+                            message: format!(
+                                "process evidence provider failed for this candidate, \
+                            continuing without its data: {err}"
+                            ),
+                            severity: WarningSeverity::Info,
+                        }),
+                    }
+                }
+
+                let assessment = score_plan(
+                    composition,
+                    &applicability,
+                    Some(&accepted.reaction),
+                    &template.steps,
+                    &evidence,
+                    process_evidence_provider_consulted,
+                    template.route_family,
+                    &self.config.ranking_weights,
+                );
+
+                let mut plan_warnings = template.warnings;
+                plan_warnings.extend(assessment.warnings);
+                plan_warnings.extend(provider_warnings);
+
+                plans.push(SynthesisPlan {
+                    plan_id: derive_plan_id(
+                        &accepted.precursors,
+                        &accepted.reaction,
+                        template.route_family,
+                    ),
+                    route_family: template.route_family,
+                    precursors,
+                    balanced_reaction: Some(accepted.reaction.clone()),
+                    steps: template.steps,
+                    score: assessment.score,
+                    confidence: assessment.confidence,
+                    applicability: assessment.applicability,
+                    evidence,
+                    warnings: plan_warnings,
+                    assumptions: assessment.assumptions,
+                    unresolved: assessment.unresolved,
+                    manual_review_required: assessment.manual_review_required,
+                });
             }
-
-            let assessment = score_plan(
-                composition,
-                &applicability,
-                Some(&accepted.reaction),
-                &template.steps,
-                &evidence,
-                process_evidence_provider_consulted,
-                &self.config.ranking_weights,
-            );
-
-            let mut plan_warnings = template.warnings;
-            plan_warnings.extend(assessment.warnings);
-            plan_warnings.extend(provider_warnings);
-
-            plans.push(SynthesisPlan {
-                plan_id: derive_plan_id(&accepted.precursors, &accepted.reaction),
-                route_family: template.route_family,
-                precursors,
-                balanced_reaction: Some(accepted.reaction.clone()),
-                steps: template.steps,
-                score: assessment.score,
-                confidence: assessment.confidence,
-                applicability: assessment.applicability,
-                evidence,
-                warnings: plan_warnings,
-                assumptions: assessment.assumptions,
-                unresolved: assessment.unresolved,
-                manual_review_required: assessment.manual_review_required,
-            });
         }
 
         // Deterministic descending rank; ties break on plan_id so ordering
@@ -378,9 +391,17 @@ fn abstain(
 }
 
 /// Content-derived, not position-derived (AGENTS.md §20: "plan IDを決定的
-/// にする"): the same precursor set and reaction always get the same id
-/// regardless of where it lands in ranked order or catalog insertion order.
-fn derive_plan_id(precursors: &[PrecursorId], reaction: &BalancedReaction) -> PlanId {
+/// にする"): the same precursor set, reaction, and route family always get
+/// the same id regardless of where it lands in ranked order or catalog
+/// insertion order. `route_family` is part of the hash (Phase 12): since
+/// Phase 12, the same accepted precursor set can produce a plan under more
+/// than one route family, and those are different plans that must not
+/// collide on `plan_id`.
+fn derive_plan_id(
+    precursors: &[PrecursorId],
+    reaction: &BalancedReaction,
+    route_family: RouteFamily,
+) -> PlanId {
     use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     let mut ids: Vec<&str> = precursors.iter().map(|p| p.0.as_str()).collect();
@@ -395,6 +416,7 @@ fn derive_plan_id(precursors: &[PrecursorId], reaction: &BalancedReaction) -> Pl
         }
         species.coefficient.hash(&mut hasher);
     }
+    format!("{route_family:?}").hash(&mut hasher);
     PlanId(format!("plan-{:016x}", hasher.finish()))
 }
 
@@ -653,6 +675,11 @@ mod tests {
                 .plan(&target, "2026-08-14T00:00:00Z")
                 .unwrap();
 
+        // Since Phase 12, one precursor set can produce a plan under more
+        // than one route family -- the key must include `route_family` too,
+        // or two distinct plans (same precursors, different route family)
+        // collide on this map's key and one is silently dropped, which
+        // would make this assertion vacuous for whichever one survives.
         let plan_key = |plan: &SynthesisPlan| {
             let mut ids: Vec<String> = plan
                 .precursors
@@ -660,14 +687,19 @@ mod tests {
                 .map(|s| s.precursor.0.clone())
                 .collect();
             ids.sort();
-            ids
+            (ids, plan.route_family)
         };
-        let baseline_by_precursors: std::collections::BTreeMap<Vec<String>, &str> = baseline
-            .plans
-            .iter()
-            .map(|p| (plan_key(p), p.plan_id.0.as_str()))
-            .collect();
-        assert!(!baseline_by_precursors.is_empty());
+        let baseline_by_precursors: std::collections::BTreeMap<(Vec<String>, RouteFamily), &str> =
+            baseline
+                .plans
+                .iter()
+                .map(|p| (plan_key(p), p.plan_id.0.as_str()))
+                .collect();
+        assert_eq!(
+            baseline_by_precursors.len(),
+            baseline.plans.len(),
+            "baseline plans must not collide on (precursor set, route family)"
+        );
 
         for plan in &augmented.plans {
             if let Some(&expected_id) = baseline_by_precursors.get(&plan_key(plan)) {

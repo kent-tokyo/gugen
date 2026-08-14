@@ -8,7 +8,7 @@
 use clap::{Parser, Subcommand, ValueEnum};
 use gugen::{
     BalancedReaction, Composition, Element, InMemoryPrecursorCatalog, Planner, PlanningConfig,
-    PrecursorCandidate, ProcessStep, RankingWeights, ReactionSpecies, SynthesisPlan,
+    PrecursorCandidate, ProcessStep, RankingWeights, ReactionSpecies, RouteFamily, SynthesisPlan,
     SynthesisPlanningReport, TargetSpecification, TargetSummary, ranking_weights_digest,
 };
 use std::path::{Path, PathBuf};
@@ -266,13 +266,18 @@ fn doctor_report() -> String {
         deterministic mode: yes -- the planning core never reads the system clock; \
         execution_timestamp is supplied by this CLI at the moment each `plan`/`batch` runs\n\
         supported domain: bulk polycrystalline inorganic solids via conventional solid-state \
-        synthesis (see docs/scientific_scope.md for the full scope)\n\
-        known limitations: single route family (ConventionalSolidState); no hazard/safety \
-        database (manual_review_required is always true); chematic-crystal not integrated; \
-        full list in CHANGELOG.md's \"Known limitations\" section",
+        or mechanochemical (structural route only, no detailed milling conditions -- \
+        AGENTS.md §3) synthesis (see docs/scientific_scope.md for the full scope)\n\
+        known limitations: no per-route-family suitability precedent (every applicable route \
+        family is offered for every accepted precursor set, unranked by real-world fit); no \
+        hazard/safety database (manual_review_required is always true); chematic-crystal not \
+        integrated; full list in CHANGELOG.md's \"Known limitations\" section",
         env!("CARGO_PKG_VERSION"),
         gugen::SCHEMA_VERSION,
-        gugen::RouteFamily::ConventionalSolidState,
+        [
+            RouteFamily::ConventionalSolidState,
+            RouteFamily::Mechanochemical,
+        ],
         ranking_weights_digest(&RankingWeights::default()),
     )
 }
