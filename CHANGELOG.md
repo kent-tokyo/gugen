@@ -65,6 +65,94 @@ each entry.
   reproducibly-sourced corpus is Phase 11's job, at a different trust
   tier.
 
+### Added
+
+- **Phase 11 — large-scale blind benchmark.** New `benchmarks/` directory
+  (AGENTS.md §23, comparison/corpus tooling isolated from the crate's own
+  dependency tree): `benchmarks/fetch_kononova.py` reproducibly re-fetches
+  the same licensed Kononova et al. 2019 corpus (CC BY 4.0, re-verified
+  live against the figshare API on every run) and filters it down to a
+  1500-reaction holdout sample (`benchmarks/data/kononova_sample.jsonl`,
+  `benchmarks/data/ATTRIBUTION.md`) with every `(target, precursor-set)`
+  route already used by `tests/validation.rs`'s 5 fixtures or Phase 10's
+  curated records excluded — matched by normalized elemental ratio, not
+  DOI, since several of those routes (e.g. BaTiO3's) are independently
+  reported by dozens of DOIs in this same corpus, so DOI-only exclusion
+  would have left near-duplicate leaked entries in the holdout set. New
+  `tests/large_scale_benchmark.rs` (breadth + anti-leakage assertions,
+  cheap, part of `cargo test`) and `examples/large_scale_benchmark.rs` →
+  `docs/large_scale_benchmark_report.md` (full §22 metric computation,
+  regenerated and diffed byte-identical before commit, same convention as
+  `examples/benchmark_report.rs`).
+- A fixed, corpus-derived decoy pool (the most frequent precursor
+  formulas in the sample itself, filtered to share ≥1 element with each
+  row's target, capped at 8 per row — the cap chosen by directly
+  measuring `RejectionCode::SearchBudgetExhausted` against this sample,
+  not assumed) is added to every row's catalog so precursor-set recovery
+  is a real discrimination task rather than a single-candidate
+  pass-through.
+
+### Fixed
+
+- **`benchmarks/fetch_kononova.py` used a wrong-provenance copy of the
+  Kononova corpus while under development, caught before this phase's
+  first commit by actually running the script's live (non-`--local`)
+  path rather than trusting a cached dev copy.** The dataset genuinely
+  hosted at the officially-cited figshare DOI (9722159, the one Phase 8
+  license-checked as CC BY 4.0) is a bare JSON list of 19,488 reactions;
+  the script's first draft assumed a `{"reactions": [...]}`-wrapped shape
+  with 30,031 entries, matching a cached local file that turned out to
+  have been downloaded, in an earlier session, from
+  `CederGroupHub/text-mined-synthesis_public`'s GitHub repo — a
+  *different*, later (2019-12-03 vs. the figshare deposit's 2019-06-27),
+  differently-shaped snapshot with `license: null` per the GitHub API,
+  never itself license-verified. Fixed by indexing the real top-level
+  list directly (a shape mismatch now fails loudly, not silently) and
+  correcting `EXPECTED_REACTION_COUNT` to 19,488. Full finding, including
+  its effect on already-merged Phase 8/Phase 10 numeric claims, is a
+  dedicated §28-format report in `tasks/todo.md`'s Phase 11 section — not
+  something this phase silently patched and moved past.
+
+### Known limitations
+
+- **`RejectionCode::MissingTargetElement` dominates rejections at this
+  scale (95.4% of all rejected candidates), not
+  `UnsupportedByproductRequired` as originally expected going into this
+  phase** — a mechanical consequence of `search_precursor_sets` checking
+  element coverage before any byproduct/balance check, combined with the
+  decoy pool generating many small subsets that don't happen to cover one
+  specific target's exact elements. The originally-expected finding does
+  hold once this combinatorial noise is factored out: among the
+  combinations that *do* pass the element-coverage gate,
+  `UnsupportedByproductRequired` accounts for 90.2% of what's left. Not
+  widened reactively — see `docs/large_scale_benchmark_report.md`.
+- Condition-resolution coverage from Phase 10's curated provider does not
+  generalize beyond its 5 curated targets, confirmed at this scale (0/1651
+  resolved among holdout rows whose target isn't one of those 5) — the 6
+  rows that do share a Phase-10-covered target (via a different precursor
+  route) resolve `EvidenceScope::SimilarMaterial`, not evidence of
+  unseen-target prediction.
+- This 1500-reaction sample is one fixed, seeded downsample of a larger
+  eligible pool (8,936 rows after filtering); not re-sampled or tuned
+  against gugen's own results on it (AGENTS.md §27).
+- `tests/validation.rs`'s citation text states DOI-attestation counts (19/
+  20/2/88 independent papers for LaAlO3/MgAl2O4/Zn3(PO4)2/BaTiO3) and a
+  "30,031-reaction dataset" size that do not match the correctly-licensed
+  corpus (recounted directly: 10/16/0/83, 19,488 reactions) — a
+  consequence of the same wrong-provenance file above. Every
+  representative DOI Phase 8 actually cites is still present and still
+  reports the same route in the correct corpus (so the fixtures are not
+  fabricated), except Zn3(PO4)2's: the correct corpus's own text-mining
+  extraction for that DOI reports a complex doped-glass formula, not
+  plain `Zn3(PO4)2` — independently corroborating Phase 10's separate
+  finding that this DOI's paper is a Sm-doped phosphate glass study, not
+  a `Zn3(PO4)2` synthesis. **Not corrected in this phase** — deliberately
+  left as a flagged, unresolved item for whoever owns Phase 8's fixtures,
+  since rewriting the counts (and deciding what the Zn3(PO4)2 fixture
+  should even claim, given its route's zero attestation in the licensed
+  data) is a fixture-design decision, not this phase's number to change
+  unilaterally. Full detail in `tasks/todo.md`'s Phase 11 §28 report.
+
 ## [0.1.0] - 2026-08-14
 
 Initial release. Published to [crates.io](https://crates.io/crates/gugen)
