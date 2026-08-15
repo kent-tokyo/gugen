@@ -199,13 +199,19 @@ pub struct RejectedObservation {
 }
 
 /// What happened during a [`LiteratureObservationCorpus::load`] call. A
-/// complete accounting of the input: `accepted + duplicates_collapsed +
-/// rejected.len()` always equals the snapshot's `observations` array
-/// length. `accepted` is counted *before* deduplication (how many entries
-/// parsed successfully at all) -- it is deliberately not the same number
-/// as the final loaded corpus's own `len()`, which is `accepted -
-/// duplicates_collapsed`; a reader wanting "how many end up queryable"
-/// wants the corpus's `len()`, not this field.
+/// complete accounting of the input: `accepted + rejected.len()` always
+/// equals the snapshot's `observations` array length -- every input
+/// record either parsed successfully (contributing to `accepted`) or
+/// didn't (contributing to `rejected`), mutually exclusively.
+/// `duplicates_collapsed` is *not* a third disjoint count on top of
+/// those two -- it's a subset breakdown *within* `accepted`, counting
+/// how many of the successfully-parsed entries were then found to be
+/// duplicates of another and collapsed. `accepted` itself is counted
+/// *before* deduplication (how many entries parsed successfully at
+/// all) -- it is deliberately not the same number as the final loaded
+/// corpus's own `len()`, which is `accepted - duplicates_collapsed`; a
+/// reader wanting "how many end up queryable" wants the corpus's
+/// `len()`, not this field.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LoadReport {
     pub accepted: usize,

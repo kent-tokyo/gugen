@@ -1,7 +1,10 @@
 use crate::composition::{Composition, Element};
 use crate::error::{GugenError, Result, require_finite};
 use crate::evidence::{EvidenceStrength, PlanningEvidence};
-use crate::process::{ConditionConflict, PlannedStep, ProcessStep, RouteFamily};
+use crate::process::{
+    CONDITION_FIELD_ATMOSPHERE, CONDITION_FIELD_DURATION, CONDITION_FIELD_RAMP_RATE,
+    CONDITION_FIELD_TEMPERATURE, ConditionConflict, PlannedStep, ProcessStep, RouteFamily,
+};
 use crate::reaction::BalancedReaction;
 use crate::report::{
     ApplicabilityAssessment, PlanningWarning, UnresolvedRequirement, WarningSeverity,
@@ -330,10 +333,10 @@ fn collect_unresolved(
                 ..
             } => {
                 let named = [
-                    (temperature.is_none(), "temperature"),
-                    (duration.is_none(), "duration"),
-                    (atmosphere.is_none(), "atmosphere"),
-                    (ramp.is_none(), "ramp rate"),
+                    (temperature.is_none(), CONDITION_FIELD_TEMPERATURE),
+                    (duration.is_none(), CONDITION_FIELD_DURATION),
+                    (atmosphere.is_none(), CONDITION_FIELD_ATMOSPHERE),
+                    (ramp.is_none(), CONDITION_FIELD_RAMP_RATE),
                 ];
                 for (is_unresolved, field) in named {
                     if is_unresolved {
@@ -360,6 +363,31 @@ fn collect_unresolved(
         }
     }
     unresolved
+}
+
+/// `RankingWeights` has fully public `f64` fields and no validating
+/// constructor (matching this crate's existing precedent for other
+/// caller-tunable weight/config types), so a caller can hand `score_plan`
+/// a non-finite or negative weight. Treating such a weight as
+/// contributing `0.0` (i.e. excluding it from its side's weighted
+/// average) mirrors `score_plan`'s own existing graceful-degradation
+/// pattern for an all-zero `weight_sum`, and is what keeps a malformed
+/// weight from turning into a `NaN` that would otherwise reach
+/// `Score01::new(...).expect(...)` and panic --
+/// `f64::INFINITY * a_finite_value / f64::INFINITY` is `NaN`, and
+/// `NaN.clamp(0.0, 1.0)` is still `NaN` (documented `f64::clamp`
+/// behavior), not a value `Score01::new` would accept.
+///
+/// `RankingWeights`' seventh field, `thermodynamic_support`, is not read
+/// by `score_plan` today (see its doc comment below) and so is never
+/// passed here -- if a future phase wires it into the average, that read
+/// needs this same treatment.
+fn sanitize_weight(weight: f64) -> f64 {
+    if weight.is_finite() && weight >= 0.0 {
+        weight
+    } else {
+        0.0
+    }
 }
 
 /// Scores one plan's ingredients (AGENTS.md §13/§16). `route_family`
@@ -454,12 +482,21 @@ pub fn score_plan(
 
     let positive_components: Vec<(f64, f64)> = vec![
         (
-            weights.stoichiometric_validity,
+            sanitize_weight(weights.stoichiometric_validity),
             stoichiometric_validity.value(),
         ),
-        (weights.precursor_coverage, precursor_coverage.value()),
-        (weights.process_simplicity, process_simplicity.value()),
-        (weights.evidence_strength, evidence_strength.value()),
+        (
+            sanitize_weight(weights.precursor_coverage),
+            precursor_coverage.value(),
+        ),
+        (
+            sanitize_weight(weights.process_simplicity),
+            process_simplicity.value(),
+        ),
+        (
+            sanitize_weight(weights.evidence_strength),
+            evidence_strength.value(),
+        ),
     ];
     let weight_sum: f64 = positive_components.iter().map(|(w, _)| w).sum();
     let positive_average = if weight_sum > 0.0 {
@@ -475,8 +512,14 @@ pub fn score_plan(
     // can swamp a legitimately strong positive_average just because it
     // wasn't divided by anything.
     let penalty_components: Vec<(f64, f64)> = vec![
-        (weights.safety_penalty, safety_penalty.value()),
-        (weights.uncertainty_penalty, uncertainty_penalty.value()),
+        (
+            sanitize_weight(weights.safety_penalty),
+            safety_penalty.value(),
+        ),
+        (
+            sanitize_weight(weights.uncertainty_penalty),
+            uncertainty_penalty.value(),
+        ),
     ];
     let penalty_weight_sum: f64 = penalty_components.iter().map(|(w, _)| w).sum();
     let penalty_average = if penalty_weight_sum > 0.0 {
@@ -893,6 +936,26 @@ mod tests {
             RouteFamily::ConventionalSolidState,
             &RankingWeights::default(),
         );
+        // Exact counts, not just the relative inequality above: `step_count`
+        // is silently clamped into `step_bounds`'s `[min, max]` range in
+        // `score_plan`, so a future accidental extra step in
+        // `conventional_solid_state_template` would still pass the
+        // inequality check (both routes would just shift together) --
+        // mirrors `mechanochemical_process_simplicity_is_scored_against_its_own_family_range`'s
+        // own exact-count assertions for its sibling route family.
+        assert_eq!(
+            routes.oxide_steps.len(),
+            7,
+            "oxide route must be at ConventionalSolidState's own minimum"
+        );
+        assert_eq!(
+            routes.carbonate_steps.len(),
+            9,
+            "carbonate route (extra CO2-releasing decomposition step) must be \
+             at ConventionalSolidState's own maximum"
+        );
+        assert_eq!(oxide.score.process_simplicity, Score01::ONE);
+        assert_eq!(carbonate.score.process_simplicity, Score01::ZERO);
         assert!(
             carbonate.score.process_simplicity.value() < oxide.score.process_simplicity.value()
         );
@@ -963,5 +1026,65 @@ mod tests {
         };
         let c = ranking_weights_digest(&changed);
         assert_ne!(a, c);
+    }
+
+    /// `RankingWeights` has no validating constructor, so nothing stops a
+    /// caller from constructing one with a non-finite component. Before
+    /// the fix this made `weight_sum` infinite, `positive_average` a
+    /// `NaN` (`inf * finite / inf`), and
+    /// `Score01::new(NaN.clamp(0.0, 1.0)).expect(...)` panic --
+    /// `score_plan` must instead treat the malformed weight as
+    /// contributing nothing and still return a valid, finite score.
+    #[test]
+    fn score_plan_does_not_panic_on_a_non_finite_weight() {
+        let (target, routes) = carbonate_and_oxide_routes();
+        let weights = RankingWeights {
+            stoichiometric_validity: f64::INFINITY,
+            ..RankingWeights::default()
+        };
+        let assessment = score_plan(
+            &target,
+            &in_domain(),
+            Some(&routes.oxide_reaction),
+            &routes.oxide_steps,
+            &routes.oxide_evidence,
+            false,
+            &[],
+            RouteFamily::ConventionalSolidState,
+            &weights,
+        );
+        assert!(
+            assessment.score.total_ranking_score.value().is_finite(),
+            "a non-finite weight must not make the total score non-finite: {:?}",
+            assessment.score
+        );
+    }
+
+    /// Same hazard, the other sign: a negative weight (e.g. a caller
+    /// mistake, not overflow) must also be excluded rather than
+    /// silently flipping a component's contribution to negative.
+    #[test]
+    fn score_plan_does_not_panic_on_a_negative_weight() {
+        let (target, routes) = carbonate_and_oxide_routes();
+        let weights = RankingWeights {
+            uncertainty_penalty: -1.0,
+            ..RankingWeights::default()
+        };
+        let assessment = score_plan(
+            &target,
+            &in_domain(),
+            Some(&routes.oxide_reaction),
+            &routes.oxide_steps,
+            &routes.oxide_evidence,
+            false,
+            &[],
+            RouteFamily::ConventionalSolidState,
+            &weights,
+        );
+        assert!(
+            assessment.score.total_ranking_score.value().is_finite(),
+            "a negative weight must not make the total score non-finite: {:?}",
+            assessment.score
+        );
     }
 }

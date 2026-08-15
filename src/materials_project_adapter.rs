@@ -24,6 +24,7 @@ use crate::composition::Composition;
 use crate::error::ProviderError;
 use crate::provider::ThermodynamicProvider;
 use crate::reaction::{BalancedReaction, CompetingPhase, ReactionEnergy, ThermodynamicConditions};
+use crate::thermodynamics::check_element_conservation;
 use std::collections::BTreeSet;
 
 /// A `ThermodynamicProvider` over a fixed, caller-supplied snapshot of
@@ -77,11 +78,23 @@ impl ThermodynamicProvider for MaterialsProjectSnapshotProvider {
     /// a reaction energy computed from some-but-not-all species would
     /// silently misrepresent "no data for this reaction" as "a real,
     /// if incomplete, answer."
+    ///
+    /// `Err(ProviderError::MalformedRecord(_))` if `reaction` doesn't
+    /// conserve elements -- `BalancedReaction::new` doesn't itself
+    /// guarantee this for a hand-constructed reaction that never went
+    /// through `balance.rs`'s solver, so this reuses
+    /// `thermodynamics::check_element_conservation` (the same check
+    /// `balanced_reaction_delta_ev_per_atom` runs) rather than silently
+    /// computing a meaningless-but-plausible-looking energy for an
+    /// unbalanced reaction.
     fn reaction_energy(
         &self,
         reaction: &BalancedReaction,
         _conditions: &ThermodynamicConditions,
     ) -> std::result::Result<Option<ReactionEnergy>, ProviderError> {
+        check_element_conservation(reaction)
+            .map_err(|e| ProviderError::MalformedRecord(e.to_string()))?;
+
         let mut product_total = 0.0;
         for species in &reaction.products {
             let Some(energy) = self.energy_for(&species.composition) else {
@@ -256,6 +269,33 @@ mod tests {
         // the result would be -1.0 (this test's other case), so this also
         // proves the *lower* energy was picked, not just "a consistent one".
         assert_eq!(a.value_ev_per_atom(), 2.0);
+    }
+
+    /// Mirrors `thermodynamics::balanced_reaction_delta_rejects_element_imbalance`:
+    /// `BalancedReaction::new` accepts a reaction with mismatched
+    /// reactant/product element totals (1 Fe + 1 O vs. 2 Fe + 3 O here) --
+    /// `reaction_energy` must catch this itself rather than silently
+    /// producing a meaningless-but-plausible energy value.
+    #[test]
+    fn reaction_energy_rejects_element_imbalance() {
+        let feo = composition(&[("Fe", 1.0), ("O", 1.0)]);
+        let fe2o3 = composition(&[("Fe", 2.0), ("O", 3.0)]);
+        let reaction = BalancedReaction::new(
+            vec![species(&[("Fe", 1.0), ("O", 1.0)], 1)],
+            vec![species(&[("Fe", 2.0), ("O", 3.0)], 1)],
+        )
+        .unwrap();
+
+        let provider = MaterialsProjectSnapshotProvider::from_entries(vec![
+            CompetingPhase::new(feo, -2.0).unwrap(),
+            CompetingPhase::new(fe2o3, -8.0).unwrap(),
+        ]);
+
+        let result = provider.reaction_energy(&reaction, &ThermodynamicConditions::default());
+        assert!(
+            matches!(result, Err(ProviderError::MalformedRecord(_))),
+            "expected MalformedRecord for an unbalanced reaction, got {result:?}"
+        );
     }
 
     #[test]

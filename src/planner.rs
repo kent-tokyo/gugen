@@ -626,8 +626,14 @@ fn enabled_features() -> Vec<String> {
     if cfg!(feature = "mikiwame") {
         features.push("mikiwame".to_string());
     }
+    if cfg!(feature = "chematic_crystal") {
+        features.push("chematic_crystal".to_string());
+    }
     if cfg!(feature = "materials_project") {
         features.push("materials_project".to_string());
+    }
+    if cfg!(feature = "literature_corpus") {
+        features.push("literature_corpus".to_string());
     }
     features
 }

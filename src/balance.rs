@@ -214,9 +214,12 @@ fn scale_to_integers(vector: &[Frac]) -> Result<Option<Vec<u64>>> {
         lcm = next;
     }
 
+    let lcm_frac = Frac::new(lcm, 1)?;
     let mut integers: Vec<i128> = Vec::with_capacity(vector.len());
     for f in vector {
-        let scaled = f.checked_mul(Frac::new(lcm, 1)?)?;
+        let Ok(scaled) = f.checked_mul(lcm_frac) else {
+            return Ok(None);
+        };
         debug_assert_eq!(scaled.denominator(), 1);
         integers.push(scaled.numerator());
     }
@@ -585,6 +588,25 @@ mod tests {
         assert!(
             result.is_none(),
             "LCM of two near-i128::MAX denominators must overflow, not panic"
+        );
+    }
+
+    /// Distinct from the test above: that one overflows at the
+    /// `checked_lcm` step (huge denominators). This one keeps the LCM
+    /// itself small (2) but gives one entry a numerator already at
+    /// `i128::MAX`, so the multiply-by-LCM step overflows instead --
+    /// the bug this test guards against silently let that overflow
+    /// propagate as `Err` (via a bare `?`) rather than the documented
+    /// `Ok(None)` "skip this candidate" contract.
+    #[test]
+    fn scale_to_integers_reports_multiply_overflow_as_no_solution_not_an_error() {
+        let huge_numerator = Frac::new(i128::MAX, 1).unwrap();
+        let denominator_two = Frac::new(1, 2).unwrap();
+        let result = scale_to_integers(&[huge_numerator, denominator_two]);
+        assert!(
+            matches!(result, Ok(None)),
+            "a numerator already at i128::MAX times an LCM of 2 must overflow \
+             the multiply step as Ok(None), not Err: {result:?}"
         );
     }
 }

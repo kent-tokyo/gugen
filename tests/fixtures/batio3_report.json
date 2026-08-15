@@ -526,7 +526,9 @@
       "serde",
       "clap",
       "mikiwame",
-      "materials_project"
+      "chematic_crystal",
+      "materials_project",
+      "literature_corpus"
     ]
   }
 }
