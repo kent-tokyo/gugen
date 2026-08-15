@@ -83,6 +83,7 @@ fn sample_report() -> SynthesisPlanningReport {
             assumptions: assessment.assumptions,
             unresolved: assessment.unresolved,
             manual_review_required: assessment.manual_review_required,
+            literature_evidence: None,
         }],
         rejected_candidates: vec![],
         unresolved: vec![],

@@ -266,6 +266,47 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   deferred to a separately-triggered future "Integration" phase. See
   `docs/literature_observation_provider.md`'s "Cross-DOI comparison"
   section for the full design and numbers.
+- **v0.4.0 Integration -- reference-only literature evidence in
+  `Planner`.** New `SynthesisPlan.literature_evidence:
+  Option<LiteratureRouteEvidence>` and `Planner::with_literature_evidence_provider`,
+  populated when a `LiteratureEvidenceProvider` finds a match for a
+  plan's exact `(target, precursors, route_family)`. Scoped explicitly:
+  given Phase 20D's ~0% auto-applicable finding and Phase 20C's 53.6%
+  step-count-diversity / ~78% temperature-conflict rates, this is
+  evidence and warning surfacing only -- no `ProcessStep` auto-fill, no
+  `uncertainty_penalty`/`confidence`/`score`/ranking change of any kind,
+  no `ConditionPrecedent` conversion, no `HeatingPurpose` inference, no
+  application to `Mechanochemical`. Structural, not a promise:
+  `LiteratureRouteEvidence` is never placed into any of `score_plan`'s
+  three score-affecting inputs (`evidence`, `condition_conflicts`,
+  `process_evidence_provider_consulted`) -- it is looked up and attached
+  to `SynthesisPlan` only *after* `score_plan` has already returned, as
+  its own field that function never receives. Verified over 324 real
+  plans from a 200-route real-corpus sample: 0 score/confidence/ranking
+  inversions, 0 `ProcessStep` changes, checked as a hard assertion in
+  `examples/literature_evidence_integration_report.rs`, not just
+  observed. `LiteratureEvidenceProvider` and its evidence types
+  (`literature_evidence.rs`, moved out of the `literature_corpus`-gated
+  module they originated in during Phase 20C) are always compiled --
+  `Planner`'s public API and `SynthesisPlan`'s JSON schema never change
+  shape depending on which crate features are enabled; only the real
+  corpus-backed implementation (`LiteratureObservationCorpusProvider`)
+  is feature-gated, same split `ThermodynamicProvider` already has
+  against `MaterialsProjectSnapshotProvider`. An `Info`-severity
+  `PlanningWarning` disclosure surfaces on *every* plan that gets
+  `literature_evidence` attached, not only conflict/shape-diversity
+  cases -- a clean unanimous `Agreement` is exactly the result most
+  likely to be misread as endorsement if it were the one case left
+  silent. See `docs/literature_evidence_integration.md` for the full
+  design, real-corpus coverage numbers (161/324 sampled plans matched,
+  49.7%; 65.8% of those flagged `has_multiple_operation_shapes`), and
+  runtime/report-size measurements (~38.5 ms one-time index build,
+  ~2.5 µs/query lookup, +3,327 bytes per evidence-carrying plan --
+  measured with each sampled target planned against its own
+  route-scoped precursor catalog, not a corpus-wide shared one).
+  "More coverage" is never phrased here as "more accurate conditions"
+  -- see that document's own explicit statement of what this does not
+  establish.
 
 ### Known limitations
 
@@ -332,8 +373,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   this corpus's ~14K-observation scale, not benchmarked for a bulk-query
   workload. Cross-DOI comparison (Phase 20C, added above) is detection
   and classification only, not resolution -- a `Conflict` is surfaced,
-  never reconciled. No promotion path to `ConditionPrecedent`/`Planner`
-  (by design, see the "Added" entries above). Phase 20D's audit itself is
+  never reconciled. `Planner` now surfaces this evidence for display
+  only (v0.4.0 Integration, above) -- no promotion path to
+  `ConditionPrecedent` exists, and nothing here is ever an auto-fill or
+  scoring input, by design. Phase 20D's audit itself is
   small-n (58 DOIs,
   only 5 reached full text) and measures population-level base rates
   only -- it certifies no individual observation, and 100% of the corpus

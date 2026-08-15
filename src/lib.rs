@@ -67,6 +67,7 @@ mod error;
 mod evidence;
 mod frac;
 mod literature_conditions;
+mod literature_evidence;
 #[cfg(feature = "literature_corpus")]
 mod literature_observation_conflicts;
 #[cfg(feature = "literature_corpus")]
@@ -96,11 +97,12 @@ pub use config::{PlanningConfig, SearchBudget};
 pub use error::{GugenError, ProviderError, Result};
 pub use evidence::{EvidenceKind, EvidenceScope, EvidenceStrength, PlanningEvidence};
 pub use literature_conditions::{CuratedConditionRecord, InMemoryLiteratureConditionProvider};
-#[cfg(feature = "literature_corpus")]
-pub use literature_observation_conflicts::{
-    CrossDoiFieldStatus, RouteObservationAssessment, SourcedValue, StepGroupAssessment,
-    StepGroupKey,
+pub use literature_evidence::{
+    CrossDoiFieldStatus, LiteratureRouteEvidence, RouteObservationAssessment, SourcedValue,
+    StepGroupAssessment, StepGroupKey, literature_evidence_limitations,
 };
+#[cfg(feature = "literature_corpus")]
+pub use literature_observation_conflicts::LiteratureObservationCorpusProvider;
 #[cfg(feature = "literature_corpus")]
 pub use literature_observations::{
     CORPUS_SNAPSHOT_SCHEMA_VERSION, CorpusHeatingObservation, CorpusManifest,
@@ -124,7 +126,8 @@ pub use process::{
 };
 pub use provenance::PlanningProvenance;
 pub use provider::{
-    PrecursorCatalog, ProcessEvidenceProvider, RouteSuitabilityProvider, ThermodynamicProvider,
+    LiteratureEvidenceProvider, PrecursorCatalog, ProcessEvidenceProvider,
+    RouteSuitabilityProvider, ThermodynamicProvider,
 };
 pub use reaction::{
     BalancedReaction, CompetingPhase, ReactionEnergy, ReactionSpecies, ThermodynamicConditions,

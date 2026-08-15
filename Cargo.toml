@@ -108,6 +108,11 @@ name = "literature_observation_cross_doi_report"
 path = "examples/literature_observation_cross_doi_report.rs"
 required-features = ["literature_corpus"]
 
+[[example]]
+name = "literature_evidence_integration_report"
+path = "examples/literature_evidence_integration_report.rs"
+required-features = ["literature_corpus"]
+
 [[bin]]
 name = "gugen"
 path = "src/bin/gugen.rs"

@@ -277,7 +277,8 @@
           "reason": "no thermodynamic or literature evidence provider is wired in yet (AGENTS.md §4.1)"
         }
       ],
-      "manual_review_required": true
+      "manual_review_required": true,
+      "literature_evidence": null
     },
     {
       "plan_id": "plan-ee311be9350b7d8b",
@@ -482,7 +483,8 @@
           "reason": "no thermodynamic or literature evidence provider is wired in yet (AGENTS.md §4.1)"
         }
       ],
-      "manual_review_required": true
+      "manual_review_required": true,
+      "literature_evidence": null
     }
   ],
   "not_recommended": [],
