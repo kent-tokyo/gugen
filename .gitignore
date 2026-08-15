@@ -6,3 +6,4 @@ tasks/*.md
 AGENTS.md
 CLAUDE.md
 /benchmarks/data/literature_observation_snapshot.json
+/benchmarks/data/SS_rxns_80806.json.gz

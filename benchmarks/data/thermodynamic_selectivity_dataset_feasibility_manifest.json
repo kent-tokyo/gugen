@@ -1,0 +1,396 @@
+{
+  "counts": {
+    "distinct_targets": 33001,
+    "excluded_leakage_target_record": 1104,
+    "excluded_null_target": 9914,
+    "outcome_impure_records": 16206,
+    "outcome_pure_records": 53582,
+    "records_gas_free_reaction": 28243,
+    "records_gas_present_reaction": 23613,
+    "records_with_no_extracted_reaction": 17932,
+    "sensitivity_majority_vote_outcome__selectivity_signal": 1690,
+    "sensitivity_majority_vote_outcome_and_all_gas_free__gas_free_computable": 371,
+    "targets_with_selectivity_signal": 1742,
+    "targets_with_selectivity_signal_gas_free_computable": 385,
+    "targets_with_selectivity_signal_multi_doi": 1710,
+    "total_records": 80806
+  },
+  "leakage_exclusion": {
+    "excluded_targets": [
+      "BaTiO3",
+      "CaO",
+      "LaAlO3",
+      "LiFePO4",
+      "MgAl2O4"
+    ],
+    "present_in_dataset": [
+      "BaTiO3",
+      "CaO",
+      "LaAlO3",
+      "LiFePO4",
+      "MgAl2O4"
+    ]
+  },
+  "sample_gate": {
+    "minimum_routes_per_target": 2,
+    "minimum_targets_required": 30
+  },
+  "selectivity_signal_targets_sample": [
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 478,
+      "n_routes": 286,
+      "target": "ZnO"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 252,
+      "n_routes": 140,
+      "target": "Si3N4"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 167,
+      "n_routes": 128,
+      "target": "Al2O3"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 167,
+      "n_routes": 120,
+      "target": "TiO2"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 204,
+      "n_routes": 115,
+      "target": "SiC"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 320,
+      "n_routes": 114,
+      "target": "MgB2"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 123,
+      "n_routes": 100,
+      "target": "SnO2"
+    },
+    {
+      "gas_free_computable": true,
+      "multi_doi": true,
+      "n_distinct_dois": 161,
+      "n_routes": 94,
+      "target": "LiNbO3"
+    },
+    {
+      "gas_free_computable": true,
+      "multi_doi": true,
+      "n_distinct_dois": 173,
+      "n_routes": 86,
+      "target": "Y3Al5O12"
+    },
+    {
+      "gas_free_computable": true,
+      "multi_doi": true,
+      "n_distinct_dois": 220,
+      "n_routes": 69,
+      "target": "SrTiO3"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 94,
+      "n_routes": 69,
+      "target": "CeO2"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 112,
+      "n_routes": 68,
+      "target": "Y2O3"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 81,
+      "n_routes": 63,
+      "target": "AlN"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 69,
+      "n_routes": 58,
+      "target": "ZnS"
+    },
+    {
+      "gas_free_computable": true,
+      "multi_doi": true,
+      "n_distinct_dois": 130,
+      "n_routes": 55,
+      "target": "SrAl2O4"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 79,
+      "n_routes": 55,
+      "target": "ZrO2"
+    },
+    {
+      "gas_free_computable": true,
+      "multi_doi": true,
+      "n_distinct_dois": 59,
+      "n_routes": 53,
+      "target": "Al6Si2O13"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 202,
+      "n_routes": 51,
+      "target": "LiMn2O4"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 172,
+      "n_routes": 50,
+      "target": "YBa2Cu3O7"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 151,
+      "n_routes": 50,
+      "target": "LiCoO2"
+    },
+    {
+      "gas_free_computable": true,
+      "multi_doi": true,
+      "n_distinct_dois": 140,
+      "n_routes": 50,
+      "target": "CaTiO3"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 49,
+      "n_routes": 47,
+      "target": "Ga2O3"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 87,
+      "n_routes": 45,
+      "target": "LiNi0.5Mn1.5O4"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 196,
+      "n_routes": 45,
+      "target": "Li4Ti5O12"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 49,
+      "n_routes": 45,
+      "target": "CaF2"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 76,
+      "n_routes": 45,
+      "target": "Ni"
+    },
+    {
+      "gas_free_computable": true,
+      "multi_doi": true,
+      "n_distinct_dois": 73,
+      "n_routes": 42,
+      "target": "Mg2SiO4"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 55,
+      "n_routes": 41,
+      "target": "SiAlON"
+    },
+    {
+      "gas_free_computable": true,
+      "multi_doi": true,
+      "n_distinct_dois": 75,
+      "n_routes": 40,
+      "target": "ZnGa2O4"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 51,
+      "n_routes": 40,
+      "target": "MgO"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 83,
+      "n_routes": 38,
+      "target": "Li7La3Zr2O12"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 67,
+      "n_routes": 38,
+      "target": "YVO4"
+    },
+    {
+      "gas_free_computable": true,
+      "multi_doi": true,
+      "n_distinct_dois": 243,
+      "n_routes": 37,
+      "target": "BiFeO3"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 35,
+      "n_routes": 36,
+      "target": "Fe"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 37,
+      "n_routes": 35,
+      "target": "W"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 54,
+      "n_routes": 35,
+      "target": "AlON"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 51,
+      "n_routes": 35,
+      "target": "Li2B4O7"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 38,
+      "n_routes": 35,
+      "target": "Si"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 45,
+      "n_routes": 35,
+      "target": "Fe2O3"
+    },
+    {
+      "gas_free_computable": true,
+      "multi_doi": true,
+      "n_distinct_dois": 57,
+      "n_routes": 34,
+      "target": "CaSiO3"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 40,
+      "n_routes": 33,
+      "target": "In2O3"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 43,
+      "n_routes": 33,
+      "target": "Cu"
+    },
+    {
+      "gas_free_computable": true,
+      "multi_doi": true,
+      "n_distinct_dois": 157,
+      "n_routes": 32,
+      "target": "Ti3SiC2"
+    },
+    {
+      "gas_free_computable": true,
+      "multi_doi": true,
+      "n_distinct_dois": 55,
+      "n_routes": 32,
+      "target": "Zn2SiO4"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 203,
+      "n_routes": 32,
+      "target": "CaCu3Ti4O12"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 37,
+      "n_routes": 32,
+      "target": "Ca2MgSi2O7"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 36,
+      "n_routes": 31,
+      "target": "LiCoPO4"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 54,
+      "n_routes": 30,
+      "target": "ZrB2"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 41,
+      "n_routes": 30,
+      "target": "LiTaO3"
+    },
+    {
+      "gas_free_computable": false,
+      "multi_doi": true,
+      "n_distinct_dois": 43,
+      "n_routes": 30,
+      "target": "Sr2MgSi2O7"
+    }
+  ],
+  "source": {
+    "citation": "Lee, Cruse, Baibakova, Ceder, Jain (2025), Scientific Data",
+    "figshare_doi": "10.6084/m9.figshare.30423274",
+    "file_md5": "2cca759682be4689e7d0d3d882d12909",
+    "license": "CC BY 4.0"
+  }
+}
