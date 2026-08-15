@@ -15,9 +15,9 @@ solid-state process plans — each with its evidence, assumptions, and
 unresolved conditions kept explicit and machine-readable. It does not
 predict experimental success.
 
-> **Status: v0.3.0 published**, v0.4.0 release in progress.
+> **Status: v0.4.0 published.**
 > [crates.io](https://crates.io/crates/gugen) /
-> [docs.rs](https://docs.rs/gugen) / [v0.3.0 release](https://github.com/kent-tokyo/gugen/releases/tag/v0.3.0).
+> [docs.rs](https://docs.rs/gugen) / [v0.4.0 release](https://github.com/kent-tokyo/gugen/releases/tag/v0.4.0).
 > v0.4.0 adds gas-free solid finite-temperature thermodynamic primitives,
 > a bulk literature observation snapshot API with cross-DOI agreement/
 > conflict classification, and reference-only literature evidence
