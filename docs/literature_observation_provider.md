@@ -68,15 +68,53 @@ Measured locally (`cargo run --release --example literature_observation_benchmar
 - **Memory**: ~9.2 MB estimated for 13,969 loaded observations (~688 bytes/observation) -- a rough capacity-based estimate (composition entries, DOI/description string storage, plus each observation's fixed-size fields), not a rigorous allocator-level measurement; no profiling dependency was added for one phase's benchmark.
 - **Serialized size**: 5.3 MB input snapshot file (13,982 observations); 4.7 MB re-serializing the loaded, deduplicated 13,969 observations.
 
+## Cross-DOI comparison (Phase 20C)
+
+`LiteratureObservationCorpus::cross_doi_comparisons()`
+(`src/literature_observation_conflicts.rs`) compares independent DOIs'
+reports of the same route -- detection and classification only, no
+averaging, no picking a winner, no `ConditionPrecedent`/`Planner`
+connection. Two observations are only ever compared when they share
+exact target, exact precursor set, `ConventionalSolidState`, an
+independent DOI, the *same total heating-operation count* for their
+source record, and the *same operation position* within it -- called
+*positional alignment*, never "the same processing step," since
+Phase 20D found step-segmentation (a paper's own multi-stage treatment
+merged into one `HeatingOperation` upstream) is the dominant confirmed
+disagreement mechanism, and comparing differently-shaped sequences by
+raw position would repeat that failure one level up. See the module doc
+comment for the full design (DOI-as-independence-unit, why
+`has_multiple_operation_shapes` never overrides a within-shape
+`Agreement`/`Conflict`, the `Atmosphere::Controlled` free-text
+exclusion) and `docs/literature_observation_accuracy_audit.md` for the
+manual-audit findings this design is built from.
+
+**Corpus-wide numbers** (real, local run,
+`cargo run --release --example literature_observation_cross_doi_report --features literature_corpus`,
+2026-08-15, same 13,969-observation snapshot as above): 619 of the
+corpus's routes have 2+ independent DOIs comparable at some operation
+shape; 332 of those (53.6%) are flagged `has_multiple_operation_shapes`
+-- independent DOIs disagreeing on how many heating steps a route even
+has is common, not an edge case. 1,400 total step groups. Among step
+groups with enough independent sources to reach a verdict, temperature
+disagrees far more often than it agrees (859 `Conflict` vs. 238
+`Agreement`, ~78% of the 1,097 evaluable groups); duration similarly
+skews toward conflict (677 vs. 295, ~70%). Atmosphere reaches a real
+`Agreement`/`Conflict` verdict at all for only 412 of 1,400 step groups
+(29.4%) -- the `Controlled` free-text exclusion rule removes most of the
+corpus's atmosphere data from comparison, since only 6 raw strings map
+to a structured variant; this is a real, disclosed limit on what this
+signal can currently say, not a near-complete picture presented as one.
+
 ## Known limitations
 
 - Ambiguous multi-entry temperature/duration readings resolve to `None`, never a guessed union or "first entry wins" value -- see the coverage section above. This is a real, load-bearing information loss (1,063 of the 13,982 emitted observations, for temperature specifically), not a rare edge case, disclosed as such rather than silently accepted.
-- Atmosphere vocabulary is a fixed 6-string map to structured `Atmosphere` variants; everything else becomes `Atmosphere::Controlled { description }`, preserving text rather than asserting an interpretation (e.g. "ambient" is *not* assumed to mean "air").
+- Atmosphere vocabulary is a fixed 6-string map to structured `Atmosphere` variants; everything else becomes `Atmosphere::Controlled { description }`, preserving text rather than asserting an interpretation (e.g. "ambient" is *not* assumed to mean "air"). This also means cross-DOI atmosphere comparison (Phase 20C) is largely inapplicable -- see above.
 - `find_exact` is a linear scan; no index is built. Acceptable at this corpus's ~14K-observation scale for single-target queries; would need revisiting for a bulk-query workload.
-- No cross-record conflict resolution: a target+precursor-set pair with many independent DOIs returns all of them, unreconciled (Phase 20C, not built).
-- No promotion path to `ConditionPrecedent`/`Planner` exists yet (by design -- see the module doc comment and this document's opening paragraph).
+- Cross-DOI comparison (Phase 20C) is detection/classification only, not resolution: a route with disagreeing independent DOIs surfaces a `Conflict`, never a reconciled value. No promotion path to `ConditionPrecedent`/`Planner` exists yet (by design -- see the module doc comment and this document's opening paragraph); even a unanimous `Agreement` stays a reference-only signal.
+- `cross_doi_comparisons()` cannot detect whether a specific record has an identity-audit problem (only the 58 DOIs Phase 20D manually sampled have this label, 3 confirmed mismatches, not scalable to 6,370+ corpus DOIs) or whether a single observation's temperature and duration actually came from the same experimental run -- both disclosed, not approximated, in the module doc comment.
 - 1,419 of the 9,045 structurally-valid records contribute zero observations (no `HeatingOperation` reported at all in the source text) -- not a bug, a real property of the underlying corpus.
 
 ## What this document does not establish
 
-Not a claim that any observation here is *correct* for planning a real synthesis -- gugen never independently re-verifies a text-mined paper's own extraction accuracy (that is Phase 20D, a manual audit against original papers, not built here). Not a claim about `HeatingPurpose` -- none is ever inferred, by design. Not a performance guarantee for a workload this module wasn't measured against (e.g. thousands of queries per load, or a corpus release with meaningfully different scale or vocabulary than the one measured here).
+Not a claim that any observation here is *correct* for planning a real synthesis -- gugen never independently re-verifies a text-mined paper's own extraction accuracy beyond the small, manually-audited Phase 20D sample (`docs/literature_observation_accuracy_audit.md`), which found ~93% identity accuracy among verifiable records but explicitly could not certify any individual observation. Not a claim about `HeatingPurpose` -- none is ever inferred, by design. Not a performance guarantee for a workload this module wasn't measured against (e.g. thousands of queries per load, or a corpus release with meaningfully different scale or vocabulary than the one measured here).

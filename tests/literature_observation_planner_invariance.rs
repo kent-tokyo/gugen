@@ -11,6 +11,11 @@
 //! that the boundary the owner drew (no automatic `ConditionPrecedent`
 //! promotion until `HeatingPurpose` accuracy against this corpus is
 //! validated) was just crossed.
+//!
+//! Phase 20C added `cross_doi_comparisons()` on the same corpus type --
+//! same guard, extended below, since that function is equally
+//! disconnected from `Planner` by construction (it never imports from
+//! `planner.rs` or constructs a `ConditionPrecedent`).
 
 use gugen::{
     Composition, Element, InMemoryPrecursorCatalog, LiteratureObservationCorpus, LoadMode, Planner,
@@ -85,5 +90,30 @@ fn loading_and_querying_the_corpus_does_not_change_planning_output() {
     assert_eq!(
         report_before, report_after,
         "loading and querying the literature observation corpus must not affect planning output at all"
+    );
+}
+
+#[test]
+fn cross_doi_comparisons_does_not_change_planning_output() {
+    let planner = Planner::offline_minimal(
+        InMemoryPrecursorCatalog::new(barium_titanate_catalog()),
+        PlanningConfig::default(),
+    );
+    let target_spec = target(composition(&[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)]));
+
+    let report_before = planner.plan(&target_spec, "2026-08-15T00:00:00Z").unwrap();
+
+    let (corpus, report) = LiteratureObservationCorpus::load(FIXTURE, LoadMode::Lenient).unwrap();
+    assert!(report.rejected.is_empty());
+    // Exercise the whole Phase 20C surface -- entirely disconnected from
+    // `planner`/`score_plan`, run here specifically to prove it has no
+    // side effect on subsequent planning output.
+    let _assessments = corpus.cross_doi_comparisons();
+
+    let report_after = planner.plan(&target_spec, "2026-08-15T00:00:00Z").unwrap();
+
+    assert_eq!(
+        report_before, report_after,
+        "cross_doi_comparisons() must not affect planning output at all"
     );
 }

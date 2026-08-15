@@ -219,6 +219,53 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   disagreement. No conflict resolver, promotion policy, or Planner
   connection added -- see `docs/literature_observation_accuracy_audit.md`
   for the full 15-item report and reproduction commands.
+- **Phase 20C -- cross-DOI field comparison for
+  `LiteratureObservationCorpus`**, the corpus-scale analogue of Phase
+  19's `apply_condition_precedents`, new
+  `LiteratureObservationCorpus::cross_doi_comparisons()`
+  (`src/literature_observation_conflicts.rs`). Detection and
+  classification only -- no averaging, no picking a winner, no
+  `ConditionPrecedent`/`Planner`/ranking connection, structurally so
+  (this module never imports from `planner.rs`), checked by a permanent
+  regression test. Two observations are compared only when they agree on
+  exact target, exact precursor set, `ConventionalSolidState`,
+  independent DOI, total reported heating-operation count for their
+  source record, *and* operation position within it -- called
+  *positional alignment*, deliberately never "the same processing step,"
+  since Phase 20D found step-segmentation (a paper's own multi-stage
+  treatment merged into one `HeatingOperation` upstream) is the dominant
+  confirmed disagreement mechanism, and comparing differently-shaped
+  heating sequences by raw position would repeat that failure one level
+  up. Per field (temperature/duration/atmosphere), reports `Agreement`,
+  `Conflict`, `InsufficientIndependentSources` (exactly one independent
+  DOI reported it), or `Unresolved` (none did) -- a lone value never
+  resolves a field here, unlike Phase 19's own precedent-filling logic,
+  since this module answers "do independent replications agree," not
+  "do we have any data." A fifth status, `SegmentationAmbiguous`, exists
+  in the type but is never populated in v1 -- reserved for a future
+  per-observation segmentation-failure signal (a `HeatingOperation`
+  merging multiple stages) that nothing in the corpus schema currently
+  carries; a bare cross-DOI step-count difference is route-level shape
+  diversity (`has_multiple_operation_shapes` below) and deliberately does
+  not trigger it. Route-level `has_multiple_operation_shapes`
+  (independent DOIs disagreeing on the route's own step count) is a
+  separate, independent warning that never overrides a within-shape
+  `Agreement`/`Conflict` -- real agreement within one operation shape
+  stays real even when the route's step structure is itself contested.
+  `Atmosphere::Controlled { description }` free-text values never
+  contribute to a comparison, even against another `Controlled` value,
+  since raw-string equality between independently-written descriptions
+  isn't a safe signal. Real corpus-wide numbers (13,969-observation
+  local snapshot): 619 routes have 2+ independent DOIs comparable
+  somewhere, 332 of those (53.6%) flagged `has_multiple_operation_shapes`;
+  among the 1,097 temperature step-groups with enough sources to reach a
+  verdict, 859 (~78%) disagree; atmosphere reaches any real verdict for
+  only 412 of 1,400 step groups (29.4%), since most atmosphere data is
+  free text excluded by the `Controlled` rule. Even a unanimous
+  `Agreement` stays a reference-only signal in v0.4.0 -- promotion is
+  deferred to a separately-triggered future "Integration" phase. See
+  `docs/literature_observation_provider.md`'s "Cross-DOI comparison"
+  section for the full design and numbers.
 
 ### Known limitations
 
@@ -283,11 +330,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   { description }` rather than guessed. `find_exact` is an unindexed
   linear scan over the whole corpus -- fine for single-target lookups at
   this corpus's ~14K-observation scale, not benchmarked for a bulk-query
-  workload. No cross-record conflict resolution across independently-
-  reported DOIs for the same route (Phase 20C, not built -- Phase 20D's
-  audit above is the evidence base it will be designed from). No
-  promotion path to `ConditionPrecedent`/`Planner` (by design, see the
-  "Added" entry above). Phase 20D's audit itself is small-n (58 DOIs,
+  workload. Cross-DOI comparison (Phase 20C, added above) is detection
+  and classification only, not resolution -- a `Conflict` is surfaced,
+  never reconciled. No promotion path to `ConditionPrecedent`/`Planner`
+  (by design, see the "Added" entries above). Phase 20D's audit itself is
+  small-n (58 DOIs,
   only 5 reached full text) and measures population-level base rates
   only -- it certifies no individual observation, and 100% of the corpus
   remains reference-only after this phase; see
