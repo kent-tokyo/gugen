@@ -702,6 +702,19 @@ pub fn applicable_route_family_templates(
 /// conservative reading, since `TemperatureRange`/`DurationRange`/
 /// `RampRateRange` have no overlap/subsumption semantics and inventing
 /// one is explicitly out of scope for this phase.
+/// The four `ConditionConflict.field`/`format_conflict_reason` literals
+/// this module produces, defined once so `score.rs`'s consumer-side
+/// lookup (`condition_conflicts.iter().find(|c| c.field == field)`)
+/// can't silently drift out of sync with the producer side here -- a
+/// rename on either side becomes a compile error instead of a silent
+/// fallback to a generic reason. Only `"temperature"` had a dedicated
+/// regression test pinning this agreement before; the other three
+/// relied on the two sides happening to stay textually identical.
+pub(crate) const CONDITION_FIELD_TEMPERATURE: &str = "temperature";
+pub(crate) const CONDITION_FIELD_DURATION: &str = "duration";
+pub(crate) const CONDITION_FIELD_ATMOSPHERE: &str = "atmosphere";
+pub(crate) const CONDITION_FIELD_RAMP_RATE: &str = "ramp rate";
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConditionConflict {
     pub step_index: usize,
@@ -819,13 +832,16 @@ pub(crate) fn apply_condition_precedents(
                 Some(FieldResolution::Resolved(value, idxs)) => {
                     *temperature = Some(value);
                     for i in idxs {
-                        contributed.entry(i).or_default().push("temperature");
+                        contributed
+                            .entry(i)
+                            .or_default()
+                            .push(CONDITION_FIELD_TEMPERATURE);
                     }
                 }
                 Some(FieldResolution::Conflict(values)) => conflicts.push(ConditionConflict {
                     step_index,
-                    field: "temperature",
-                    reason: format_conflict_reason("temperature", &values),
+                    field: CONDITION_FIELD_TEMPERATURE,
+                    reason: format_conflict_reason(CONDITION_FIELD_TEMPERATURE, &values),
                 }),
                 None => {}
             }
@@ -839,13 +855,16 @@ pub(crate) fn apply_condition_precedents(
                 Some(FieldResolution::Resolved(value, idxs)) => {
                     *duration = Some(value);
                     for i in idxs {
-                        contributed.entry(i).or_default().push("duration");
+                        contributed
+                            .entry(i)
+                            .or_default()
+                            .push(CONDITION_FIELD_DURATION);
                     }
                 }
                 Some(FieldResolution::Conflict(values)) => conflicts.push(ConditionConflict {
                     step_index,
-                    field: "duration",
-                    reason: format_conflict_reason("duration", &values),
+                    field: CONDITION_FIELD_DURATION,
+                    reason: format_conflict_reason(CONDITION_FIELD_DURATION, &values),
                 }),
                 None => {}
             }
@@ -860,13 +879,16 @@ pub(crate) fn apply_condition_precedents(
                 Some(FieldResolution::Resolved(value, idxs)) => {
                     *atmosphere = Some(value);
                     for i in idxs {
-                        contributed.entry(i).or_default().push("atmosphere");
+                        contributed
+                            .entry(i)
+                            .or_default()
+                            .push(CONDITION_FIELD_ATMOSPHERE);
                     }
                 }
                 Some(FieldResolution::Conflict(values)) => conflicts.push(ConditionConflict {
                     step_index,
-                    field: "atmosphere",
-                    reason: format_conflict_reason("atmosphere", &values),
+                    field: CONDITION_FIELD_ATMOSPHERE,
+                    reason: format_conflict_reason(CONDITION_FIELD_ATMOSPHERE, &values),
                 }),
                 None => {}
             }
@@ -880,13 +902,16 @@ pub(crate) fn apply_condition_precedents(
                 Some(FieldResolution::Resolved(value, idxs)) => {
                     *ramp = Some(value);
                     for i in idxs {
-                        contributed.entry(i).or_default().push("ramp rate");
+                        contributed
+                            .entry(i)
+                            .or_default()
+                            .push(CONDITION_FIELD_RAMP_RATE);
                     }
                 }
                 Some(FieldResolution::Conflict(values)) => conflicts.push(ConditionConflict {
                     step_index,
-                    field: "ramp rate",
-                    reason: format_conflict_reason("ramp rate", &values),
+                    field: CONDITION_FIELD_RAMP_RATE,
+                    reason: format_conflict_reason(CONDITION_FIELD_RAMP_RATE, &values),
                 }),
                 None => {}
             }

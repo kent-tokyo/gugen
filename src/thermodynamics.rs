@@ -465,8 +465,12 @@ fn most_stable_entry_for<'a>(
 /// imbalance -- this is the runtime check that actually enforces the
 /// conservation `balanced_reaction_delta_ev_per_atom`'s per-atom
 /// normalization relies on, for a hand-constructed reaction that never
-/// went through `balance.rs`'s solver.
-fn check_element_conservation(reaction: &BalancedReaction) -> Result<()> {
+/// went through `balance.rs`'s solver. `pub(crate)` so
+/// `materials_project_adapter.rs::reaction_energy` can reuse the same,
+/// already-tested tolerance logic instead of duplicating it -- that
+/// function has exactly the same "hand-constructed reaction, no
+/// conservation guarantee from `BalancedReaction::new`" exposure.
+pub(crate) fn check_element_conservation(reaction: &BalancedReaction) -> Result<()> {
     let mut residual: BTreeMap<Element, f64> = BTreeMap::new();
     for species in &reaction.reactants {
         for (element, amount) in species.composition.iter() {

@@ -1,3 +1,4 @@
+use crate::composition::{MAX_RATIONAL_DENOMINATOR, RATIONAL_TOLERANCE};
 use thiserror::Error;
 
 /// Crate-wide error type. Construction of any public numeric or
@@ -22,7 +23,7 @@ pub enum GugenError {
     #[error("element {element} was supplied more than once in the same composition")]
     DuplicateElement { element: String },
     #[error(
-        "amount {value} for element {element} is not a simple rational number gugen can balance exactly (need a denominator <= 1_000_000 within tolerance 1e-9)"
+        "amount {value} for element {element} is not a simple rational number gugen can balance exactly (need a denominator <= {MAX_RATIONAL_DENOMINATOR} within tolerance {RATIONAL_TOLERANCE})"
     )]
     AmountNotRational { element: String, value: f64 },
     #[error("reaction species coefficients must be > 0")]

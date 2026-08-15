@@ -7,8 +7,10 @@ use std::collections::BTreeMap;
 /// float-approximate). `1e-9` is far tighter than any realistic formula
 /// precision; `1_000_000` comfortably covers ordinary decimal subscripts
 /// (e.g. `0.67`, `0.333`) without risking overflow in later arithmetic.
-const MAX_RATIONAL_DENOMINATOR: i128 = 1_000_000;
-const RATIONAL_TOLERANCE: f64 = 1e-9;
+// `pub(crate)` so `error.rs`'s `AmountNotRational` message can interpolate
+// the real values instead of hardcoding a second copy that could drift.
+pub(crate) const MAX_RATIONAL_DENOMINATOR: i128 = 1_000_000;
+pub(crate) const RATIONAL_TOLERANCE: f64 = 1e-9;
 
 /// The 118 IUPAC element symbols, used to validate that a symbol supplied by
 /// a caller is a real element rather than a typo. This is chemical-notation
