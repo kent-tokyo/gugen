@@ -253,16 +253,52 @@ explicitly named for this phase).
   `delta_e`) are present in the first real response rather than silently
   coercing a missing one.
 
-### 6.2 Live service status: down (2026-08-15)
+### 6.2 Live service status: down as of 2026-08-15, recovered 2026-08-16
 
 `https://oqmd.org/` and `https://oqmd.org/oqmdapi/formationenergy`
-returned `HTTP 502` on every attempt made while writing this section —
-confirmed independently by two separate fetch paths (direct `curl` and
-an agent's own `WebFetch`), consistently, not a one-off transient blip
-in a single tool. No status page or open GitHub issue documenting this
-specific outage could be found. **This is a real, external
-infrastructure blocker, not a design gap in this phase** — condition 1's
-live measurement could not be completed this session for this reason.
+returned `HTTP 502` on every attempt made while writing this section on
+2026-08-15 — confirmed independently by two separate fetch paths
+(direct `curl` and an agent's own `WebFetch`), consistently, not a
+one-off transient blip in a single tool. No status page or open GitHub
+issue documenting this specific outage could be found. **This was a
+real, external infrastructure blocker, not a design gap in this
+phase** — condition 1's live measurement could not be completed on
+2026-08-15 for this reason.
+
+**Update, 2026-08-16: the service is back.** While building the
+automated recovery check below, a real (not mocked) request to
+`https://oqmd.org/oqmdapi/formationenergy?composition=TiO2` returned
+`HTTP 200` with a well-formed response (`_oqmd_version: 1.0`, 3
+returned entries, e.g. `entry_id: 2475`, `delta_e: -3.21575255518126`
+eV/atom, `stability: 0.0269`) — a genuine, usable formation-energy
+result, not an empty or malformed body. This does **not** by itself
+restart condition 1 — that still needs its own fresh, explicit owner
+trigger, same as every prior update in this document required. It only
+means the external blocker that stopped condition 1 on 2026-08-15 is,
+as of this check, no longer present.
+
+### 6.2.1 Automated recovery detection (added 2026-08-16)
+
+Because the outage above already recurred once, a daily, low-load
+*notification* mechanism was added so any future recurrence — or a
+fresh outage after this one — doesn't depend on someone remembering to
+check manually: `.github/workflows/oqmd-recovery-check.yml` runs
+`.github/scripts/check_oqmd_recovery.py` once a day. "Recovered" is
+defined as *OQMD returning usable data* (HTTP 200, valid JSON, the
+expected fields present, at least one entry with a non-null `delta_e`
+for a small fixed test composition), not merely "the site responds" —
+a 200 with an empty or malformed body would still count as down. On
+recovery it opens exactly one GitHub Issue and stops (a search for an
+already-open issue with the same title prevents a duplicate on
+subsequent daily runs); while down, it produces no issue and no
+notification at all, so consecutive "still down" days don't train
+anyone to ignore the one day that matters. **Opening that issue does
+not, by itself, restart condition 1, run
+`benchmarks/fetch_oqmd_coverage.py` for real, or start calibration** —
+those still require the owner's own separate, explicit instruction,
+same as the rest of this document already requires. See the script's
+own module doc for the exact healthy/unhealthy criteria and retry
+policy.
 
 ### 6.3 Pre-registered coverage gate and polymorph policy
 
