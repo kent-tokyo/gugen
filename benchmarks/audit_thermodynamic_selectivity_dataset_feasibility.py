@@ -34,12 +34,24 @@ future calibration label set -- reusing them would let this new phase
 "validate against" targets gugen's own route-generation code was already
 tuned/tested against. Matches benchmarks/fetch_kononova.py's identical
 target-level exclusion discipline.
+
+Phase 21B addition (condition 3, artifact filtering): while inspecting
+example routes for Phase 21A's report, visibly malformed formula tokens
+were spotted (duplicated-element extraction errors like "Ti3Ti", and
+non-standard-separator tokens like "NaCl-KCl" that are either a genuine
+two-species flux mixture or a real mineral compound written with an
+unusual hydrate separator -- either way, not usable as a single parseable
+`Composition`). This script now also reports the sample size AFTER
+excluding any route touching such a formula (target or precursor side),
+so the headline 385/371 counts from Phase 21A can be compared against
+the artifact-filtered count.
 """
 
 import argparse
 import gzip
 import hashlib
 import json
+import re
 import ssl
 import sys
 import urllib.request
@@ -78,6 +90,28 @@ GAS_FORMULAS = {
     "SO3", "CO", "Cl2", "HCl", "H2S", "CH4", "F2", "HF", "Br2", "I2",
     "H2O2", "N2O5", "NO3",
 }
+
+# Phase 21B condition 3: a formula matching this pattern is a bare element
+# symbol immediately followed by its own repeat (e.g. "Ti3Ti", "Si1Si") --
+# not a real compound, an LLM-extraction duplication artifact.
+DUPLICATED_ELEMENT_ARTIFACT_RE = re.compile(r"^([A-Z][a-z]?)\d*\1$")
+# A cleanly single-Composition-parseable formula uses only letters, digits,
+# parentheses, a middle dot (hydrate notation), a period, or x/X
+# (stoichiometric variable). Anything else -- most commonly a "-" joining
+# two formulas -- is either a genuine multi-species flux/mineralizer
+# mixture (e.g. "NaCl-KCl") or a real compound using a non-standard hydrate
+# separator (e.g. "(MgCO3)4-Mg(OH)2*5H2O" for hydromagnesite); either way
+# it is not usable as a single parseable `Composition` without manual
+# disambiguation this phase does not perform.
+CLEAN_FORMULA_CHARSET_RE = re.compile(r"^[A-Za-z0-9()·.xX]+$")
+
+
+def artifact_reason(formula):
+    if DUPLICATED_ELEMENT_ARTIFACT_RE.match(formula):
+        return "duplicated_element"
+    if not CLEAN_FORMULA_CHARSET_RE.match(formula):
+        return "nonstandard_separator_or_char"
+    return None
 
 
 def _fetch_json(url):
@@ -261,12 +295,72 @@ def analyze(records):
     counts["sensitivity_majority_vote_outcome__selectivity_signal"] = strict_signal
     counts["sensitivity_majority_vote_outcome_and_all_gas_free__gas_free_computable"] = strict_gas_free
 
+    # Phase 21B condition 3: same lenient definition as the 385 headline,
+    # but excluding any route where the target or any precursor formula is
+    # an artifact (duplicated-element or non-standard-separator token).
+    # Also collects the surviving (target, route, outcome, DOI) rows --
+    # this is the population condition 2's manual-audit sample is drawn
+    # from downstream, so a route already known to be unparseable never
+    # enters the audit.
+    artifact_route_count = Counter()
+    clean_signal = clean_gas_free = 0
+    clean_population = []
+    for t, recs in by_target.items():
+        route_outcomes = defaultdict(list)
+        route_gas_free = defaultdict(list)
+        route_dois = defaultdict(set)
+        route_is_artifact = {}
+        for precset, outcome, gas_free, doi in recs:
+            route_outcomes[precset].append(outcome)
+            route_gas_free[precset].append(gas_free)
+            if doi:
+                route_dois[precset].add(doi)
+            if precset not in route_is_artifact:
+                reason = artifact_reason(t)
+                if not reason:
+                    for f in precset:
+                        reason = artifact_reason(f)
+                        if reason:
+                            break
+                route_is_artifact[precset] = reason
+
+        clean_routes = {r: o for r, o in route_outcomes.items() if not route_is_artifact[r]}
+        for r, reason in route_is_artifact.items():
+            if reason:
+                artifact_route_count[reason] += 1
+
+        if len(clean_routes) < 2:
+            continue
+        verdict = {r: ("pure" if "pure" in o else "impure") for r, o in clean_routes.items()}
+        if len(set(verdict.values())) < 2:
+            continue
+        clean_signal += 1
+
+        gf_routes = {r for r in clean_routes if True in route_gas_free[r]}
+        gf_verdicts = {verdict[r] for r in gf_routes}
+        is_gas_free_computable = len(gf_routes) >= 2 and len(gf_verdicts) >= 2
+        if is_gas_free_computable:
+            clean_gas_free += 1
+            for r in gf_routes:
+                clean_population.append(
+                    {
+                        "target": t,
+                        "route": list(r),
+                        "verdict": verdict[r],
+                        "dois": sorted(route_dois[r]),
+                    }
+                )
+
+    counts["artifact_filtered_routes_excluded"] = dict(artifact_route_count)
+    counts["clean_targets_with_selectivity_signal"] = clean_signal
+    counts["clean_targets_with_selectivity_signal_gas_free_computable"] = clean_gas_free
+
     present_leakage_targets = sorted(
         t for t in LEAKAGE_EXCLUDE_TARGETS
         if any((r.get("target") or [{}])[0].get("material_formula") == t for r in records)
     )
 
-    return counts, selectivity_signal_targets, present_leakage_targets
+    return counts, selectivity_signal_targets, present_leakage_targets, clean_population
 
 
 def main():
@@ -281,7 +375,11 @@ def main():
     with gzip.open(path, "rt") as f:
         records = json.load(f)
 
-    counts, selectivity_signal_targets, present_leakage_targets = analyze(records)
+    counts, selectivity_signal_targets, present_leakage_targets, clean_population = analyze(records)
+
+    clean_population_path = DATA_DIR / "thermodynamic_selectivity_clean_population.json"
+    clean_population_path.write_text(json.dumps(clean_population, indent=2, sort_keys=True))
+    print(f"wrote {clean_population_path} ({len(clean_population)} clean gas-free-computable route rows)", file=sys.stderr)
 
     manifest = {
         "source": {
@@ -319,6 +417,10 @@ def main():
     print(f"\nsample gate (>=30 targets, >=2 gas-free-computable routes, differing outcome):")
     print(f"  lenient (any_pure outcome, any_gas_free route):    {'PASS' if gate_pass else 'FAIL'} ({lenient} found)")
     print(f"  strict (majority-vote outcome, all_gas_free route): {'PASS' if strict_gate_pass else 'FAIL'} ({strict} found)")
+
+    clean = counts["clean_targets_with_selectivity_signal_gas_free_computable"]
+    print(f"  artifact-filtered (lenient, excluding malformed-formula routes): "
+          f"{'PASS' if clean >= 30 else 'FAIL'} ({clean} found)")
 
 
 if __name__ == "__main__":

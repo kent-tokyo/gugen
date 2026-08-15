@@ -1,5 +1,11 @@
 {
   "counts": {
+    "artifact_filtered_routes_excluded": {
+      "duplicated_element": 50,
+      "nonstandard_separator_or_char": 440
+    },
+    "clean_targets_with_selectivity_signal": 1715,
+    "clean_targets_with_selectivity_signal_gas_free_computable": 381,
     "distinct_targets": 33001,
     "excluded_leakage_target_record": 1104,
     "excluded_null_target": 9914,
