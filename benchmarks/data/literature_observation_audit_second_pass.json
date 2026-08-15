@@ -1,0 +1,31 @@
+{
+  "schema": "gugen-phase20d-audit-second-pass-v1",
+  "note": "Independent second review of a 5-item overlap subset drawn from the accessible (full_text/abstract_only) first-pass items, for inter-reviewer agreement (report item 8). Each second-pass agent was blind to the first-pass verdict. Redistributable IDs and judgment enums only.",
+  "overlap_reviews": [
+    {
+      "doi": "10.1016/j.jpowsour.2007.08.077",
+      "first_pass": {"access_level": "full_text", "identity_match": "match", "temperature_verdict": "match", "multi_entry_cause": "genuine_multi_condition", "duration_verdict": "match", "atmosphere_verdict": "match"},
+      "second_pass": {"access_level": "full_text", "identity_match": "match", "temperature_verdict": "match", "multi_entry_cause": "genuine_multi_condition", "duration_verdict": "match", "atmosphere_verdict": "match"}
+    },
+    {
+      "doi": "10.1016/j.ssc.2009.01.002",
+      "first_pass": {"access_level": "full_text", "identity_match": "match", "temperature_verdict": "match", "multi_entry_cause": "genuine_multi_condition", "duration_verdict": "match", "atmosphere_verdict": "match"},
+      "second_pass": {"access_level": "source_inaccessible", "identity_match": "match", "temperature_verdict": "not_checked", "multi_entry_cause": "insufficient_evidence", "duration_verdict": "not_checked", "atmosphere_verdict": "not_checked"}
+    },
+    {
+      "doi": "10.1016/j.jeurceramsoc.2005.03.032",
+      "first_pass": {"access_level": "full_text", "identity_match": "match", "temperature_verdict": "mismatch", "multi_entry_cause": "not_applicable", "duration_verdict": "match", "atmosphere_verdict": "match"},
+      "second_pass": {"access_level": "full_text", "identity_match": "match", "temperature_verdict": "match", "multi_entry_cause": "not_applicable", "duration_verdict": "match", "atmosphere_verdict": "match"}
+    },
+    {
+      "doi": "10.1016/j.matchemphys.2004.12.035",
+      "first_pass": {"access_level": "abstract_only", "identity_match": "match", "temperature_verdict": "match", "multi_entry_cause": "not_applicable", "duration_verdict": "match", "atmosphere_verdict": "match"},
+      "second_pass": {"access_level": "source_inaccessible", "identity_match": "match", "temperature_verdict": "not_checked", "multi_entry_cause": "not_applicable", "duration_verdict": "not_checked", "atmosphere_verdict": "not_checked"}
+    },
+    {
+      "doi": "10.1016/j.jpowsour.2008.05.041",
+      "first_pass": {"access_level": "abstract_only", "identity_match": "mismatch", "temperature_verdict": "not_checked", "multi_entry_cause": "not_applicable", "duration_verdict": "not_checked", "atmosphere_verdict": "not_checked"},
+      "second_pass": {"access_level": "source_inaccessible", "identity_match": "unverifiable", "temperature_verdict": "not_checked", "multi_entry_cause": "not_applicable", "duration_verdict": "not_checked", "atmosphere_verdict": "not_checked"}
+    }
+  ]
+}
