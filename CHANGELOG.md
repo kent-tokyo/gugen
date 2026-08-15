@@ -4,6 +4,72 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-15
+
+An evidence-infrastructure release: gas-free solid finite-temperature
+thermodynamic primitives, a bulk literature observation snapshot API,
+cross-DOI agreement/conflict classification, and reference-only
+literature evidence surfaced in `Planner`. **Not** a claim of improved
+ranking accuracy, synthesis-success prediction, or auto-filled
+conditions -- see each item below and `docs/literature_evidence_integration.md`'s
+"What this does not establish" section for what this release
+deliberately does not claim.
+
+### Migration notes
+
+Everything below is also disclosed inline in Added/Fixed; this section
+exists so an upgrading consumer has one place to check.
+
+- **`score_plan` now takes 9 parameters instead of 8** (new
+  `condition_conflicts: &[ConditionConflict]`). Any direct caller of
+  `score_plan` (not just through `Planner`) must update its call site.
+  Confirmed breaking by `cargo semver-checks`
+  (`function_parameter_count_changed`).
+- **`GugenError` gained 3 new variants**: `NonPositiveMagnitude`,
+  `UnbalancedReaction`, `InconsistentThermodynamicDataset`.
+  `GugenError` is not `#[non_exhaustive]`, so **any downstream `match`
+  on `GugenError` that does not already end in a wildcard `_ => ...`
+  arm will fail to compile** until arms for these three variants (or a
+  wildcard) are added. Confirmed breaking by `cargo semver-checks`
+  (`enum_variant_added`).
+- **`balanced_reaction_delta_ev_per_atom` and
+  `decomposition_margin_ev_per_atom` now return `Result<Option<f64>>`
+  instead of `Option<f64>`.** `Ok(Some(value))` replaces a bare
+  `Some(value)`; `Ok(None)` replaces a bare `None` (a legitimate
+  abstention); `Err(...)` is new -- invalid caller input that previously
+  had no way to be reported from these two functions. Any caller
+  matching on the old `Option<f64>` shape needs an added `?` or `match`
+  arm for `Err`. **Not caught by `cargo semver-checks`** (it has no
+  lint for a bare return-type shape change like this one) -- disclosed
+  here specifically because the tool stays silent on it.
+- **`SynthesisPlan` gained a `literature_evidence:
+  Option<LiteratureRouteEvidence>` field.** `SynthesisPlan` is not
+  `#[non_exhaustive]` and has all-public fields, so any downstream
+  struct-literal construction or exhaustive destructuring of it needs
+  updating. Confirmed breaking by `cargo semver-checks`
+  (`constructible_struct_adds_field`). `SCHEMA_VERSION` is bumped `1 ->
+  2` to mark this addition. Note for consumers with their own strict
+  JSON schema (e.g. a hand-written schema or a `serde` struct with
+  `#[serde(deny_unknown_fields)]`) validating gugen's report output:
+  `2` does not cleanly delimit "the v0.3.0 shape" from "the v0.4.0
+  shape" -- `SCHEMA_VERSION` stayed `1` through v0.1.0/v0.2.0/v0.3.0
+  even though the report gained fields in that span too (e.g.
+  `route_suitability`/`not_recommended` in v0.3.0). A consumer that
+  already tolerates unknown fields needs no change; a consumer that
+  rejects them needs updating regardless of which schema_version number
+  it's keyed on.
+- **New optional `literature_corpus` Cargo feature** (depends on
+  `serde`, off by default) -- new to this release (introduced in Phase
+  20B, after v0.3.0). Existing optional features (`serde`, `clap`,
+  `mikiwame`, `chematic_crystal`, `materials_project`) are unchanged.
+  Enabling no new feature (the default build) is unaffected by this
+  addition beyond the struct-literal/match-exhaustiveness changes
+  above, which apply regardless of features enabled.
+- No bulk literature-corpus data is bundled in the published package --
+  `benchmarks/data/*.json`/`*.jsonl` stay excluded (see Fixed below);
+  this is a packaging fact, not an API change, listed here for
+  completeness.
+
 ### Fixed
 
 - **Phase 19 — order-independent literature-condition conflict

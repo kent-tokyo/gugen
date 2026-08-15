@@ -67,7 +67,7 @@ Verified two ways:
   `Conflict` and `has_multiple_operation_shapes: true`, then asserts
   `score`, `confidence`, `steps`, and plan ranking order are byte-for-byte
   identical to a baseline run with no provider configured at all.
-- The real-corpus benchmark below re-confirms this over 414 real plans,
+- The real-corpus benchmark below re-confirms this over 324 real plans,
   not just one synthetic case.
 
 ## Feature-gating design

@@ -9,7 +9,13 @@ use crate::rejection::RejectedCandidate;
 use crate::route_suitability::{RouteSuitabilityAssessment, SuitabilityFinding};
 use crate::score::{ConfidenceAssessment, PlanScoreBreakdown, PlanningAssumption};
 
-pub const SCHEMA_VERSION: u32 = 1;
+/// Bumped whenever `SynthesisPlan`'s or `SynthesisPlanningReport`'s JSON
+/// shape changes in a way a strict deserializer (e.g. one rejecting
+/// unknown fields) would need to account for. `2` as of v0.4.0: adds
+/// `SynthesisPlan.literature_evidence`, confirmed as a breaking addition
+/// by `cargo semver-checks`'s `constructible_struct_adds_field` lint --
+/// see `docs/literature_evidence_integration.md`.
+pub const SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

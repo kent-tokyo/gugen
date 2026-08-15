@@ -269,6 +269,9 @@ fn doctor_report() -> String {
         thermodynamic provider: none (this CLI builds every `Planner` via `offline_minimal`)\n\
         process evidence provider: none (this CLI builds every `Planner` via `offline_minimal`)\n\
         route suitability provider: none (this CLI builds every `Planner` via `offline_minimal`)\n\
+        literature evidence provider: none (this CLI builds every `Planner` via `offline_minimal`; \
+        see docs/literature_evidence_integration.md for the reference-only report field this \
+        provider type populates when configured programmatically)\n\
         ranking config digest: {}\n\
         deterministic mode: yes -- the planning core never reads the system clock; \
         execution_timestamp is supplied by this CLI at the moment each `plan`/`batch` runs\n\
@@ -766,6 +769,7 @@ mod tests {
         assert!(text.contains("gugen version:"));
         assert!(text.contains("mikiwame integration status:"));
         assert!(text.contains("chematic-crystal integration status:"));
+        assert!(text.contains("literature evidence provider:"));
         assert!(text.contains("known limitations:"));
     }
 
