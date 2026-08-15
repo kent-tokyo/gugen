@@ -4,6 +4,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-08-15
+
+A patch release: 4 behavior-affecting `src/` bug fixes and 1
+doc-comment correction, found by an owner-requested full-crate bug
+check and refactoring sweep. No new features, no public API changes
+(`cargo semver-checks` confirms no breaking changes), no `SCHEMA_VERSION`
+bump.
+
 ### Fixed
 
 - `scale_to_integers` (reaction balancing) now correctly abstains
