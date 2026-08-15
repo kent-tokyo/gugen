@@ -1,0 +1,102 @@
+name: OQMD recovery check
+
+# Daily health check only -- detects whether oqmd.org is returning
+# usable formation-energy data again (Phase 21B condition 1 has been
+# blocked on a real oqmd.org outage since 2026-08-15, see
+# docs/thermodynamic_selectivity_calibration.md Sec 6.2). This workflow
+# never runs the real Phase 21B fetcher (benchmarks/fetch_oqmd_coverage.py)
+# and never starts calibration -- on recovery it only opens a GitHub
+# Issue so a human can decide the next step. See
+# .github/scripts/check_oqmd_recovery.py for what "healthy" means.
+#
+# Every value derived from the health check (`reason` in particular) is
+# built from OQMD's own API response and is treated as untrusted: it is
+# always passed through `env:` and shell variables, never interpolated
+# directly into a `run:` script via `${{ }}`.
+
+on:
+  schedule:
+    # 02:23 UTC == 11:23 JST daily. Off-the-hour minute on purpose.
+    - cron: '23 2 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Do not create an issue (health-check only)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run OQMD health check
+        id: health
+        run: python3 .github/scripts/check_oqmd_recovery.py
+
+      - name: Check for an existing open recovery issue
+        id: dedup
+        if: steps.health.outputs.healthy == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          count=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "\"OQMD service recovered\" in:title" --json number --jq 'length')
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+      - name: Decide whether this run may actually create an issue
+        id: decide
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DRY_RUN_INPUT: ${{ github.event.inputs.dry_run }}
+        run: |
+          if [ "$EVENT_NAME" = "schedule" ]; then
+            dry_run="false"
+          else
+            dry_run="$DRY_RUN_INPUT"
+          fi
+          echo "dry_run=$dry_run" >> "$GITHUB_OUTPUT"
+
+      - name: Create recovery issue
+        if: >-
+          steps.health.outputs.healthy == 'true' &&
+          steps.dedup.outputs.count == '0' &&
+          steps.decide.outputs.dry_run == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEALTH_REASON: ${{ steps.health.outputs.reason }}
+        run: |
+          cat > /tmp/oqmd_recovery_issue_body.md <<'BODY_EOF'
+          The daily OQMD recovery check (`.github/workflows/oqmd-recovery-check.yml`) detected that oqmd.org is returning usable formation-energy data again.
+
+          This does **not** auto-start Phase 21B condition 1 or calibration. Per `docs/thermodynamic_selectivity_calibration.md`, condition 1's real coverage measurement still needs a fresh owner trigger to run `python3 benchmarks/fetch_oqmd_coverage.py` for real. This workflow only detects recovery -- it will not open a duplicate issue while this one stays open.
+          BODY_EOF
+          printf '\n**Health-check detail:** %s\n' "$HEALTH_REASON" >> /tmp/oqmd_recovery_issue_body.md
+          gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "OQMD service recovered -- Phase 21B condition 1 can resume" \
+            --body-file /tmp/oqmd_recovery_issue_body.md
+
+      - name: Report outcome
+        env:
+          HEALTHY: ${{ steps.health.outputs.healthy }}
+          HEALTH_REASON: ${{ steps.health.outputs.reason }}
+          DRY_RUN: ${{ steps.decide.outputs.dry_run }}
+          DEDUP_COUNT: ${{ steps.dedup.outputs.count }}
+        run: |
+          if [ "$HEALTHY" = "true" ]; then
+            if [ "$DRY_RUN" = "true" ]; then
+              printf 'dry_run: OQMD is healthy (%s). Existing open recovery issues: %s. No issue created (dry run).\n' "$HEALTH_REASON" "$DEDUP_COUNT"
+            elif [ "$DEDUP_COUNT" = "0" ]; then
+              echo "OQMD is healthy. Created a new recovery issue."
+            else
+              echo "OQMD is healthy, but a recovery issue is already open -- not creating a duplicate."
+            fi
+          else
+            printf 'OQMD still unhealthy: %s. No issue, no notification -- this is the expected daily outcome during the outage.\n' "$HEALTH_REASON"
+          fi
