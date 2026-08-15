@@ -86,10 +86,28 @@
 //! actually come from the same experimental run (no schema signal
 //! distinguishes this, inherited as-is from the raw corpus's own
 //! per-operation grouping). Neither is approximated here.
+//!
+//! **Integration (v0.4.0)**: [`LiteratureObservationCorpusProvider`]
+//! adapts this module's computation to the ungated
+//! `LiteratureEvidenceProvider` trait (`provider.rs`) that `Planner`
+//! consumes -- same architecture as `MaterialsProjectSnapshotProvider`
+//! implementing the already-ungated `ThermodynamicProvider`. The output
+//! types themselves ([`StepGroupKey`], [`SourcedValue`],
+//! [`CrossDoiFieldStatus`], [`StepGroupAssessment`],
+//! [`RouteObservationAssessment`]) live in the always-compiled
+//! `literature_evidence` module, not here, precisely so `Planner`'s
+//! report schema never changes shape depending on whether this feature
+//! is enabled.
 
 use crate::composition::Composition;
+use crate::error::ProviderError;
+pub use crate::literature_evidence::{
+    CrossDoiFieldStatus, LiteratureRouteEvidence, RouteObservationAssessment, SourcedValue,
+    StepGroupAssessment, StepGroupKey, literature_evidence_limitations,
+};
 use crate::literature_observations::{CorpusHeatingObservation, LiteratureObservationCorpus};
-use crate::process::{Atmosphere, DurationRange, RouteFamily, TemperatureRange};
+use crate::process::{Atmosphere, RouteFamily};
+use crate::provider::LiteratureEvidenceProvider;
 use std::collections::{BTreeMap, BTreeSet};
 
 type RouteKey = (Composition, BTreeSet<Composition>, RouteFamily);
@@ -108,91 +126,62 @@ struct StepAlignmentKey {
     operation_index: usize,
 }
 
-/// The grouping key *within* one route -- target/precursors/route_family
-/// already fixed by the enclosing [`RouteObservationAssessment`], so
-/// only the operation shape and position remain. Two step groups with
-/// the same `operation_index` but different `heating_operation_count`
-/// are never the same key -- see the module doc comment on why that's
-/// the whole point.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
-pub struct StepGroupKey {
-    pub heating_operation_count: usize,
-    pub operation_index: usize,
+/// Adapts [`LiteratureObservationCorpus::cross_doi_comparisons`] to the
+/// ungated [`LiteratureEvidenceProvider`] trait. Computes
+/// `cross_doi_comparisons()` exactly **once**, at construction time, and
+/// indexes the result by route -- a per-plan `route_evidence()` call is
+/// an O(log n) `BTreeMap` lookup, never a fresh corpus-wide pass. This is
+/// what makes calling it once per candidate plan (as `Planner::plan`
+/// does) affordable; measured for real in
+/// `examples/literature_evidence_integration_report.rs`.
+pub struct LiteratureObservationCorpusProvider {
+    by_route: BTreeMap<RouteKey, RouteObservationAssessment>,
 }
 
-/// One distinct value among 2+ conflicting independent reports, with one
-/// representative contributing DOI (the alphabetically-first DOI that
-/// reported this exact value, for determinism) -- mirrors
-/// `process.rs`'s own `FieldResolution::Conflict` shape, which also
-/// keeps one source per distinct value rather than every contributor.
-#[derive(Debug, Clone, PartialEq, serde::Serialize)]
-pub struct SourcedValue<T> {
-    pub value: T,
-    pub doi: String,
+impl LiteratureObservationCorpusProvider {
+    pub fn new(corpus: &LiteratureObservationCorpus) -> Self {
+        let by_route = corpus
+            .cross_doi_comparisons()
+            .into_iter()
+            .map(|assessment| {
+                let key: RouteKey = (
+                    assessment.target.clone(),
+                    assessment.precursors.clone(),
+                    assessment.route_family,
+                );
+                (key, assessment)
+            })
+            .collect();
+        Self { by_route }
+    }
 }
 
-/// One field's cross-DOI comparison result within one [`StepGroupKey`].
-/// See the module doc comment for the full rationale, especially why
-/// `InsufficientIndependentSources` and `Unresolved` are distinct
-/// (exactly one DOI reported this field vs. zero did) and why a lone
-/// value never resolves the field here, unlike Phase 19's
-/// `apply_condition_precedents` -- that function answers "do we have
-/// any data to fill this slot," this one answers "do independent
-/// replications agree," so a single source is insufficient by design,
-/// not an oversight.
-#[derive(Debug, Clone, PartialEq, serde::Serialize)]
-pub enum CrossDoiFieldStatus<T> {
-    Agreement { value: T, source_dois: Vec<String> },
-    Conflict { values: Vec<SourcedValue<T>> },
-    InsufficientIndependentSources,
-    Unresolved,
-    SegmentationAmbiguous,
-}
-
-/// A positional comparison across independent DOIs, conditioned on one
-/// operation shape -- never "the route's step N," always "among
-/// independent DOIs whose heating was extracted with this many steps,
-/// step N." `source_dois` is every distinct DOI that contributed *any*
-/// field at this key (a superset of any one field's own contributors,
-/// since not every DOI reports every field).
-#[derive(Debug, Clone, PartialEq, serde::Serialize)]
-pub struct StepGroupAssessment {
-    pub key: StepGroupKey,
-    pub source_dois: Vec<String>,
-    pub temperature: CrossDoiFieldStatus<TemperatureRange>,
-    pub duration: CrossDoiFieldStatus<DurationRange>,
-    pub atmosphere: CrossDoiFieldStatus<Atmosphere>,
-}
-
-/// One route (target + precursor set + route family) with at least one
-/// [`StepGroupAssessment`] backed by 2+ independent DOIs. Routes with no
-/// cross-DOI replication anywhere are never emitted -- see
-/// `LiteratureObservationCorpus::cross_doi_comparisons`.
-#[derive(Debug, Clone, PartialEq, serde::Serialize)]
-pub struct RouteObservationAssessment {
-    pub target: Composition,
-    pub precursors: BTreeSet<Composition>,
-    pub route_family: RouteFamily,
-    /// True iff 2+ distinct *independent DOIs* for this route report
-    /// different `heating_operation_count` values -- computed from
-    /// *every* independent DOI for this route, not just ones that
-    /// cleared the 2-DOI bar for a listed `step_groups` entry, so even a
-    /// single differently-shaped outlier DOI is reflected here. Each DOI
-    /// is canonicalized to one shape first (its lowest
-    /// `corpus_record_index` entry for this route, same tie-break as the
-    /// step groups) before comparing, so a single DOI covering two
-    /// records with different shapes for the same route can never set
-    /// this on its own -- that would be a within-paper artifact, not
-    /// independent DOIs disagreeing, exactly the class of thing the
-    /// DOI-as-independence-unit rule exists to exclude. An independent,
-    /// route-level warning -- never overrides any `step_groups` entry's
-    /// field status, see the module doc comment.
-    pub has_multiple_operation_shapes: bool,
-    /// Every distinct `heating_operation_count` seen among this route's
-    /// independent DOIs (one canonicalized shape per DOI, see
-    /// `has_multiple_operation_shapes`), sorted ascending.
-    pub observed_operation_counts: Vec<usize>,
-    pub step_groups: Vec<StepGroupAssessment>,
+impl LiteratureEvidenceProvider for LiteratureObservationCorpusProvider {
+    fn route_evidence(
+        &self,
+        target: &Composition,
+        route_family: RouteFamily,
+        precursors: &[Composition],
+    ) -> std::result::Result<Option<LiteratureRouteEvidence>, ProviderError> {
+        // Mirrors LiteratureObservationCorpus::find_exact's own explicit
+        // route-family gate -- defense in depth: even though the corpus
+        // itself never contains non-ConventionalSolidState evidence
+        // (Phase 20A's audit), this makes the restriction independently
+        // checkable at the call site too, not just inherited silently
+        // from upstream data.
+        if route_family != RouteFamily::ConventionalSolidState {
+            return Ok(None);
+        }
+        let precursor_set: BTreeSet<Composition> = precursors.iter().cloned().collect();
+        let key: RouteKey = (target.clone(), precursor_set, route_family);
+        Ok(self
+            .by_route
+            .get(&key)
+            .map(|assessment| LiteratureRouteEvidence {
+                limitations: literature_evidence_limitations(assessment),
+                assessment: assessment.clone(),
+            }))
+    }
 }
 
 impl LiteratureObservationCorpus {
@@ -394,6 +383,7 @@ fn field_status<T: Clone + PartialEq>(candidates: Vec<(String, T)>) -> CrossDoiF
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::process::{DurationRange, TemperatureRange};
 
     fn element(symbol: &str) -> crate::composition::Element {
         crate::composition::Element::new(symbol).unwrap()

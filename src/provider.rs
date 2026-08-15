@@ -1,5 +1,6 @@
 use crate::composition::Composition;
 use crate::error::ProviderError;
+use crate::literature_evidence::LiteratureRouteEvidence;
 use crate::precursor::{PrecursorCandidate, PrecursorSelection};
 use crate::process::{ProcessPrecedent, RouteFamily};
 use crate::reaction::{BalancedReaction, CompetingPhase, ReactionEnergy, ThermodynamicConditions};
@@ -67,4 +68,28 @@ pub trait RouteSuitabilityProvider {
         target: &Composition,
         route_family: RouteFamily,
     ) -> std::result::Result<Vec<SuitabilityFinding>, ProviderError>;
+}
+
+/// Source of reference-only, cross-DOI literature evidence for an exact
+/// target/precursor-set/route-family combination (v0.4.0 Integration).
+/// Deliberately narrower in spirit than [`ProcessEvidenceProvider`]: this
+/// trait's output ([`LiteratureRouteEvidence`]) is never applied to a
+/// `ProcessStep`, never converted to a `ConditionPrecedent`, and never
+/// passed to `score_plan` -- `Planner` attaches it to `SynthesisPlan` as
+/// its own field, structurally isolated from every scoring input. Not
+/// gated behind the `literature_corpus` feature: this trait and
+/// [`LiteratureRouteEvidence`] are always compiled, so `Planner`'s public
+/// API and report schema never change shape depending on which crate
+/// features are enabled. The one real implementation
+/// (`LiteratureObservationCorpusProvider`, backed by
+/// `LiteratureObservationCorpus::cross_doi_comparisons`) lives behind
+/// that feature -- same split `ThermodynamicProvider` already has against
+/// `MaterialsProjectSnapshotProvider`.
+pub trait LiteratureEvidenceProvider {
+    fn route_evidence(
+        &self,
+        target: &Composition,
+        route_family: RouteFamily,
+        precursors: &[Composition],
+    ) -> std::result::Result<Option<LiteratureRouteEvidence>, ProviderError>;
 }

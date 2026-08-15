@@ -1,21 +1,23 @@
 //! Phase 20B's explicit non-goal, checked as a permanent regression guard
 //! rather than left as "true because nothing calls it yet" (mirrors
 //! `tests/thermodynamics_ranking_invariance.rs`'s own Phase 19P guard):
-//! loading a corpus snapshot and running `find_exact` queries against it
-//! must have zero effect on `Planner::plan`'s output. There is currently
-//! no code path connecting `literature_observations.rs` to
-//! `planner.rs`/`process.rs`'s `ConditionPrecedent` machinery at all --
-//! this is not expected to fail today. Its value is as a tripwire: if a
-//! future phase (20C/20D/integration) wires this module into the Planner
-//! without deliberately updating this test, the test itself is the signal
-//! that the boundary the owner drew (no automatic `ConditionPrecedent`
-//! promotion until `HeatingPurpose` accuracy against this corpus is
-//! validated) was just crossed.
-//!
-//! Phase 20C added `cross_doi_comparisons()` on the same corpus type --
-//! same guard, extended below, since that function is equally
-//! disconnected from `Planner` by construction (it never imports from
-//! `planner.rs` or constructs a `ConditionPrecedent`).
+//! loading a corpus snapshot and running `find_exact`/`cross_doi_comparisons`
+//! queries against it, with **no** `LiteratureEvidenceProvider`
+//! configured, must have zero effect on `Planner::plan`'s output. Its
+//! value is as a tripwire: if a future change wires this module into the
+//! Planner's *scoring* path (as opposed to the v0.4.0 Integration
+//! phase's reference-only `SynthesisPlan.literature_evidence` display
+//! field, which deliberately never reaches `score_plan`, see
+//! `docs/literature_evidence_integration.md`) without deliberately
+//! updating this test, the test itself is the signal that the boundary
+//! the owner drew (no automatic `ConditionPrecedent` promotion until
+//! `HeatingPurpose` accuracy against this corpus is validated) was just
+//! crossed. `planner.rs`'s own test module carries the *with-a-provider-
+//! configured* analogue of this guard
+//! (`literature_evidence_provider_attaches_evidence_without_changing_score_or_steps`),
+//! since exercising that path needs a `LiteratureEvidenceProvider` test
+//! double this file's `literature_corpus`-gated fixture-only setup
+//! doesn't have.
 
 use gugen::{
     Composition, Element, InMemoryPrecursorCatalog, LiteratureObservationCorpus, LoadMode, Planner,

@@ -1,5 +1,6 @@
 use crate::composition::Composition;
 use crate::evidence::PlanningEvidence;
+use crate::literature_evidence::LiteratureRouteEvidence;
 use crate::precursor::PrecursorSelection;
 use crate::process::{PlannedStep, RouteFamily};
 use crate::provenance::PlanningProvenance;
@@ -92,6 +93,22 @@ pub struct SynthesisPlan {
     pub assumptions: Vec<PlanningAssumption>,
     pub unresolved: Vec<UnresolvedRequirement>,
     pub manual_review_required: bool,
+    /// Reference-only cross-DOI literature evidence for this plan's exact
+    /// (target, precursors, route_family) (v0.4.0 Integration), from a
+    /// configured `LiteratureEvidenceProvider`. `None` whenever no
+    /// provider is configured, the provider found no matching route, or
+    /// this plan's route family isn't `ConventionalSolidState` (the only
+    /// route family the underlying corpus has evidence for). Never
+    /// derived from or fed into `score`, `confidence`, `evidence`, or
+    /// `steps` -- see `literature_evidence.rs`'s module doc comment for
+    /// why that's structural, not a convention this field happens to
+    /// follow. A field/route showing `Conflict` or
+    /// `has_multiple_operation_shapes` here is a *disclosure*, not a
+    /// planning failure -- it is never auto-resolved, and its presence
+    /// alone must never be read as "condition accuracy improved" (it
+    /// means more literature coverage was found, not that any specific
+    /// value here is correct).
+    pub literature_evidence: Option<LiteratureRouteEvidence>,
 }
 
 /// A plan excluded from the recommended list by route-suitability findings

@@ -8,7 +8,8 @@ use crate::process::{
 };
 use crate::provenance::PlanningProvenance;
 use crate::provider::{
-    PrecursorCatalog, ProcessEvidenceProvider, RouteSuitabilityProvider, ThermodynamicProvider,
+    LiteratureEvidenceProvider, PrecursorCatalog, ProcessEvidenceProvider,
+    RouteSuitabilityProvider, ThermodynamicProvider,
 };
 use crate::reaction::{BalancedReaction, ThermodynamicConditions};
 use crate::rejection::{RejectedCandidate, RejectionCode};
@@ -39,6 +40,7 @@ pub struct Planner {
     thermodynamic_provider: Option<Box<dyn ThermodynamicProvider>>,
     process_evidence_provider: Option<Box<dyn ProcessEvidenceProvider>>,
     route_suitability_provider: Option<Box<dyn RouteSuitabilityProvider>>,
+    literature_evidence_provider: Option<Box<dyn LiteratureEvidenceProvider>>,
     config: PlanningConfig,
 }
 
@@ -55,6 +57,7 @@ impl Planner {
             thermodynamic_provider: Some(Box::new(thermodynamic_provider)),
             process_evidence_provider: Some(Box::new(process_evidence_provider)),
             route_suitability_provider: None,
+            literature_evidence_provider: None,
             config,
         }
     }
@@ -72,6 +75,7 @@ impl Planner {
             thermodynamic_provider: None,
             process_evidence_provider: None,
             route_suitability_provider: None,
+            literature_evidence_provider: None,
             config,
         }
     }
@@ -90,6 +94,7 @@ impl Planner {
             thermodynamic_provider: None,
             process_evidence_provider: Some(Box::new(process_evidence_provider)),
             route_suitability_provider: None,
+            literature_evidence_provider: None,
             config,
         }
     }
@@ -108,6 +113,30 @@ impl Planner {
             thermodynamic_provider: None,
             process_evidence_provider: None,
             route_suitability_provider: Some(Box::new(route_suitability_provider)),
+            literature_evidence_provider: None,
+            config,
+        }
+    }
+
+    /// Catalog plus a literature-evidence provider (e.g.
+    /// `LiteratureObservationCorpusProvider`, v0.4.0 Integration) -- no
+    /// other optional provider. Mirrors `with_route_suitability_provider`'s
+    /// shape; see `new`/`offline_minimal` for the other combinations. The
+    /// resulting reports carry `SynthesisPlan.literature_evidence` but are
+    /// otherwise identical to what `offline_minimal` alone would have
+    /// produced -- score, confidence, ranking, and `steps` are unaffected
+    /// by construction (`literature_evidence.rs`'s module doc comment).
+    pub fn with_literature_evidence_provider(
+        catalog: impl PrecursorCatalog + 'static,
+        literature_evidence_provider: impl LiteratureEvidenceProvider + 'static,
+        config: PlanningConfig,
+    ) -> Self {
+        Self {
+            catalog: Box::new(catalog),
+            thermodynamic_provider: None,
+            process_evidence_provider: None,
+            route_suitability_provider: None,
+            literature_evidence_provider: Some(Box::new(literature_evidence_provider)),
             config,
         }
     }
@@ -367,6 +396,76 @@ impl Planner {
                     &self.config.ranking_weights,
                 );
 
+                // v0.4.0 Integration: looked up *after* score_plan has
+                // already run and returned, deliberately -- this evidence
+                // is never a score_plan input (it isn't in that call's
+                // argument list at all, unlike `evidence`/
+                // `condition_conflicts`/`process_evidence_provider_consulted`
+                // above), so nothing about its ordering here can affect
+                // `assessment`. Restricted to ConventionalSolidState even
+                // though `LiteratureObservationCorpusProvider` already
+                // enforces the same restriction internally -- checked at
+                // this call site too, so the "never applied to
+                // Mechanochemical" claim doesn't rely on any one
+                // implementation's internals alone.
+                let mut literature_evidence = None;
+                if template.route_family == RouteFamily::ConventionalSolidState {
+                    if let Some(provider) = &self.literature_evidence_provider {
+                        let precursor_compositions: Vec<_> = accepted
+                            .reaction
+                            .reactants
+                            .iter()
+                            .map(|s| s.composition.clone())
+                            .collect();
+                        match provider.route_evidence(
+                            composition,
+                            template.route_family,
+                            &precursor_compositions,
+                        ) {
+                            Ok(Some(route_evidence)) => {
+                                let found = &route_evidence.assessment;
+                                // Always disclosed, not just for the
+                                // Conflict/shape-diversity cases -- a clean
+                                // unanimous Agreement is exactly the result
+                                // most likely to be misread as "the corpus
+                                // endorses this temperature" if it were the
+                                // one case left silent (pre-commit advisor
+                                // review finding).
+                                provider_warnings.push(PlanningWarning {
+                                    message: format!(
+                                        "literature evidence for this exact route: {} \
+                                        independent DOI(s) found{}{} -- reference-only, \
+                                        never applied to conditions or score",
+                                        found.independent_doi_count(),
+                                        if found.has_multiple_operation_shapes {
+                                            ", with differing reported step counts across \
+                                            DOIs"
+                                        } else {
+                                            ""
+                                        },
+                                        if found.has_any_conflict() {
+                                            ", including a field-level disagreement among \
+                                            independent DOIs"
+                                        } else {
+                                            ""
+                                        },
+                                    ),
+                                    severity: WarningSeverity::Info,
+                                });
+                                literature_evidence = Some(route_evidence);
+                            }
+                            Ok(None) => {}
+                            Err(err) => provider_warnings.push(PlanningWarning {
+                                message: format!(
+                                    "literature evidence provider failed for this candidate, \
+                                    continuing without it: {err}"
+                                ),
+                                severity: WarningSeverity::Info,
+                            }),
+                        }
+                    }
+                }
+
                 let mut plan_warnings = template.warnings;
                 plan_warnings.extend(assessment.warnings);
                 plan_warnings.extend(provider_warnings);
@@ -389,6 +488,7 @@ impl Planner {
                     assumptions: assessment.assumptions,
                     unresolved: assessment.unresolved,
                     manual_review_required: assessment.manual_review_required,
+                    literature_evidence,
                 });
             }
         }
@@ -647,6 +747,10 @@ mod tests {
     use crate::composition::Composition;
     use crate::config::SearchBudget;
     use crate::error::ProviderError;
+    use crate::literature_evidence::{
+        CrossDoiFieldStatus, LiteratureRouteEvidence, RouteObservationAssessment, SourcedValue,
+        StepGroupAssessment, StepGroupKey,
+    };
     use crate::precursor::{AvailabilityMetadata, InMemoryPrecursorCatalog, PrecursorCandidate};
     use crate::process::ProcessPrecedent;
     use crate::reaction::ReactionEnergy;
@@ -928,5 +1032,340 @@ mod tests {
             .plan(&target, "2026-08-14T00:00:00Z")
             .unwrap();
         assert!(!report.plans.is_empty());
+    }
+
+    // v0.4.0 Integration: LiteratureEvidenceProvider wiring. Ungated (the
+    // trait and its types are always compiled), so these run in the
+    // default test suite regardless of the `literature_corpus` feature --
+    // the score/ranking/steps non-interference guarantee is core enough
+    // that it should not depend on that feature being enabled.
+
+    fn conflicted_literature_evidence() -> LiteratureRouteEvidence {
+        let assessment = RouteObservationAssessment {
+            target: composition(&[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)]),
+            precursors: [
+                composition(&[("Ba", 1.0), ("C", 1.0), ("O", 3.0)]),
+                composition(&[("Ti", 1.0), ("O", 2.0)]),
+            ]
+            .into_iter()
+            .collect(),
+            route_family: RouteFamily::ConventionalSolidState,
+            has_multiple_operation_shapes: true,
+            observed_operation_counts: vec![1, 2],
+            step_groups: vec![StepGroupAssessment {
+                key: StepGroupKey {
+                    heating_operation_count: 1,
+                    operation_index: 0,
+                },
+                source_dois: vec!["10.1/a".to_string(), "10.1/b".to_string()],
+                temperature: CrossDoiFieldStatus::Conflict {
+                    values: vec![
+                        SourcedValue {
+                            value: crate::process::TemperatureRange::new(900.0, 900.0).unwrap(),
+                            doi: "10.1/a".to_string(),
+                        },
+                        SourcedValue {
+                            value: crate::process::TemperatureRange::new(950.0, 950.0).unwrap(),
+                            doi: "10.1/b".to_string(),
+                        },
+                    ],
+                },
+                duration: CrossDoiFieldStatus::Unresolved,
+                atmosphere: CrossDoiFieldStatus::InsufficientIndependentSources,
+            }],
+        };
+        LiteratureRouteEvidence {
+            limitations: crate::literature_evidence::literature_evidence_limitations(&assessment),
+            assessment,
+        }
+    }
+
+    /// Always returns the same conflict-laden evidence, regardless of
+    /// query -- deliberately "bad news" (a real Conflict, real shape
+    /// diversity), used to prove that even disagreement-carrying evidence
+    /// never moves score/confidence/steps.
+    struct StubLiteratureEvidenceProvider;
+    impl LiteratureEvidenceProvider for StubLiteratureEvidenceProvider {
+        fn route_evidence(
+            &self,
+            _target: &Composition,
+            _route_family: RouteFamily,
+            _precursors: &[Composition],
+        ) -> std::result::Result<Option<LiteratureRouteEvidence>, ProviderError> {
+            Ok(Some(conflicted_literature_evidence()))
+        }
+    }
+
+    /// The opposite case from `conflicted_literature_evidence`: every
+    /// field is a clean, unanimous `Agreement`, no shape diversity. This
+    /// is the case most likely to be misread as "the corpus endorses this
+    /// temperature" if it were the one left with no disclosure warning at
+    /// all (pre-commit advisor review finding) -- so the warning must
+    /// still fire here too.
+    fn agreeing_literature_evidence() -> LiteratureRouteEvidence {
+        let assessment = RouteObservationAssessment {
+            target: composition(&[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)]),
+            precursors: [
+                composition(&[("Ba", 1.0), ("C", 1.0), ("O", 3.0)]),
+                composition(&[("Ti", 1.0), ("O", 2.0)]),
+            ]
+            .into_iter()
+            .collect(),
+            route_family: RouteFamily::ConventionalSolidState,
+            has_multiple_operation_shapes: false,
+            observed_operation_counts: vec![1],
+            step_groups: vec![StepGroupAssessment {
+                key: StepGroupKey {
+                    heating_operation_count: 1,
+                    operation_index: 0,
+                },
+                source_dois: vec!["10.1/a".to_string(), "10.1/b".to_string()],
+                temperature: CrossDoiFieldStatus::Agreement {
+                    value: crate::process::TemperatureRange::new(900.0, 900.0).unwrap(),
+                    source_dois: vec!["10.1/a".to_string(), "10.1/b".to_string()],
+                },
+                duration: CrossDoiFieldStatus::Unresolved,
+                atmosphere: CrossDoiFieldStatus::InsufficientIndependentSources,
+            }],
+        };
+        LiteratureRouteEvidence {
+            limitations: crate::literature_evidence::literature_evidence_limitations(&assessment),
+            assessment,
+        }
+    }
+
+    struct AgreeingLiteratureEvidenceProvider;
+    impl LiteratureEvidenceProvider for AgreeingLiteratureEvidenceProvider {
+        fn route_evidence(
+            &self,
+            _target: &Composition,
+            _route_family: RouteFamily,
+            _precursors: &[Composition],
+        ) -> std::result::Result<Option<LiteratureRouteEvidence>, ProviderError> {
+            Ok(Some(agreeing_literature_evidence()))
+        }
+    }
+
+    struct FailingLiteratureEvidenceProvider;
+    impl LiteratureEvidenceProvider for FailingLiteratureEvidenceProvider {
+        fn route_evidence(
+            &self,
+            _target: &Composition,
+            _route_family: RouteFamily,
+            _precursors: &[Composition],
+        ) -> std::result::Result<Option<LiteratureRouteEvidence>, ProviderError> {
+            Err(ProviderError::Unavailable("simulated outage".to_string()))
+        }
+    }
+
+    /// Records every `(route_family)` it was ever asked about -- a test
+    /// that only checks `literature_evidence.is_none()` for a
+    /// Mechanochemical plan would pass even if the call-site guard were
+    /// deleted, since a real corpus-backed provider also returns nothing
+    /// for that route family; this makes the guard itself the thing under
+    /// test, not just its typical outcome. `Rc<RefCell<_>>`, not a bare
+    /// `RefCell`, so the test can keep its own handle to read the log
+    /// after the provider itself has been moved into the `Planner`.
+    struct RecordingLiteratureEvidenceProvider {
+        queried_route_families: std::rc::Rc<std::cell::RefCell<Vec<RouteFamily>>>,
+    }
+    impl LiteratureEvidenceProvider for RecordingLiteratureEvidenceProvider {
+        fn route_evidence(
+            &self,
+            _target: &Composition,
+            route_family: RouteFamily,
+            _precursors: &[Composition],
+        ) -> std::result::Result<Option<LiteratureRouteEvidence>, ProviderError> {
+            self.queried_route_families.borrow_mut().push(route_family);
+            Ok(None)
+        }
+    }
+
+    #[test]
+    fn no_provider_leaves_literature_evidence_none_on_every_plan() {
+        let report = Planner::offline_minimal(barium_titanate_catalog(), generous_config())
+            .plan(&barium_titanate_target(), "2026-08-14T00:00:00Z")
+            .unwrap();
+        assert!(!report.plans.is_empty());
+        assert!(report.plans.iter().all(|p| p.literature_evidence.is_none()));
+    }
+
+    #[test]
+    fn literature_evidence_provider_attaches_evidence_without_changing_score_or_steps() {
+        let target = barium_titanate_target();
+        let baseline = Planner::offline_minimal(barium_titanate_catalog(), generous_config())
+            .plan(&target, "2026-08-14T00:00:00Z")
+            .unwrap();
+        let with_evidence = Planner::with_literature_evidence_provider(
+            barium_titanate_catalog(),
+            StubLiteratureEvidenceProvider,
+            generous_config(),
+        )
+        .plan(&target, "2026-08-14T00:00:00Z")
+        .unwrap();
+
+        assert_eq!(baseline.plans.len(), with_evidence.plans.len());
+        let mut any_conventional_solid_state = false;
+        for (before, after) in baseline.plans.iter().zip(with_evidence.plans.iter()) {
+            assert_eq!(before.plan_id, after.plan_id);
+            assert_eq!(
+                before.score, after.score,
+                "a configured LiteratureEvidenceProvider must never change score"
+            );
+            assert_eq!(
+                before.confidence, after.confidence,
+                "a configured LiteratureEvidenceProvider must never change confidence"
+            );
+            assert_eq!(
+                before.steps, after.steps,
+                "a configured LiteratureEvidenceProvider must never auto-fill ProcessStep fields"
+            );
+            assert!(before.literature_evidence.is_none());
+            if after.route_family == RouteFamily::ConventionalSolidState {
+                any_conventional_solid_state = true;
+                assert!(
+                    after.literature_evidence.is_some(),
+                    "the stub provider always returns evidence for ConventionalSolidState"
+                );
+                assert!(
+                    after
+                        .warnings
+                        .iter()
+                        .any(|w| w.message.contains("literature evidence")
+                            && w.message.contains("independent DOI")),
+                    "a Conflict-carrying evidence must surface a disclosure warning: {:?}",
+                    after.warnings
+                );
+            } else {
+                assert!(
+                    after.literature_evidence.is_none(),
+                    "literature evidence must never be attached to a non-ConventionalSolidState plan"
+                );
+            }
+        }
+        assert!(
+            any_conventional_solid_state,
+            "test setup must actually exercise the ConventionalSolidState path"
+        );
+
+        // Ranking order itself (not just per-plan score) must also be
+        // identical -- score equality alone wouldn't catch a change to
+        // the *order* plans are placed in.
+        let baseline_order: Vec<&str> = baseline
+            .plans
+            .iter()
+            .map(|p| p.plan_id.0.as_str())
+            .collect();
+        let with_evidence_order: Vec<&str> = with_evidence
+            .plans
+            .iter()
+            .map(|p| p.plan_id.0.as_str())
+            .collect();
+        assert_eq!(baseline_order, with_evidence_order);
+    }
+
+    #[test]
+    fn clean_agreement_still_surfaces_a_disclosure_warning() {
+        let report = Planner::with_literature_evidence_provider(
+            barium_titanate_catalog(),
+            AgreeingLiteratureEvidenceProvider,
+            generous_config(),
+        )
+        .plan(&barium_titanate_target(), "2026-08-14T00:00:00Z")
+        .unwrap();
+
+        let mut any_conventional_solid_state = false;
+        for plan in &report.plans {
+            if plan.route_family != RouteFamily::ConventionalSolidState {
+                continue;
+            }
+            any_conventional_solid_state = true;
+            assert!(plan.literature_evidence.is_some());
+            assert!(
+                plan.warnings
+                    .iter()
+                    .any(|w| w.message.contains("literature evidence")
+                        && w.message.contains("independent DOI")),
+                "a clean, unanimous Agreement must still surface a disclosure warning -- \
+                otherwise it's the one case that silently reads as endorsement: {:?}",
+                plan.warnings
+            );
+        }
+        assert!(
+            any_conventional_solid_state,
+            "test setup must actually exercise the ConventionalSolidState path"
+        );
+    }
+
+    #[test]
+    fn literature_evidence_provider_failure_degrades_to_a_warning() {
+        let report = Planner::with_literature_evidence_provider(
+            barium_titanate_catalog(),
+            FailingLiteratureEvidenceProvider,
+            generous_config(),
+        )
+        .plan(&barium_titanate_target(), "2026-08-14T00:00:00Z")
+        .unwrap();
+
+        assert!(!report.plans.is_empty());
+        let mut any_conventional_solid_state = false;
+        for plan in &report.plans {
+            assert!(plan.literature_evidence.is_none());
+            // Only ConventionalSolidState plans ever call the provider at
+            // all (the Mechanochemical call-site guard) -- a Mechanochemical
+            // plan correctly has no such warning, since it was never asked.
+            if plan.route_family == RouteFamily::ConventionalSolidState {
+                any_conventional_solid_state = true;
+                assert!(
+                    plan.warnings
+                        .iter()
+                        .any(|w| w.message.contains("literature evidence provider failed")),
+                    "expected the provider failure reflected as a warning: {:?}",
+                    plan.warnings
+                );
+            }
+        }
+        assert!(
+            any_conventional_solid_state,
+            "test setup must actually exercise the ConventionalSolidState path"
+        );
+    }
+
+    #[test]
+    fn literature_evidence_provider_is_never_asked_about_mechanochemical() {
+        let log = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let recorder = RecordingLiteratureEvidenceProvider {
+            queried_route_families: log.clone(),
+        };
+        let report = Planner::with_literature_evidence_provider(
+            barium_titanate_catalog(),
+            recorder,
+            generous_config(),
+        )
+        .plan(&barium_titanate_target(), "2026-08-14T00:00:00Z")
+        .unwrap();
+
+        // Sanity: this target really does produce Mechanochemical plans
+        // too (Phase 12's unconditional route-family applicability), so
+        // the absence of a Mechanochemical query below is a real
+        // guard-is-working signal, not a vacuous "nothing to ask about."
+        assert!(
+            report
+                .plans
+                .iter()
+                .any(|p| p.route_family == RouteFamily::Mechanochemical)
+        );
+        let queried = log.borrow();
+        assert!(
+            !queried.is_empty(),
+            "the recorder must have been called at least once (for ConventionalSolidState)"
+        );
+        assert!(
+            queried
+                .iter()
+                .all(|&rf| rf == RouteFamily::ConventionalSolidState),
+            "the literature evidence provider must never be asked about a route family other \
+            than ConventionalSolidState: {queried:?}"
+        );
     }
 }
