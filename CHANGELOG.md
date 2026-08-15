@@ -4,6 +4,29 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `scale_to_integers` (reaction balancing) now correctly abstains
+  (`Ok(None)`) rather than erroring out the entire precursor search when
+  integer scaling overflows during the multiply step, matching its own
+  documented overflow contract.
+- `MaterialsProjectSnapshotProvider::reaction_energy` now rejects a
+  hand-built element-imbalanced reaction (`ProviderError::MalformedRecord`),
+  matching the element-conservation check its `thermodynamics.rs` sibling
+  function already performs.
+- `PlanningProvenance::enabled_features()` now reports the
+  `chematic_crystal` and `literature_corpus` Cargo features, which it
+  was silently omitting.
+- `score_plan` no longer panics when a caller-supplied `RankingWeights`
+  component is non-finite or negative; such a weight now contributes
+  `0.0` to its side's weighted average instead, matching the function's
+  existing all-zero-`weight_sum` fallback. No public signature change.
+
+### Documentation
+
+- Corrected a false "complete accounting" invariant in `LoadReport`'s
+  doc comment (`literature_observations.rs`).
+
 ## [0.4.0] - 2026-08-15
 
 An evidence-infrastructure release: gas-free solid finite-temperature
