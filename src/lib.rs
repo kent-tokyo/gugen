@@ -70,8 +70,9 @@
 //! agreement/conflict classification, and reference-only literature
 //! evidence in `Planner` -- an evidence-infrastructure release, not a
 //! ranking-accuracy or synthesis-success-prediction claim.
-//! **v0.4.0 is published** (crates.io, tagged `v0.4.0`). See
-//! `CHANGELOG.md` for the user-facing summary.
+//! **v0.4.1 is published** (crates.io, tagged `v0.4.1`) -- a bug-fix
+//! patch, no new capabilities. See `CHANGELOG.md` for the user-facing
+//! summary.
 
 #![forbid(unsafe_code)]
 
