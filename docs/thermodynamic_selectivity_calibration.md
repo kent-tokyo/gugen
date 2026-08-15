@@ -1,25 +1,31 @@
 # Phase 21B: thermodynamic-selectivity calibration
 
-**Status: partially executed. The calibration experiment itself has NOT
-run.** Phase 21A's GO for Phase 21B (`docs/thermodynamic_selectivity_dataset_feasibility.md`)
-was conditioned on four requirements. This document executes conditions
-2 and 3, per an explicit owner decision to defer condition 1 (and
-therefore the calibration behind it) until a Materials Project API key
-is available:
+**Status: in progress.** Phase 21A's GO for Phase 21B was conditioned on
+four requirements. Conditions 2 and 3 completed first (§2, §3). Condition
+1 was originally scoped against Materials Project, but the owner
+explicitly redirected it to **OQMD** instead (unauthenticated REST API,
+own data licensed CC BY 4.0 — verified, §6.1) to avoid blocking this
+phase on a credential. As of this document's current revision, condition
+1's live data pull is itself blocked by a **real, external OQMD service
+outage** (confirmed independently, §6.2) — a different kind of blocker
+than the original MP-key one, and not something this phase can design
+around.
 
 | Condition | Status |
 |---|---|
-| 1. Thermodynamic-coverage check against gugen's real data source | **Not done — blocked.** `MaterialsProjectSnapshotProvider` structurally holds no API key and fetches nothing itself (`src/materials_project_adapter.rs` module doc, `docs/integration.md`); no key exists in this environment. Owner chose to run conditions 2/3 first rather than supply one now. |
+| 1. Thermodynamic-coverage check against gugen's real data source | **Redirected to OQMD (owner instruction); pre-registered gate and polymorph policy fixed in §6 before any data was fetched. Live pull currently blocked by an OQMD service outage (confirmed, §6.2) — not yet measured.** |
 | 2. Manual label audit (mirroring Phase 20D) | **Done — this document, §2.** |
 | 3. Artifact filtering | **Done — this document, §3.** |
 | 4. Carry forward leakage exclusion + DOI independence unit | **Done — both conditions 2 and 3 build directly on Phase 21A's leakage-excluded, DOI-tracked population.** |
 
 **No calibration was run. No correlation was computed. No GO/NO-GO for
 the calibration itself can be given yet** — that decision still needs
-condition 1. This is the same discipline as Phase 21A's own §7
-("not measured in this phase"): an unmet precondition is reported as
-unmet, not quietly worked around or assumed favorable. No `src/` change,
-no version bump.
+condition 1 to actually measure something, and OQMD's own outage
+prevented that this session. This is the same discipline as Phase 21A's
+own §7 ("not measured in this phase"): an unmet precondition is reported
+as unmet, not quietly worked around, and a real infrastructure outage is
+reported as exactly that, not silently substituted with a cached or
+third-party copy of the data (§6.4). No `src/` change, no version bump.
 
 ## 1. Recap: what this builds on
 
@@ -174,11 +180,7 @@ the population any future calibration (and this document's own condition
 
 ## 4. What remains before a calibration can run
 
-1. **Condition 1 (thermodynamic coverage)**: needs a Materials Project
-   API key (or an equivalent formation-energy source) to construct
-   `CompetingPhase` entries for the ~381 clean targets' actual solid
-   species and confirm they resolve against
-   `MaterialsProjectSnapshotProvider`. Not started.
+1. **Condition 1 (thermodynamic coverage)**: redirected to OQMD, see §6.
 2. **The calibration experiment itself**: computing
    `balanced_reaction_delta_ev_per_atom` for each clean route pair and
    testing correlation against the audited pure/impure label — blocked
@@ -192,7 +194,152 @@ the population any future calibration (and this document's own condition
    flux-growth routes) if they recur systematically in the larger clean
    population — this was not checked at scale in this document.
 
-## 5. Non-goals (unchanged)
+## 6. Condition 1 via OQMD (owner-redirected, avoids the MP-key block)
+
+The owner explicitly declined to wait for a Materials Project API key
+and instead named OQMD (Open Quantum Materials Database) as condition
+1's data source: its REST API needs no authentication, and its own data
+is separately licensed (§6.1). This section fixes the source identity,
+license, coverage gate, and polymorph policy **before** any data was
+fetched, per this project's established discipline (Phase 21A's own
+sample gate; the pre-implementation advisor-review item "coverage gate"
+explicitly named for this phase).
+
+### 6.1 Source, license, endpoint (verified, not assumed)
+
+- **API**: `GET https://oqmd.org/oqmdapi/formationenergy` (also
+  `/oqmdapi/formationenergy/<id>` for a single entry), unauthenticated —
+  confirmed against the `qmpy_rester` reference client
+  (`github.com/mohanliu/qmpy_rester`) and OQMD's own `restful.html`
+  documentation, and against `mohanliu/oqmddoc`'s README ("No API key
+  required").
+- **Data license**: **CC BY 4.0**, stated by OQMD itself ("The data in
+  OQMD is licensed under CC-BY 4.0") — this is the data license, not to
+  be confused with the separate MIT license covering the `qmpy` software
+  only. `oqmd.org` itself is down as this is written (§6.2), so this was
+  verified via a Wayback Machine capture, timestamp `20260803134040`
+  (~12 days before this outage was found) — the same sentence and license
+  link appears unchanged in captures from 2021, 2024, and 2025, i.e. a
+  stable, long-standing policy, not a stale or one-off snapshot.
+  Attribution requirement: cite Saal, Kirklin, Aykol, Meredig, Wolverton,
+  *JOM* 65, 1501 (2013), doi:10.1007/s11837-013-0755-4, and Kirklin, Saal,
+  Meredig, Thompson, Doak, Aykol, Rühl, Wolverton, *npj Computational
+  Materials* 1, 15010 (2015), doi:10.1038/npjcompumats.2015.10.
+- **Scope caveat**: OQMD does not redistribute original ICSD-sourced
+  input structures (an ICSD licensing restriction) — it provides ICSD
+  collection codes instead. This does not block using OQMD's own
+  computed formation energies/structures, which are what condition 1
+  needs.
+- **The owner's stated "v1.8, Feb 2026" dataset version is unverified**
+  and is **not** written into any manifest on the strength of the
+  prompt alone. The real snapshot identity this phase records is: the
+  API response's own `meta.api_version` and `meta.time_stamp` fields,
+  this fetcher's own retrieval datetime, the exact query used, and a
+  checksum of the downloaded JSON — the same discipline as every other
+  dataset this project has ever fetched (`fetch_kononova.py`,
+  `audit_thermodynamic_selectivity_dataset_feasibility.py`).
+- **Fields actually requested** (via the API's own `fields` param, so
+  the raw snapshot never carries unrelated per-entry data like `sites`/
+  `unit_cell`), matching `benchmarks/fetch_oqmd_coverage.py`'s
+  `QUERY_FIELDS` exactly: `name` (formula), `entry_id`, `natoms`,
+  `volume` (**unit-cell** volume, for `natoms` atoms — not per-atom),
+  `delta_e` (formation energy, eV/atom, 0 K DFT), `spacegroup`,
+  `stability` (hull distance, eV/atom, captured for context — not part
+  of the coverage decision), `duplicate_entry_id`. Confirmed against the
+  reference client and OQMD's own docs — treated as *probable*, not
+  certain, since the documentation page is copyright-dated 2019 citing
+  an older `qmpy` version; the fetcher asserts the fields the coverage
+  decision itself needs (`name`, `entry_id`, `natoms`, `volume`,
+  `delta_e`) are present in the first real response rather than silently
+  coercing a missing one.
+
+### 6.2 Live service status: down (2026-08-15)
+
+`https://oqmd.org/` and `https://oqmd.org/oqmdapi/formationenergy`
+returned `HTTP 502` on every attempt made while writing this section —
+confirmed independently by two separate fetch paths (direct `curl` and
+an agent's own `WebFetch`), consistently, not a one-off transient blip
+in a single tool. No status page or open GitHub issue documenting this
+specific outage could be found. **This is a real, external
+infrastructure blocker, not a design gap in this phase** — condition 1's
+live measurement could not be completed this session for this reason.
+
+### 6.3 Pre-registered coverage gate and polymorph policy
+
+Fixed here, before any successful fetch, so a later result can't be
+talked into passing by adjusting the criterion after seeing it (same
+discipline as Phase 21A's 30-target sample gate):
+
+- **Field mapping**: OQMD's `delta_e` (eV/atom, 0 K DFT formation
+  energy) maps directly to `SolidThermodynamicEntry::formation_enthalpy_ev_per_atom`
+  — this is the same "0 K DFT energy stands in for 0 K formation
+  enthalpy" convention gugen's own type doc already establishes for any
+  caller-supplied dataset (`src/thermodynamics.rs`: "A caller-supplied
+  0 K formation enthalpy... gugen never fetches this data itself"), the
+  same convention `MaterialsProjectSnapshotProvider` already uses for MP
+  data. OQMD's `volume` is **unit-cell** volume; `SolidThermodynamicEntry`
+  needs **per-atom** volume, so the fetcher computes `volume / natoms` —
+  stated explicitly here so the conversion is never silently assumed.
+- **Polymorph policy**: OQMD returns multiple entries per composition
+  (distinct `spacegroup`/`entry_id`). Policy: **take the lowest
+  `delta_e` among matches** — mirrors `MaterialsProjectSnapshotProvider::energy_for`'s
+  existing "most stable known phase" convention exactly
+  (`src/materials_project_adapter.rs`), order-independent by
+  construction. This is a **modeling convention, never an experimental
+  phase identification** — stated here so it cannot later be described
+  as "the phase this route actually formed." `duplicate_entry_id` rows
+  (OQMD's own explicit duplicate-calculation marker) are excluded before
+  this selection, not counted as independent entries.
+- **Dataset-mixing prevention**: OQMD entries are tagged with their own
+  `ThermodynamicDatasetIdentity` (`source: "OQMD"`), distinct from any
+  Materials Project identity. `balanced_reaction_delta_ev_per_atom`'s
+  existing `InconsistentThermodynamicDataset` check (`src/thermodynamics.rs`)
+  already refuses to compute across two different dataset identities —
+  this is gugen's own existing, structural mechanism for the owner's
+  "don't mix MP and OQMD entries" requirement, not a new check this
+  phase has to build.
+- **Coverage gate**: `balanced_reaction_delta_ev_per_atom` returns
+  `Ok(None)` — an abstention — the moment *any single species* in a
+  reaction lacks an entry, so coverage is all-or-nothing per route, and
+  a route *pair* (needed for a within-target comparison) is only usable
+  if **both** routes are fully covered. Per-species coverage can look
+  high while very few full route pairs survive — both numbers are
+  computed and reported (§ coverage report, once data is available), but
+  **the gate is on the route-pair number**: condition 1 passes only if
+  **≥30 targets retain ≥2 fully-OQMD-covered, gas-free, outcome-
+  disagreeing routes** — the same 30-target floor as Phase 21A's sample
+  gate, applied one stage later in the pipeline.
+
+### 6.4 What was not done to route around the outage
+
+No cached, mirrored, or third-party copy of OQMD's data was substituted
+for a live pull. The Wayback Machine was used only to read a *license
+statement*, not to source data, and the sharper reason that's a
+legitimate distinction (not just "text vs. bulk data"): a license
+statement is a **claim about terms**, whose staleness this document
+independently verified by checking it was unchanged across five years
+of snapshots; a dataset is a **measurement**, whose staleness cannot be
+verified at all once the live source is unreachable — an archived
+formation-energy value could reflect a since-corrected calculation and
+there is no way to know. This is the same principle that ruled out using
+the Lee et al. dataset's `mp_eabovehull` field as a coverage substitute
+in an earlier draft of this document; it generalizes beyond that one
+case. If the live service is still down when this phase is next picked
+up, condition 1 remains reported as **not measured, for a documented
+external reason** — not silently worked around. `oqmd.org`,
+`www.oqmd.org`, `api.oqmd.org`, and `oqmd.northwestern.edu` were all
+checked (only the separately-hosted `static.oqmd.org` docs mirror
+responded) before concluding this, not on a single failed request.
+
+**Committability of the raw coverage snapshot**: not yet decided, since
+its real size is unknown until a live fetch succeeds — the fetcher
+already requests only the fields the coverage decision needs (no
+`sites`/`unit_cell`), and the same size test used throughout this
+project applies once real data exists (commit if comparable to
+`kononova_sample.jsonl`'s ~500KB, gitignore and keep only a manifest
+otherwise).
+
+## 7. Non-goals (unchanged)
 
 No `score_plan` connection, no `RankingWeights` change, no default
 ranking change, no success-probability claim, no automatic temperature
