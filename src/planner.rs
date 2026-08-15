@@ -1,6 +1,6 @@
 use crate::composition::Element;
 use crate::config::PlanningConfig;
-use crate::error::Result;
+use crate::error::{ProviderError, Result};
 use crate::evidence::{EvidenceKind, EvidenceScope, EvidenceStrength, PlanningEvidence};
 use crate::precursor::{PrecursorId, PrecursorSelection, search_precursor_sets};
 use crate::process::{
@@ -11,7 +11,7 @@ use crate::provider::{
     LiteratureEvidenceProvider, PrecursorCatalog, ProcessEvidenceProvider,
     RouteSuitabilityProvider, ThermodynamicProvider,
 };
-use crate::reaction::{BalancedReaction, ThermodynamicConditions};
+use crate::reaction::{BalancedReaction, CompetingPhase, ReactionEnergy, ThermodynamicConditions};
 use crate::rejection::{RejectedCandidate, RejectionCode};
 use crate::report::{
     ApplicabilityAssessment, ApplicabilityLevel, NotRecommendedPlan, PlanId, PlanningWarning,
@@ -217,25 +217,58 @@ impl Planner {
             &self.config.search_budget,
         )?;
 
+        // `competing_phases` is a target-only query -- its answer cannot
+        // vary across `accepted`/route-family iterations below, since
+        // `composition` is fixed for this whole `plan()` call. Computed
+        // once here (previously: once per (accepted, route_family) pair,
+        // a known, accepted inefficiency the ROADMAP recorded) and reused
+        // by every iteration. Gated on a non-empty accepted set, matching
+        // the pre-fix call site's own scope (it lived inside `for accepted
+        // in &outcome.accepted`) -- an empty search result must still make
+        // zero provider calls, not one, since nothing below will ever read
+        // this value.
+        let competing_phases_cache: Option<
+            std::result::Result<Vec<CompetingPhase>, ProviderError>,
+        > = if outcome.accepted.is_empty() {
+            None
+        } else {
+            self.thermodynamic_provider
+                .as_ref()
+                .map(|provider| provider.competing_phases(composition))
+        };
+
         let mut plans: Vec<SynthesisPlan> = Vec::with_capacity(outcome.accepted.len());
         for accepted in &outcome.accepted {
             // Phase 12: one accepted precursor set can now produce a plan
             // under more than one route family (e.g. ConventionalSolidState
             // and Mechanochemical both apply unconditionally). Each gets its
-            // own full pass through provider lookups below -- duplicating a
-            // thermodynamic/process-evidence provider call per route family
-            // sharing the same reaction is a known, accepted inefficiency
-            // (see the plan's cross-phase notes), not a correctness issue.
+            // own full pass through provider lookups below.
+            //
+            // `reaction_energy` depends only on `accepted.reaction` (fixed
+            // `ThermodynamicConditions::default()`), not on which route
+            // family's template is being scored, so it's computed once per
+            // `accepted` here and reused across every route family sharing
+            // it -- closes the other half of the same known inefficiency
+            // `competing_phases_cache` above closes; process-evidence
+            // provider calls further below still run once per route family,
+            // deliberately not touched by this change (out of the scope
+            // ROADMAP recorded for this fix).
+            let reaction_energy_cache: Option<
+                std::result::Result<Option<ReactionEnergy>, ProviderError>,
+            > = self.thermodynamic_provider.as_ref().map(|provider| {
+                provider.reaction_energy(&accepted.reaction, &ThermodynamicConditions::default())
+            });
+
             for mut template in applicable_route_family_templates(composition, accepted) {
                 let mut evidence = std::mem::take(&mut template.evidence);
                 let mut provider_warnings = Vec::new();
                 let mut condition_conflicts = Vec::new();
                 let process_evidence_provider_consulted = self.process_evidence_provider.is_some();
 
-                if let Some(provider) = &self.thermodynamic_provider {
-                    match provider
-                        .reaction_energy(&accepted.reaction, &ThermodynamicConditions::default())
-                    {
+                if let (Some(cached_energy), Some(cached_phases)) =
+                    (&reaction_energy_cache, &competing_phases_cache)
+                {
+                    match cached_energy.clone() {
                         Ok(Some(energy)) => evidence.push(PlanningEvidence {
                             kind: EvidenceKind::ThermodynamicData,
                             source_id: None,
@@ -287,7 +320,7 @@ impl Planner {
                         .chain(&accepted.reaction.products)
                         .map(|s| s.composition.clone())
                         .collect();
-                    match provider.competing_phases(composition) {
+                    match cached_phases.clone() {
                         Ok(phases) => {
                             let phases: Vec<_> = phases
                                 .into_iter()
@@ -903,6 +936,149 @@ mod tests {
         ) -> std::result::Result<Vec<ProcessPrecedent>, ProviderError> {
             Err(ProviderError::Unavailable("simulated outage".to_string()))
         }
+    }
+
+    /// Counts real calls rather than answering from a canned per-call
+    /// table, so the counters below directly measure how many times
+    /// `plan()` actually invokes the provider -- the thing the caching fix
+    /// (ROADMAP's "Known risks" duplicate-provider-call entry) changes.
+    #[derive(Default)]
+    struct CountingThermodynamicProvider {
+        reaction_energy_calls: std::cell::Cell<usize>,
+        competing_phases_calls: std::cell::Cell<usize>,
+    }
+    impl ThermodynamicProvider for CountingThermodynamicProvider {
+        fn reaction_energy(
+            &self,
+            _reaction: &BalancedReaction,
+            _conditions: &ThermodynamicConditions,
+        ) -> std::result::Result<Option<ReactionEnergy>, ProviderError> {
+            self.reaction_energy_calls
+                .set(self.reaction_energy_calls.get() + 1);
+            Ok(None)
+        }
+
+        fn competing_phases(
+            &self,
+            _target: &Composition,
+        ) -> std::result::Result<Vec<CompetingPhase>, ProviderError> {
+            self.competing_phases_calls
+                .set(self.competing_phases_calls.get() + 1);
+            Ok(Vec::new())
+        }
+    }
+    // Planner::new takes ownership of its provider, but the test needs a
+    // handle to read the counters afterward -- an Arc clone shares the same
+    // Cells, so this impl just delegates to the wrapped provider.
+    impl ThermodynamicProvider for std::rc::Rc<CountingThermodynamicProvider> {
+        fn reaction_energy(
+            &self,
+            reaction: &BalancedReaction,
+            conditions: &ThermodynamicConditions,
+        ) -> std::result::Result<Option<ReactionEnergy>, ProviderError> {
+            self.as_ref().reaction_energy(reaction, conditions)
+        }
+
+        fn competing_phases(
+            &self,
+            target: &Composition,
+        ) -> std::result::Result<Vec<CompetingPhase>, ProviderError> {
+            self.as_ref().competing_phases(target)
+        }
+    }
+    struct NoopProcessEvidenceProvider;
+    impl ProcessEvidenceProvider for NoopProcessEvidenceProvider {
+        fn precedents(
+            &self,
+            _target: &TargetSpecification,
+            _precursors: &[PrecursorSelection],
+        ) -> std::result::Result<Vec<ProcessPrecedent>, ProviderError> {
+            Ok(Vec::new())
+        }
+    }
+
+    /// Regression test for the ROADMAP "Known risks" entry: once Phase 12
+    /// (multiple route families per accepted precursor set) and Phase 13
+    /// (thermodynamic provider) are both configured, `reaction_energy`/
+    /// `competing_phases` must not be called once per route family sharing
+    /// the same accepted set or composition -- `reaction_energy` should run
+    /// at most once per distinct accepted reaction, and `competing_phases`
+    /// (a target-only query, invariant across the whole `plan()` call)
+    /// should run exactly once regardless of how many accepted sets or
+    /// route families exist.
+    #[test]
+    fn thermodynamic_provider_calls_are_not_duplicated_per_route_family() {
+        let provider = std::rc::Rc::new(CountingThermodynamicProvider::default());
+        let planner = Planner::new(
+            barium_titanate_catalog(),
+            NoopProcessEvidenceProvider,
+            provider.clone(),
+            generous_config(),
+        );
+
+        let report = planner
+            .plan(&barium_titanate_target(), "2026-08-14T00:00:00Z")
+            .unwrap();
+
+        // Multiple route families (ConventionalSolidState, Mechanochemical)
+        // apply unconditionally to every accepted set, so this fixture is
+        // guaranteed to produce more plans than distinct accepted reactions
+        // whenever the provider is actually configured -- otherwise this
+        // test would trivially pass with 1 plan and prove nothing.
+        assert!(
+            report.plans.len() > 1,
+            "fixture must produce multiple plans for this test to be meaningful, got {}",
+            report.plans.len()
+        );
+        assert_eq!(
+            provider.competing_phases_calls.get(),
+            1,
+            "competing_phases depends only on the target composition, which is fixed for \
+            the whole plan() call -- it must be called exactly once, not once per plan"
+        );
+        assert!(
+            provider.reaction_energy_calls.get() < report.plans.len(),
+            "reaction_energy must be cached per accepted reaction, not called once per \
+            route-family plan: {} calls for {} plans",
+            provider.reaction_energy_calls.get(),
+            report.plans.len()
+        );
+        assert!(
+            provider.reaction_energy_calls.get() >= 1,
+            "the provider must still actually be consulted at least once"
+        );
+    }
+
+    /// The `competing_phases` cache is hoisted above the accepted-set loop
+    /// (see `plan()`'s comment), so it must stay gated on a non-empty
+    /// accepted set explicitly -- otherwise an empty search result would
+    /// still make one provider call for a report that ends up with zero
+    /// plans, unlike the pre-fix code (whose call site lived entirely
+    /// inside `for accepted in &outcome.accepted`, so an empty accepted set
+    /// made zero calls by construction).
+    #[test]
+    fn no_thermodynamic_provider_calls_when_nothing_is_accepted() {
+        let provider = std::rc::Rc::new(CountingThermodynamicProvider::default());
+        // A catalog that shares no element with the target: search_precursor_sets
+        // accepts nothing, so this exercises the empty-accepted-set path
+        // with a real (not offline_minimal) thermodynamic provider
+        // configured.
+        let unrelated_catalog =
+            InMemoryPrecursorCatalog::new(vec![candidate("NaCl", &[("Na", 1.0), ("Cl", 1.0)])]);
+        let planner = Planner::new(
+            unrelated_catalog,
+            NoopProcessEvidenceProvider,
+            provider.clone(),
+            generous_config(),
+        );
+
+        let report = planner
+            .plan(&barium_titanate_target(), "2026-08-14T00:00:00Z")
+            .unwrap();
+
+        assert!(report.plans.is_empty());
+        assert_eq!(provider.competing_phases_calls.get(), 0);
+        assert_eq!(provider.reaction_energy_calls.get(), 0);
     }
 
     /// AGENTS.md §21.5: one provider failing must not fail the whole plan.
