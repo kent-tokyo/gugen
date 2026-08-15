@@ -1,0 +1,126 @@
+{
+  "schema": "gugen-phase21b-condition2-audit-judgments-v1",
+  "note": "Redistributable IDs and judgment enums only -- no paper text, no verbatim quotes. One row per manifest item in thermodynamic_selectivity_audit_manifest.json (same doi/wave/stratum key). Produced by dispatching one independent research agent per ~5-item batch (general-purpose, real WebSearch/WebFetch against legitimate sources only -- no paywall bypass), mirroring Phase 20D's identical methodology (see literature_observation_audit_judgments.json). See docs/thermodynamic_selectivity_calibration.md for the full method and results.",
+  "judgments": [
+    {
+      "wave": 0,
+      "stratum": "impure",
+      "doi": "10.1103/PhysRevB.83.104503",
+      "access_level": "full_text",
+      "verdict": "match",
+      "note": "Author preprint (arXiv:1101.3639) explicitly reports an OsO2 impurity phase in the as-prepared sample."
+    },
+    {
+      "wave": 0,
+      "stratum": "impure",
+      "doi": "10.1016/j.pnsc.2020.08.019",
+      "access_level": "abstract_only",
+      "verdict": "match",
+      "note": "Abstract reports secondary phases in as-solidified state; caveat: target is a directionally-solidified single-crystal superalloy, dataset's 3-element route is an approximation of a more complex real process."
+    },
+    {
+      "wave": 0,
+      "stratum": "impure",
+      "doi": "10.1016/j.ijleo.2015.11.196",
+      "access_level": "source_inaccessible",
+      "verdict": "inconclusive",
+      "note": "Title only; no abstract exposed anywhere reachable, no OA copy found."
+    },
+    {
+      "wave": 0,
+      "stratum": "impure",
+      "doi": "10.1016/j.ceramint.2015.03.244",
+      "access_level": "source_inaccessible",
+      "verdict": "inconclusive",
+      "note": "Title only; no abstract exposed, publisher 403, no OA copy found."
+    },
+    {
+      "wave": 0,
+      "stratum": "impure",
+      "doi": "10.1016/j.radmeas.2021.106563",
+      "access_level": "abstract_only",
+      "verdict": "inconclusive",
+      "note": "Abstract covers luminescence characterization only, does not address precursors or phase-purity/XRD result."
+    },
+    {
+      "wave": 0,
+      "stratum": "impure",
+      "doi": "10.1021/ic402213s",
+      "access_level": "source_inaccessible",
+      "verdict": "inconclusive",
+      "note": "Title/authors confirmed via Crossref; closed-access, no abstract exposed anywhere reachable."
+    },
+    {
+      "wave": 0,
+      "stratum": "impure",
+      "doi": "10.1016/S0038-1098(02)00235-1",
+      "access_level": "source_inaccessible",
+      "verdict": "inconclusive",
+      "note": "Title indicates a Si-doped-ZnGa2O4 phosphor study, consistent with the SiO2-containing route, but closed-access with no abstract exposed."
+    },
+    {
+      "wave": 0,
+      "stratum": "impure",
+      "doi": "10.1016/j.jeurceramsoc.2005.07.025",
+      "access_level": "source_inaccessible",
+      "verdict": "inconclusive",
+      "note": "Title indicates a B2O3-glass-crystallization route consistent with the claimed route, but closed-access with no abstract exposed."
+    },
+    {
+      "wave": 0,
+      "stratum": "pure",
+      "doi": "10.1039/C3CE40473K",
+      "access_level": "source_inaccessible",
+      "verdict": "inconclusive",
+      "note": "Title strongly suggestive of a pure BiFeO3 result, but no abstract or full text accessible to confirm this applies to the specific claimed route rather than a narrower composition window -- title alone not treated as sufficient evidence."
+    },
+    {
+      "wave": 0,
+      "stratum": "pure",
+      "doi": "10.1016/j.jallcom.2022.166833",
+      "access_level": "source_inaccessible",
+      "verdict": "inconclusive",
+      "note": "Title consistent with elemental Pb+Te mechanosynthesis route, but closed-access with no abstract exposed."
+    },
+    {
+      "wave": 0,
+      "stratum": "pure",
+      "doi": "10.1016/j.jallcom.2020.153813",
+      "access_level": "abstract_only",
+      "verdict": "inconclusive",
+      "note": "Abstract covers an interface-reaction composite study, silent on whether the MoAlB powder itself was synthesized in-house or procured -- does not address the claimed synthesis-purity question either way."
+    },
+    {
+      "wave": 0,
+      "stratum": "pure",
+      "doi": "10.1063/1.5078773",
+      "access_level": "abstract_only",
+      "verdict": "inconclusive",
+      "note": "Abstract is a DFT defect study of Mn-doped ZnGa2O4; no synthesis route or phase-purity statement given. Also: route includes MnCO3, so the real product is Mn-doped, a target-labeling ambiguity independent of access."
+    },
+    {
+      "wave": 0,
+      "stratum": "pure",
+      "doi": "10.1016/j.jeurceramsoc.2009.02.015",
+      "access_level": "source_inaccessible",
+      "verdict": "inconclusive",
+      "note": "No abstract exposed anywhere; title indicates Bi4Ti3O12 may be used as an additive to modify BaTiO3 dielectrics in this paper, not necessarily the paper's own characterized target -- cannot confirm either way."
+    },
+    {
+      "wave": 0,
+      "stratum": "pure",
+      "doi": "10.1111/j.1551-2916.2005.00673.x",
+      "access_level": "abstract_only",
+      "verdict": "inconclusive",
+      "note": "Abstract describes twin-microstructure characterization of pressureless-sintered LaGaO3, no explicit phase-purity/impurity statement given."
+    },
+    {
+      "wave": 0,
+      "stratum": "pure",
+      "doi": "10.1016/j.materresbull.2013.10.047",
+      "access_level": "source_inaccessible",
+      "verdict": "inconclusive",
+      "note": "No abstract exposed; title indicates a high-pressure structural-stability study, not primarily a synthesis paper. Also: Na2B4O7/PbO/V2O5 reads as a flux-growth recipe for single crystals -- possible schema mismatch between flux-growth and solid-state powder synthesis being flattened into the same pure/impure label."
+    }
+  ]
+}

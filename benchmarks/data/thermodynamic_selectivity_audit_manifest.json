@@ -1,0 +1,193 @@
+{
+  "waves": [
+    {
+      "wave": 0,
+      "seed": 20260815,
+      "sizes": {
+        "impure": 8,
+        "pure": 7
+      },
+      "rows": [
+        {
+          "doi": "10.1103/PhysRevB.83.104503",
+          "target": "KOs2O6",
+          "route": [
+            "KO2",
+            "OsO2"
+          ],
+          "claimed_verdict": "impure",
+          "stratum": "impure",
+          "judgment": null
+        },
+        {
+          "doi": "10.1016/j.pnsc.2020.08.019",
+          "target": "Ni3Al",
+          "route": [
+            "Al",
+            "Mo",
+            "Ni"
+          ],
+          "claimed_verdict": "impure",
+          "stratum": "impure",
+          "judgment": null
+        },
+        {
+          "doi": "10.1016/j.ijleo.2015.11.196",
+          "target": "NaYF4",
+          "route": [
+            "ErF3",
+            "KF",
+            "NaF",
+            "YF3",
+            "YbF3"
+          ],
+          "claimed_verdict": "impure",
+          "stratum": "impure",
+          "judgment": null
+        },
+        {
+          "doi": "10.1016/j.ceramint.2015.03.244",
+          "target": "BiFeO3",
+          "route": [
+            "Bi2O3",
+            "Fe2O3",
+            "KCl",
+            "NaCl"
+          ],
+          "claimed_verdict": "impure",
+          "stratum": "impure",
+          "judgment": null
+        },
+        {
+          "doi": "10.1016/j.radmeas.2021.106563",
+          "target": "BaCaBO3F",
+          "route": [
+            "BaCa2(BO3)2",
+            "BaF2",
+            "Tb4O7"
+          ],
+          "claimed_verdict": "impure",
+          "stratum": "impure",
+          "judgment": null
+        },
+        {
+          "doi": "10.1021/ic402213s",
+          "target": "Pr4MgNi19",
+          "route": [
+            "Mg",
+            "Ni",
+            "Pr"
+          ],
+          "claimed_verdict": "impure",
+          "stratum": "impure",
+          "judgment": null
+        },
+        {
+          "doi": "10.1016/S0038-1098(02)00235-1",
+          "target": "ZnGa2O4",
+          "route": [
+            "Ga2O3",
+            "SiO2",
+            "ZnO"
+          ],
+          "claimed_verdict": "impure",
+          "stratum": "impure",
+          "judgment": null
+        },
+        {
+          "doi": "10.1016/j.jeurceramsoc.2005.07.025",
+          "target": "Bi4Ti3O12",
+          "route": [
+            "B2O3",
+            "Bi2O3",
+            "TiO2"
+          ],
+          "claimed_verdict": "impure",
+          "stratum": "impure",
+          "judgment": null
+        },
+        {
+          "doi": "10.1039/C3CE40473K",
+          "target": "BiFeO3",
+          "route": [
+            "Bi2O3",
+            "Fe2O3"
+          ],
+          "claimed_verdict": "pure",
+          "stratum": "pure",
+          "judgment": null
+        },
+        {
+          "doi": "10.1016/j.jallcom.2022.166833",
+          "target": "PbTe",
+          "route": [
+            "Pb",
+            "Te"
+          ],
+          "claimed_verdict": "pure",
+          "stratum": "pure",
+          "judgment": null
+        },
+        {
+          "doi": "10.1016/j.jallcom.2020.153813",
+          "target": "MoAlB",
+          "route": [
+            "Al",
+            "B",
+            "Mo"
+          ],
+          "claimed_verdict": "pure",
+          "stratum": "pure",
+          "judgment": null
+        },
+        {
+          "doi": "10.1063/1.5078773",
+          "target": "ZnGa2O4",
+          "route": [
+            "Ga2O3",
+            "MnCO3",
+            "ZnO"
+          ],
+          "claimed_verdict": "pure",
+          "stratum": "pure",
+          "judgment": null
+        },
+        {
+          "doi": "10.1016/j.jeurceramsoc.2009.02.015",
+          "target": "Bi4Ti3O12",
+          "route": [
+            "Bi2O3",
+            "TiO2"
+          ],
+          "claimed_verdict": "pure",
+          "stratum": "pure",
+          "judgment": null
+        },
+        {
+          "doi": "10.1111/j.1551-2916.2005.00673.x",
+          "target": "LaGaO3",
+          "route": [
+            "Ga2O3",
+            "La2O3"
+          ],
+          "claimed_verdict": "pure",
+          "stratum": "pure",
+          "judgment": null
+        },
+        {
+          "doi": "10.1016/j.materresbull.2013.10.047",
+          "target": "LaVO4",
+          "route": [
+            "La2O3",
+            "Na2B4O7",
+            "PbO",
+            "V2O5"
+          ],
+          "claimed_verdict": "pure",
+          "stratum": "pure",
+          "judgment": null
+        }
+      ]
+    }
+  ]
+}
