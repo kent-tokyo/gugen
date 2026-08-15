@@ -242,9 +242,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Phase 20B**: a `HeatingOperation`'s temperature/duration is left
   unresolved (`None`) whenever the raw corpus reports 2+ disagreeing
   candidate readings for it, rather than guessing which is authoritative
-  -- verified live against the full corpus, this happens for 2,311 of
-  13,982 emitted observations (see `docs/literature_observation_provider.md`),
-  a real, material information loss disclosed as such. Only 6 raw
+  -- verified live against the full raw 19,488-record corpus, 2,311 of
+  2,377 `HeatingOperation`s with 2+ candidate temperature readings
+  disagree (97.2%); of the 13,982 observations that actually made it
+  into the emitted snapshot, 1,063 have `temperature: None` for this
+  reason specifically (see
+  `docs/literature_observation_provider.md`), a real, material
+  information loss disclosed as such. (Corrected 2026-08-15: an
+  earlier draft of this entry misstated the snapshot-level figure as
+  2,311, conflating it with the full-raw-corpus figure above.) Only 6 raw
   atmosphere strings map to a structured `Atmosphere` variant; everything
   else (including any string reported alongside another one for the same
   operation) is preserved verbatim as `Atmosphere::Controlled
