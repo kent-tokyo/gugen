@@ -193,6 +193,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   semver-checks`; safe because `Composition` stores exact `Frac`
   amounts, not `f64`) so it can be used directly as a `BTreeSet` key for
   order-invariant precursor-set identity.
+- **Phase 20D -- manual extraction-accuracy audit of
+  `LiteratureObservationCorpus` against original source papers**, offline
+  tooling only (`benchmarks/sample_literature_observation_audit.py`,
+  `benchmarks/audit_literature_observations.py`), not part of the crate
+  build. Answers the question Phase 20B's own text-mining pipeline
+  couldn't answer about itself: when it reports a confident value, how
+  often is it right, and when it disagrees with itself, is that a real
+  experimental difference or a misextraction? DOI-level (not
+  observation-level) sampling, seeded and reproducible (58 DOIs across a
+  10-DOI pilot + 48-DOI main wave, stratified `temp_disagree`/
+  `atm_controlled`/`fully_resolved` plus an unconditional `baseline`
+  control group), each checked by an independent research review against
+  real sources only (no paywall bypass, no mirror sites), plus a 5-item
+  blind inter-reviewer overlap. Findings, all with Wilson 95% CIs and
+  wide intervals given the small n: identity accuracy 70.7%
+  (conservative) / 93.2% (excl. unverifiable, n=58); field accuracy where
+  checkable was temperature 62.5% (n=8, one contested case), duration
+  83.3% (n=6), atmosphere 100% (n=8); the dominant confirmed
+  `temp_disagree` mechanism is a specific, nameable step-segmentation
+  failure (a paper's genuine sequential/parallel multi-stage treatment
+  merged into one `HeatingOperation` by the upstream pipeline), not
+  random noise; 3 confirmed identity-level corpus errors (wrong DOI or
+  reaction misgrouping), categorically worse than a value-level
+  disagreement. No conflict resolver, promotion policy, or Planner
+  connection added -- see `docs/literature_observation_accuracy_audit.md`
+  for the full 15-item report and reproduction commands.
 
 ### Known limitations
 
@@ -258,12 +284,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   linear scan over the whole corpus -- fine for single-target lookups at
   this corpus's ~14K-observation scale, not benchmarked for a bulk-query
   workload. No cross-record conflict resolution across independently-
-  reported DOIs for the same route (Phase 20C, not built). No promotion
-  path to `ConditionPrecedent`/`Planner` (by design, see the "Added"
-  entry above). No manual extraction-accuracy audit against original
-  papers (Phase 20D, not built) -- an observation's numbers are exactly
-  what the corpus's own text-mining pipeline reported, gugen never
-  independently re-verifies them.
+  reported DOIs for the same route (Phase 20C, not built -- Phase 20D's
+  audit above is the evidence base it will be designed from). No
+  promotion path to `ConditionPrecedent`/`Planner` (by design, see the
+  "Added" entry above). Phase 20D's audit itself is small-n (58 DOIs,
+  only 5 reached full text) and measures population-level base rates
+  only -- it certifies no individual observation, and 100% of the corpus
+  remains reference-only after this phase; see
+  `docs/literature_observation_accuracy_audit.md` items 9-12 for the
+  full limitations list.
 
 ## [0.3.0] - 2026-08-14
 

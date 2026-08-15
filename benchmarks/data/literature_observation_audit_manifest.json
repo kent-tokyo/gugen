@@ -1,0 +1,2393 @@
+{
+  "rows": [
+    {
+      "corpus_record_index": 8833,
+      "doi": "10.1016/j.jpowsour.2007.08.077",
+      "gugen_atmosphere": "Air",
+      "gugen_duration": {
+        "max_hours": 20.0,
+        "min_hours": 20.0
+      },
+      "gugen_temperature": null,
+      "operation_index": 0,
+      "precursors": [
+        {
+          "Gd": 2.0,
+          "O": 3.0
+        },
+        {
+          "Co": 3.0,
+          "O": 4.0
+        },
+        {
+          "Ba": 1.0,
+          "C": 1.0,
+          "O": 3.0
+        }
+      ],
+      "raw_temperature_candidates_celsius": [
+        [
+          900.0,
+          900.0
+        ],
+        [
+          1000.0,
+          1000.0
+        ]
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "temp_disagree",
+      "target": {
+        "Ba": 1.0,
+        "Co": 2.0,
+        "Gd": 1.0,
+        "O": 5.0
+      },
+      "wave": 0
+    },
+    {
+      "corpus_record_index": 2705,
+      "doi": "10.1016/S0025-5408(00)00461-X",
+      "gugen_atmosphere": null,
+      "gugen_duration": null,
+      "gugen_temperature": null,
+      "operation_index": 0,
+      "precursors": [
+        {
+          "O": 1.0,
+          "Pb": 1.0
+        },
+        {
+          "O": 2.0,
+          "Ti": 1.0
+        },
+        {
+          "O": 3.0,
+          "Sm": 2.0
+        },
+        {
+          "Mn": 1.0,
+          "O": 2.0
+        }
+      ],
+      "raw_temperature_candidates_celsius": [
+        [
+          750.0,
+          750.0
+        ],
+        [
+          870.0,
+          870.0
+        ]
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "temp_disagree",
+      "target": {
+        "Mn": 0.02,
+        "O": 3.0,
+        "Pb": 0.85,
+        "Sm": 0.1,
+        "Ti": 0.98
+      },
+      "wave": 0
+    },
+    {
+      "corpus_record_index": 7265,
+      "doi": "10.1016/j.jmatprotec.2008.07.019",
+      "gugen_atmosphere": "Air",
+      "gugen_duration": {
+        "max_hours": 0.51,
+        "min_hours": 0.51
+      },
+      "gugen_temperature": null,
+      "operation_index": 0,
+      "precursors": [
+        {
+          "O": 2.0,
+          "Te": 1.0
+        },
+        {
+          "Bi": 2.0,
+          "O": 3.0
+        },
+        {
+          "C": 1.0,
+          "O": 3.0,
+          "Sr": 1.0
+        }
+      ],
+      "raw_temperature_candidates_celsius": [
+        [
+          750.0,
+          750.0
+        ],
+        [
+          800.0,
+          800.0
+        ]
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "temp_disagree",
+      "target": {
+        "Bi": 2.0,
+        "O": 16.0,
+        "Sr": 1.0,
+        "Te": 6.0
+      },
+      "wave": 0
+    },
+    {
+      "corpus_record_index": 15591,
+      "doi": "10.1016/j.ssi.2008.10.022",
+      "gugen_atmosphere": null,
+      "gugen_duration": {
+        "max_hours": 12.0,
+        "min_hours": 12.0
+      },
+      "gugen_temperature": null,
+      "operation_index": 0,
+      "precursors": [
+        {
+          "C": 1.0,
+          "Ca": 1.0,
+          "O": 3.0
+        },
+        {
+          "O": 5.0,
+          "Ta": 2.0
+        },
+        {
+          "C": 1.0,
+          "Li": 2.0,
+          "O": 3.0
+        },
+        {
+          "La": 2.0,
+          "O": 3.0
+        }
+      ],
+      "raw_temperature_candidates_celsius": [
+        [
+          950.0,
+          950.0
+        ],
+        [
+          1000.0,
+          1000.0
+        ]
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "temp_disagree",
+      "target": {
+        "Ca": 1.0,
+        "La": 2.0,
+        "Li": 6.0,
+        "O": 12.0,
+        "Ta": 2.0
+      },
+      "wave": 0
+    },
+    {
+      "corpus_record_index": 9467,
+      "doi": "10.1016/j.jssc.2004.04.037",
+      "gugen_atmosphere": null,
+      "gugen_duration": null,
+      "gugen_temperature": null,
+      "operation_index": 1,
+      "precursors": [
+        {
+          "H": 4.0,
+          "N": 1.0,
+          "O": 3.0,
+          "V": 1.0
+        },
+        {
+          "O": 3.0,
+          "Y": 2.0
+        },
+        {
+          "Eu": 2.0,
+          "O": 3.0
+        }
+      ],
+      "raw_temperature_candidates_celsius": [
+        [
+          1000.0,
+          1000.0
+        ],
+        [
+          1100.0,
+          1100.0
+        ]
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "temp_disagree",
+      "target": {
+        "O": 4.0,
+        "V": 1.0,
+        "Y": 1.0
+      },
+      "wave": 0
+    },
+    {
+      "corpus_record_index": 15006,
+      "doi": "10.1016/j.ssc.2009.01.002",
+      "gugen_atmosphere": "Air",
+      "gugen_duration": {
+        "max_hours": 4.0,
+        "min_hours": 4.0
+      },
+      "gugen_temperature": null,
+      "operation_index": 0,
+      "precursors": [
+        {
+          "O": 2.0,
+          "Zr": 1.0
+        },
+        {
+          "H": 6.0,
+          "N": 1.0,
+          "O": 4.0,
+          "P": 1.0
+        },
+        {
+          "O": 3.0,
+          "W": 1.0
+        }
+      ],
+      "raw_temperature_candidates_celsius": [
+        [
+          900.0,
+          900.0
+        ],
+        [
+          1250.0,
+          1250.0
+        ]
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "temp_disagree",
+      "target": {
+        "O": 12.0,
+        "P": 2.0,
+        "W": 1.0,
+        "Zr": 2.0
+      },
+      "wave": 0
+    },
+    {
+      "corpus_record_index": 4092,
+      "doi": "10.1016/j.apradiso.2018.04.023",
+      "gugen_atmosphere": {
+        "Inert": {
+          "gas": "Argon"
+        }
+      },
+      "gugen_duration": {
+        "max_hours": 2.0,
+        "min_hours": 2.0
+      },
+      "gugen_temperature": null,
+      "operation_index": 0,
+      "precursors": [
+        {
+          "Al": 2.0,
+          "O": 3.0
+        },
+        {
+          "Ba": 1.0,
+          "C": 1.0,
+          "O": 3.0
+        }
+      ],
+      "raw_temperature_candidates_celsius": [
+        [
+          2.0,
+          2.0
+        ],
+        [
+          1350.0,
+          1350.0
+        ]
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "temp_disagree",
+      "target": {
+        "Al": 2.0,
+        "Ba": 1.0,
+        "O": 4.0
+      },
+      "wave": 0
+    },
+    {
+      "corpus_record_index": 13234,
+      "doi": "10.1016/j.optmat.2004.10.030",
+      "gugen_atmosphere": null,
+      "gugen_duration": null,
+      "gugen_temperature": null,
+      "operation_index": 1,
+      "precursors": [
+        {
+          "F": 1.0,
+          "K": 1.0
+        },
+        {
+          "F": 3.0,
+          "Nd": 1.0
+        },
+        {
+          "F": 1.0,
+          "Na": 1.0
+        }
+      ],
+      "raw_temperature_candidates_celsius": [
+        [
+          80.0,
+          80.0
+        ],
+        [
+          790.0,
+          790.0
+        ]
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "temp_disagree",
+      "target": {
+        "F": 7.0,
+        "K": 2.0,
+        "Na": 2.0,
+        "Nd": 1.0
+      },
+      "wave": 0
+    },
+    {
+      "corpus_record_index": 16136,
+      "doi": "10.1016/j.ssi.2017.03.028",
+      "gugen_atmosphere": "Air",
+      "gugen_duration": null,
+      "gugen_temperature": null,
+      "operation_index": 0,
+      "precursors": [
+        {
+          "Mo": 1.0,
+          "O": 3.0
+        },
+        {
+          "La": 2.0,
+          "O": 3.0
+        },
+        {
+          "O": 3.0,
+          "W": 1.0
+        }
+      ],
+      "raw_temperature_candidates_celsius": [
+        [
+          500.0,
+          500.0
+        ],
+        [
+          950.0,
+          950.0
+        ]
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "temp_disagree",
+      "target": {
+        "La": 2.0,
+        "Mo": 1.5,
+        "O": 9.0,
+        "W": 0.5
+      },
+      "wave": 0
+    },
+    {
+      "corpus_record_index": 13983,
+      "doi": "10.1016/j.physc.2013.04.028",
+      "gugen_atmosphere": null,
+      "gugen_duration": {
+        "max_hours": 24.0,
+        "min_hours": 24.0
+      },
+      "gugen_temperature": null,
+      "operation_index": 0,
+      "precursors": [
+        {
+          "Ce": 1.0,
+          "O": 2.0
+        },
+        {
+          "Ba": 1.0,
+          "O": 2.0
+        }
+      ],
+      "raw_temperature_candidates_celsius": [
+        [
+          1.0,
+          1.0
+        ],
+        [
+          940.0,
+          940.0
+        ]
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "temp_disagree",
+      "target": {
+        "Ba": 1.0,
+        "Ce": 1.0,
+        "O": 3.0
+      },
+      "wave": 0
+    },
+    {
+      "corpus_record_index": 984,
+      "doi": "10.1007/s10854-008-9797-8",
+      "gugen_atmosphere": null,
+      "gugen_duration": {
+        "max_hours": 10.0,
+        "min_hours": 10.0
+      },
+      "gugen_temperature": null,
+      "operation_index": 1,
+      "precursors": [
+        {
+          "O": 1.0,
+          "Pb": 1.0
+        },
+        {
+          "O": 2.0,
+          "Ti": 1.0
+        },
+        {
+          "Mn": 1.0,
+          "O": 2.0
+        }
+      ],
+      "raw_temperature_candidates_celsius": [
+        [
+          1.0,
+          1.0
+        ],
+        [
+          1000.0,
+          1000.0
+        ]
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "temp_disagree",
+      "target": {
+        "O": 3.0,
+        "Pb": 1.0,
+        "Ti": 1.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 12394,
+      "doi": "10.1016/j.matlet.2015.07.005",
+      "gugen_atmosphere": {
+        "Inert": {
+          "gas": "Argon"
+        }
+      },
+      "gugen_duration": {
+        "max_hours": 0.42500000000000004,
+        "min_hours": 0.42500000000000004
+      },
+      "gugen_temperature": null,
+      "operation_index": 0,
+      "precursors": [
+        {
+          "In": 2.0,
+          "S": 3.0
+        },
+        {
+          "Cu": 2.0,
+          "S": 1.0
+        }
+      ],
+      "raw_temperature_candidates_celsius": [
+        [
+          350.0,
+          350.0
+        ],
+        [
+          450.0,
+          450.0
+        ],
+        [
+          550.0,
+          550.0
+        ]
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "temp_disagree",
+      "target": {
+        "Cu": 1.0,
+        "In": 1.0,
+        "S": 2.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 14845,
+      "doi": "10.1016/j.ssc.2005.04.023",
+      "gugen_atmosphere": null,
+      "gugen_duration": null,
+      "gugen_temperature": null,
+      "operation_index": 0,
+      "precursors": [
+        {
+          "O": 11.0,
+          "Pr": 6.0
+        },
+        {
+          "C": 1.0,
+          "O": 3.0,
+          "Sr": 1.0
+        },
+        {
+          "C": 1.0,
+          "Ca": 1.0,
+          "O": 3.0
+        },
+        {
+          "Mn": 1.0,
+          "O": 2.0
+        }
+      ],
+      "raw_temperature_candidates_celsius": [
+        [
+          950.0,
+          950.0
+        ],
+        [
+          1350.0,
+          1350.0
+        ]
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "temp_disagree",
+      "target": {
+        "Ca": 0.43,
+        "Mn": 1.0,
+        "O": 3.0,
+        "Pr": 0.5,
+        "Sr": 0.07
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 15469,
+      "doi": "10.1016/j.ssi.2006.10.013",
+      "gugen_atmosphere": null,
+      "gugen_duration": null,
+      "gugen_temperature": null,
+      "operation_index": 0,
+      "precursors": [
+        {
+          "O": 2.0,
+          "Si": 1.0
+        },
+        {
+          "La": 2.0,
+          "O": 3.0
+        },
+        {
+          "O": 1.0,
+          "Zn": 1.0
+        }
+      ],
+      "raw_temperature_candidates_celsius": [
+        [
+          1350.0,
+          1350.0
+        ],
+        [
+          1450.0,
+          1450.0
+        ]
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "temp_disagree",
+      "target": {
+        "La": 9.5,
+        "O": 26.0,
+        "Si": 5.75,
+        "Zn": 0.25
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 10811,
+      "doi": "10.1016/j.matchemphys.2011.10.017",
+      "gugen_atmosphere": null,
+      "gugen_duration": {
+        "max_hours": 2.0,
+        "min_hours": 2.0
+      },
+      "gugen_temperature": null,
+      "operation_index": 0,
+      "precursors": [
+        {
+          "Nb": 2.0,
+          "O": 5.0
+        },
+        {
+          "Ba": 1.0,
+          "C": 1.0,
+          "O": 3.0
+        },
+        {
+          "Fe": 2.0,
+          "O": 3.0
+        }
+      ],
+      "raw_temperature_candidates_celsius": [
+        [
+          1000.0,
+          1000.0
+        ],
+        [
+          1200.0,
+          1200.0
+        ]
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "temp_disagree",
+      "target": {
+        "Ba": 1.0,
+        "Fe": 0.5,
+        "Nb": 0.5,
+        "O": 3.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 14363,
+      "doi": "10.1016/j.solidstatesciences.2005.05.007",
+      "gugen_atmosphere": null,
+      "gugen_duration": {
+        "max_hours": 12.0,
+        "min_hours": 12.0
+      },
+      "gugen_temperature": null,
+      "operation_index": 0,
+      "precursors": [
+        {
+          "Mo": 1.0,
+          "O": 3.0
+        },
+        {
+          "La": 2.0,
+          "O": 3.0
+        }
+      ],
+      "raw_temperature_candidates_celsius": [
+        [
+          500.0,
+          500.0
+        ],
+        [
+          900.0,
+          900.0
+        ]
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "temp_disagree",
+      "target": {
+        "La": 2.0,
+        "Mo": 2.0,
+        "O": 9.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 15420,
+      "doi": "10.1016/j.ssi.2006.02.034",
+      "gugen_atmosphere": null,
+      "gugen_duration": null,
+      "gugen_temperature": null,
+      "operation_index": 0,
+      "precursors": [
+        {
+          "C": 1.0,
+          "Li": 2.0,
+          "O": 3.0
+        },
+        {
+          "O": 2.0,
+          "Ti": 1.0
+        },
+        {
+          "La": 2.0,
+          "O": 3.0
+        }
+      ],
+      "raw_temperature_candidates_celsius": [
+        [
+          600.0,
+          800.0
+        ],
+        [
+          1100.0,
+          1100.0
+        ]
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "temp_disagree",
+      "target": {
+        "La": 0.55,
+        "Li": 0.35,
+        "O": 3.0,
+        "Ti": 1.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 7810,
+      "doi": "10.1016/j.jmmm.2015.10.129",
+      "gugen_atmosphere": "Air",
+      "gugen_duration": {
+        "max_hours": 2.0,
+        "min_hours": 2.0
+      },
+      "gugen_temperature": null,
+      "operation_index": 1,
+      "precursors": [
+        {
+          "Cu": 1.0,
+          "O": 1.0
+        },
+        {
+          "Fe": 2.0,
+          "O": 3.0
+        },
+        {
+          "Ni": 1.0,
+          "O": 1.0
+        },
+        {
+          "O": 1.0,
+          "Zn": 1.0
+        }
+      ],
+      "raw_temperature_candidates_celsius": [
+        [
+          890.0,
+          890.0
+        ],
+        [
+          900.0,
+          900.0
+        ],
+        [
+          910.0,
+          910.0
+        ],
+        [
+          920.0,
+          920.0
+        ]
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "temp_disagree",
+      "target": {
+        "Cu": 0.2,
+        "Fe": 1.96,
+        "Ni": 0.33,
+        "O": 3.94,
+        "Zn": 0.47
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 13523,
+      "doi": "10.1016/j.optmat.2014.12.023",
+      "gugen_atmosphere": "Air",
+      "gugen_duration": {
+        "max_hours": 6.0,
+        "min_hours": 6.0
+      },
+      "gugen_temperature": null,
+      "operation_index": 0,
+      "precursors": [
+        {
+          "Eu": 2.0,
+          "O": 3.0
+        },
+        {
+          "C": 1.0,
+          "O": 3.0,
+          "Sr": 1.0
+        },
+        {
+          "Al": 2.0,
+          "O": 3.0
+        },
+        {
+          "O": 2.0,
+          "Si": 1.0
+        }
+      ],
+      "raw_temperature_candidates_celsius": [
+        [
+          1300.0,
+          1300.0
+        ],
+        [
+          1400.0,
+          1400.0
+        ],
+        [
+          1500.0,
+          1500.0
+        ]
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "temp_disagree",
+      "target": {
+        "Al": 2.0,
+        "O": 8.0,
+        "Si": 2.0,
+        "Sr": 1.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 13586,
+      "doi": "10.1016/j.optmat.2016.09.075",
+      "gugen_atmosphere": null,
+      "gugen_duration": {
+        "max_hours": 20.0,
+        "min_hours": 20.0
+      },
+      "gugen_temperature": null,
+      "operation_index": 1,
+      "precursors": [
+        {
+          "Al": 2.0,
+          "O": 3.0
+        },
+        {
+          "O": 7.0,
+          "Tb": 4.0
+        }
+      ],
+      "raw_temperature_candidates_celsius": [
+        [
+          1700.0,
+          1700.0
+        ],
+        [
+          1725.0,
+          1725.0
+        ]
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "temp_disagree",
+      "target": {
+        "Al": 5.0,
+        "O": 12.0,
+        "Tb": 3.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 5657,
+      "doi": "10.1016/j.jallcom.2011.12.119",
+      "gugen_atmosphere": "Air",
+      "gugen_duration": {
+        "max_hours": 20.0,
+        "min_hours": 20.0
+      },
+      "gugen_temperature": null,
+      "operation_index": 0,
+      "precursors": [
+        {
+          "Mn": 1.0,
+          "O": 2.0
+        },
+        {
+          "C": 1.0,
+          "Ca": 1.0,
+          "O": 3.0
+        },
+        {
+          "Bi": 2.0,
+          "O": 3.0
+        },
+        {
+          "Cr": 2.0,
+          "O": 3.0
+        }
+      ],
+      "raw_temperature_candidates_celsius": [
+        [
+          749.85,
+          749.85
+        ],
+        [
+          949.85,
+          949.85
+        ]
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "temp_disagree",
+      "target": {
+        "Bi": 0.3,
+        "Ca": 0.7,
+        "Cr": 0.25,
+        "Mn": 0.75,
+        "O": 3.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 15985,
+      "doi": "10.1016/j.ssi.2014.10.028",
+      "gugen_atmosphere": "Air",
+      "gugen_duration": null,
+      "gugen_temperature": null,
+      "operation_index": 0,
+      "precursors": [
+        {
+          "O": 5.0,
+          "V": 2.0
+        },
+        {
+          "Bi": 2.0,
+          "O": 3.0
+        }
+      ],
+      "raw_temperature_candidates_celsius": [
+        [
+          496.85,
+          496.85
+        ],
+        [
+          746.85,
+          746.85
+        ]
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "temp_disagree",
+      "target": {
+        "Bi": 2.0,
+        "O": 5.5,
+        "V": 1.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 11388,
+      "doi": "10.1016/j.materresbull.2012.03.023",
+      "gugen_atmosphere": null,
+      "gugen_duration": null,
+      "gugen_temperature": null,
+      "operation_index": 0,
+      "precursors": [
+        {
+          "C": 1.0,
+          "Na": 2.0,
+          "O": 3.0
+        },
+        {
+          "C": 1.0,
+          "Mg": 1.0,
+          "O": 3.0
+        },
+        {
+          "O": 3.0,
+          "W": 1.0
+        },
+        {
+          "La": 2.0,
+          "O": 3.0
+        }
+      ],
+      "raw_temperature_candidates_celsius": [
+        [
+          900.0,
+          900.0
+        ],
+        [
+          1050.0,
+          1050.0
+        ]
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "temp_disagree",
+      "target": {
+        "La": 1.0,
+        "Mg": 1.0,
+        "Na": 1.0,
+        "O": 6.0,
+        "W": 1.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 3061,
+      "doi": "10.1016/S0167-2738(02)00821-4",
+      "gugen_atmosphere": null,
+      "gugen_duration": {
+        "max_hours": 5.0,
+        "min_hours": 5.0
+      },
+      "gugen_temperature": null,
+      "operation_index": 0,
+      "precursors": [
+        {
+          "C": 1.0,
+          "O": 3.0,
+          "Sr": 1.0
+        },
+        {
+          "Ga": 2.0,
+          "O": 3.0
+        },
+        {
+          "Fe": 2.0,
+          "O": 3.0
+        },
+        {
+          "La": 2.0,
+          "O": 3.0
+        }
+      ],
+      "raw_temperature_candidates_celsius": [
+        [
+          1000.0,
+          1000.0
+        ],
+        [
+          1250.0,
+          1250.0
+        ]
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "temp_disagree",
+      "target": {
+        "Fe": 0.4,
+        "Ga": 0.6,
+        "La": 0.7,
+        "O": 3.0,
+        "Sr": 0.3
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 13359,
+      "doi": "10.1016/j.optmat.2011.06.017",
+      "gugen_atmosphere": null,
+      "gugen_duration": {
+        "max_hours": 5.0,
+        "min_hours": 5.0
+      },
+      "gugen_temperature": null,
+      "operation_index": 1,
+      "precursors": [
+        {
+          "Al": 2.0,
+          "O": 3.0
+        },
+        {
+          "O": 7.0,
+          "Tb": 4.0
+        }
+      ],
+      "raw_temperature_candidates_celsius": [
+        [
+          1550.0,
+          1550.0
+        ],
+        [
+          1600.0,
+          1600.0
+        ],
+        [
+          1650.0,
+          1650.0
+        ],
+        [
+          1700.0,
+          1700.0
+        ]
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "temp_disagree",
+      "target": {
+        "Al": 5.0,
+        "O": 12.0,
+        "Tb": 3.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 18825,
+      "doi": "10.1111/j.1551-2916.2011.04798.x",
+      "gugen_atmosphere": {
+        "Inert": {
+          "gas": "Argon"
+        }
+      },
+      "gugen_duration": null,
+      "gugen_temperature": null,
+      "operation_index": 1,
+      "precursors": [
+        {
+          "Al": 2.0,
+          "O": 3.0
+        },
+        {
+          "H": 2.0,
+          "Mg": 1.0,
+          "O": 2.0
+        }
+      ],
+      "raw_temperature_candidates_celsius": [
+        [
+          1600.0,
+          1600.0
+        ],
+        [
+          1850.0,
+          1850.0
+        ]
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "temp_disagree",
+      "target": {
+        "Al": 2.0,
+        "Mg": 1.0,
+        "O": 4.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 12989,
+      "doi": "10.1016/j.mseb.2010.09.003",
+      "gugen_atmosphere": "Air",
+      "gugen_duration": {
+        "max_hours": 4.0,
+        "min_hours": 4.0
+      },
+      "gugen_temperature": null,
+      "operation_index": 1,
+      "precursors": [
+        {
+          "O": 2.0,
+          "Ti": 1.0
+        },
+        {
+          "C": 1.0,
+          "Ca": 1.0,
+          "O": 3.0
+        },
+        {
+          "O": 2.0,
+          "Zr": 1.0
+        },
+        {
+          "Ba": 1.0,
+          "C": 1.0,
+          "O": 3.0
+        }
+      ],
+      "raw_temperature_candidates_celsius": [
+        [
+          1300.0,
+          1300.0
+        ],
+        [
+          1350.0,
+          1350.0
+        ],
+        [
+          1400.0,
+          1400.0
+        ],
+        [
+          1450.0,
+          1450.0
+        ],
+        [
+          1500.0,
+          1500.0
+        ]
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "temp_disagree",
+      "target": {
+        "Ba": 0.93,
+        "Ca": 0.07,
+        "O": 3.0,
+        "Ti": 0.95,
+        "Zr": 0.05
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 9946,
+      "doi": "10.1016/j.jssc.2009.07.007",
+      "gugen_atmosphere": null,
+      "gugen_duration": {
+        "max_hours": 48.0,
+        "min_hours": 48.0
+      },
+      "gugen_temperature": null,
+      "operation_index": 1,
+      "precursors": [
+        {
+          "In": 2.0,
+          "O": 3.0
+        },
+        {
+          "Nb": 2.0,
+          "O": 5.0
+        },
+        {
+          "Bi": 2.0,
+          "O": 3.0
+        }
+      ],
+      "raw_temperature_candidates_celsius": [
+        [
+          1000.0,
+          1000.0
+        ],
+        [
+          1050.0,
+          1050.0
+        ]
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "temp_disagree",
+      "target": {
+        "Bi": 2.0,
+        "In": 1.0,
+        "Nb": 1.0,
+        "O": 7.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 6040,
+      "doi": "10.1016/j.jcrysgro.2014.12.020",
+      "gugen_atmosphere": "Air",
+      "gugen_duration": {
+        "max_hours": 24.0,
+        "min_hours": 24.0
+      },
+      "gugen_temperature": null,
+      "operation_index": 2,
+      "precursors": [
+        {
+          "Cu": 1.0,
+          "O": 1.0
+        },
+        {
+          "Fe": 2.0,
+          "O": 3.0
+        },
+        {
+          "O": 3.0,
+          "Y": 2.0
+        },
+        {
+          "Ba": 1.0,
+          "C": 1.0,
+          "O": 3.0
+        }
+      ],
+      "raw_temperature_candidates_celsius": [
+        [
+          900.0,
+          900.0
+        ],
+        [
+          1150.0,
+          1150.0
+        ]
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "temp_disagree",
+      "target": {
+        "Ba": 1.0,
+        "Cu": 1.0,
+        "Fe": 1.0,
+        "O": 5.0,
+        "Y": 1.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 9542,
+      "doi": "10.1016/j.jssc.2004.12.012",
+      "gugen_atmosphere": null,
+      "gugen_duration": null,
+      "gugen_temperature": null,
+      "operation_index": 0,
+      "precursors": [
+        {
+          "In": 2.0,
+          "O": 3.0
+        },
+        {
+          "Nb": 2.0,
+          "O": 5.0
+        },
+        {
+          "Bi": 2.0,
+          "O": 3.0
+        }
+      ],
+      "raw_temperature_candidates_celsius": [
+        [
+          750.0,
+          750.0
+        ],
+        [
+          1100.0,
+          1100.0
+        ]
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "temp_disagree",
+      "target": {
+        "Bi": 2.0,
+        "In": 1.0,
+        "Nb": 1.0,
+        "O": 7.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 8866,
+      "doi": "10.1016/j.jpowsour.2008.02.019",
+      "gugen_atmosphere": {
+        "Controlled": {
+          "description": "air, argon, hydrogen"
+        }
+      },
+      "gugen_duration": {
+        "max_hours": 12.0,
+        "min_hours": 12.0
+      },
+      "gugen_temperature": {
+        "max_celsius": 800.0,
+        "min_celsius": 800.0
+      },
+      "operation_index": 0,
+      "precursors": [
+        {
+          "O": 2.0,
+          "Ti": 1.0
+        },
+        {
+          "Ta": 1.0
+        },
+        {
+          "C": 1.0,
+          "Li": 2.0,
+          "O": 3.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "atm_controlled",
+      "target": {
+        "Li": 4.0,
+        "O": 12.0,
+        "Ti": 5.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 6154,
+      "doi": "10.1016/j.jeurceramsoc.2005.03.032",
+      "gugen_atmosphere": {
+        "Controlled": {
+          "description": "argon, hydrogen"
+        }
+      },
+      "gugen_duration": {
+        "max_hours": 15.0,
+        "min_hours": 15.0
+      },
+      "gugen_temperature": {
+        "max_celsius": 1360.0,
+        "min_celsius": 1360.0
+      },
+      "operation_index": 1,
+      "precursors": [
+        {
+          "O": 2.0,
+          "Ti": 1.0
+        },
+        {
+          "Nb": 2.0,
+          "O": 5.0
+        },
+        {
+          "C": 1.0,
+          "O": 3.0,
+          "Sr": 1.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "atm_controlled",
+      "target": {
+        "O": 3.0,
+        "Sr": 1.0,
+        "Ti": 1.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 15972,
+      "doi": "10.1016/j.ssi.2014.09.005",
+      "gugen_atmosphere": {
+        "Controlled": {
+          "description": "air"
+        }
+      },
+      "gugen_duration": {
+        "max_hours": 10.0,
+        "min_hours": 10.0
+      },
+      "gugen_temperature": {
+        "max_celsius": 800.0,
+        "min_celsius": 800.0
+      },
+      "operation_index": 0,
+      "precursors": [
+        {
+          "O": 3.0,
+          "Y": 2.0
+        },
+        {
+          "Bi": 2.0,
+          "O": 3.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "atm_controlled",
+      "target": {
+        "Bi": 1.46,
+        "O": 3.0,
+        "Y": 0.54
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 11165,
+      "doi": "10.1016/j.materresbull.2007.12.005",
+      "gugen_atmosphere": {
+        "Controlled": {
+          "description": "hydrogen, nitrogen"
+        }
+      },
+      "gugen_duration": null,
+      "gugen_temperature": {
+        "max_celsius": 1300.0,
+        "min_celsius": 1300.0
+      },
+      "operation_index": 1,
+      "precursors": [
+        {
+          "Eu": 2.0,
+          "O": 3.0
+        },
+        {
+          "C": 1.0,
+          "O": 3.0,
+          "Sr": 1.0
+        },
+        {
+          "O": 2.0,
+          "Si": 1.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "atm_controlled",
+      "target": {
+        "O": 4.0,
+        "Si": 1.0,
+        "Sr": 1.98
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 17863,
+      "doi": "10.1038/srep04350",
+      "gugen_atmosphere": {
+        "Controlled": {
+          "description": "air, argon, hydrogen"
+        }
+      },
+      "gugen_duration": {
+        "max_hours": 5.0,
+        "min_hours": 5.0
+      },
+      "gugen_temperature": {
+        "max_celsius": 800.0,
+        "min_celsius": 800.0
+      },
+      "operation_index": 0,
+      "precursors": [
+        {
+          "O": 2.0,
+          "Ti": 1.0
+        },
+        {
+          "C": 1.0,
+          "Li": 2.0,
+          "O": 3.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "atm_controlled",
+      "target": {
+        "Li": 4.0,
+        "O": 12.0,
+        "Ti": 5.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 12264,
+      "doi": "10.1016/j.matlet.2012.11.109",
+      "gugen_atmosphere": {
+        "Controlled": {
+          "description": "hydrogen, nitrogen"
+        }
+      },
+      "gugen_duration": {
+        "max_hours": 3.0,
+        "min_hours": 3.0
+      },
+      "gugen_temperature": {
+        "max_celsius": 950.0,
+        "min_celsius": 950.0
+      },
+      "operation_index": 0,
+      "precursors": [
+        {
+          "H": 6.0,
+          "N": 1.0,
+          "O": 4.0,
+          "P": 1.0
+        },
+        {
+          "Eu": 2.0,
+          "O": 3.0
+        },
+        {
+          "C": 1.0,
+          "Ca": 1.0,
+          "O": 3.0
+        },
+        {
+          "C": 1.0,
+          "Li": 2.0,
+          "O": 3.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "atm_controlled",
+      "target": {
+        "Ca": 1.0,
+        "Li": 1.0,
+        "O": 4.0,
+        "P": 1.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 2759,
+      "doi": "10.1016/S0025-5408(02)00682-7",
+      "gugen_atmosphere": {
+        "Controlled": {
+          "description": "air"
+        }
+      },
+      "gugen_duration": null,
+      "gugen_temperature": {
+        "max_celsius": 1000.0,
+        "min_celsius": 1000.0
+      },
+      "operation_index": 0,
+      "precursors": [
+        {
+          "Al": 2.0,
+          "O": 3.0
+        },
+        {
+          "C": 1.0,
+          "O": 3.0,
+          "Sr": 1.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "atm_controlled",
+      "target": {
+        "Al": 6.0,
+        "O": 19.0,
+        "Sr": 10.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 829,
+      "doi": "10.1007/s10853-015-9080-3",
+      "gugen_atmosphere": {
+        "Controlled": {
+          "description": "air"
+        }
+      },
+      "gugen_duration": {
+        "max_hours": 2.0,
+        "min_hours": 2.0
+      },
+      "gugen_temperature": {
+        "max_celsius": 1170.0,
+        "min_celsius": 1150.0
+      },
+      "operation_index": 1,
+      "precursors": [
+        {
+          "C": 1.0,
+          "Na": 2.0,
+          "O": 3.0
+        },
+        {
+          "Nb": 2.0,
+          "O": 5.0
+        },
+        {
+          "C": 1.0,
+          "K": 2.0,
+          "O": 3.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "atm_controlled",
+      "target": {
+        "K": 0.5,
+        "Na": 0.5,
+        "Nb": 1.0,
+        "O": 3.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 16722,
+      "doi": "10.1021/acs.inorgchem.7b00564",
+      "gugen_atmosphere": "Air",
+      "gugen_duration": {
+        "max_hours": 6.0,
+        "min_hours": 6.0
+      },
+      "gugen_temperature": {
+        "max_celsius": 500.0,
+        "min_celsius": 500.0
+      },
+      "operation_index": 0,
+      "precursors": [
+        {
+          "C": 1.0,
+          "Ca": 1.0,
+          "O": 3.0
+        },
+        {
+          "H": 6.0,
+          "N": 1.0,
+          "O": 4.0,
+          "P": 1.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "fully_resolved",
+      "target": {
+        "Bi": 0.001,
+        "Ca": 1.999,
+        "O": 7.0,
+        "P": 2.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 10568,
+      "doi": "10.1016/j.matchemphys.2004.12.035",
+      "gugen_atmosphere": "Air",
+      "gugen_duration": {
+        "max_hours": 1.0,
+        "min_hours": 1.0
+      },
+      "gugen_temperature": {
+        "max_celsius": 1300.0,
+        "min_celsius": 1300.0
+      },
+      "operation_index": 0,
+      "precursors": [
+        {
+          "O": 2.0,
+          "Ti": 1.0
+        },
+        {
+          "La": 2.0,
+          "O": 3.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "fully_resolved",
+      "target": {
+        "La": 4.0,
+        "O": 24.0,
+        "Ti": 9.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 9135,
+      "doi": "10.1016/j.jpowsour.2013.03.154",
+      "gugen_atmosphere": "Air",
+      "gugen_duration": {
+        "max_hours": 12.0,
+        "min_hours": 12.0
+      },
+      "gugen_temperature": {
+        "max_celsius": 1000.0,
+        "min_celsius": 1000.0
+      },
+      "operation_index": 0,
+      "precursors": [
+        {
+          "C": 1.0,
+          "O": 3.0,
+          "Sr": 1.0
+        },
+        {
+          "Co": 3.0,
+          "O": 4.0
+        },
+        {
+          "Fe": 2.0,
+          "O": 3.0
+        },
+        {
+          "La": 2.0,
+          "O": 3.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "fully_resolved",
+      "target": {
+        "Co": 0.8,
+        "Fe": 0.2,
+        "La": 0.1,
+        "O": 3.0,
+        "Sr": 0.9
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 12313,
+      "doi": "10.1016/j.matlet.2013.11.039",
+      "gugen_atmosphere": "Air",
+      "gugen_duration": {
+        "max_hours": 2.0,
+        "min_hours": 2.0
+      },
+      "gugen_temperature": {
+        "max_celsius": 999.85,
+        "min_celsius": 999.85
+      },
+      "operation_index": 0,
+      "precursors": [
+        {
+          "O": 3.0,
+          "Y": 2.0
+        },
+        {
+          "La": 2.0,
+          "O": 3.0
+        },
+        {
+          "O": 2.0,
+          "Zr": 1.0
+        },
+        {
+          "Ce": 1.0,
+          "O": 2.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "fully_resolved",
+      "target": {
+        "Ce": 0.6,
+        "La": 1.9,
+        "O": 7.0,
+        "Y": 0.1,
+        "Zr": 1.4
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 4806,
+      "doi": "10.1016/j.electacta.2012.08.073",
+      "gugen_atmosphere": {
+        "Inert": {
+          "gas": "Argon"
+        }
+      },
+      "gugen_duration": {
+        "max_hours": 1.0,
+        "min_hours": 1.0
+      },
+      "gugen_temperature": {
+        "max_celsius": 575.0,
+        "min_celsius": 575.0
+      },
+      "operation_index": 0,
+      "precursors": [
+        {
+          "F": 1.0,
+          "Li": 1.0
+        },
+        {
+          "Fe": 1.0,
+          "O": 4.0,
+          "P": 1.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "fully_resolved",
+      "target": {
+        "F": 1.0,
+        "Fe": 1.0,
+        "Li": 1.0,
+        "O": 4.0,
+        "P": 1.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 17151,
+      "doi": "10.1021/cm304101n",
+      "gugen_atmosphere": "Air",
+      "gugen_duration": {
+        "max_hours": 2.0,
+        "min_hours": 2.0
+      },
+      "gugen_temperature": {
+        "max_celsius": 900.0,
+        "min_celsius": 900.0
+      },
+      "operation_index": 0,
+      "precursors": [
+        {
+          "Ga": 2.0,
+          "O": 3.0
+        },
+        {
+          "Cr": 2.0,
+          "O": 3.0
+        },
+        {
+          "O": 1.0,
+          "Zn": 1.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "fully_resolved",
+      "target": {
+        "Ga": 2.0,
+        "O": 4.0,
+        "Zn": 1.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 4188,
+      "doi": "10.1016/j.apsusc.2015.08.079",
+      "gugen_atmosphere": "Air",
+      "gugen_duration": {
+        "max_hours": 12.0,
+        "min_hours": 12.0
+      },
+      "gugen_temperature": {
+        "max_celsius": 700.0,
+        "min_celsius": 700.0
+      },
+      "operation_index": 0,
+      "precursors": [
+        {
+          "O": 1.0,
+          "Pb": 1.0
+        },
+        {
+          "Bi": 1.0,
+          "Cl": 1.0,
+          "O": 1.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "fully_resolved",
+      "target": {
+        "Bi": 1.0,
+        "Cl": 1.0,
+        "O": 2.0,
+        "Pb": 1.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 19234,
+      "doi": "10.1149/1.3597634",
+      "gugen_atmosphere": "Air",
+      "gugen_duration": {
+        "max_hours": 10.0,
+        "min_hours": 10.0
+      },
+      "gugen_temperature": {
+        "max_celsius": 1399.85,
+        "min_celsius": 1399.85
+      },
+      "operation_index": 0,
+      "precursors": [
+        {
+          "O": 3.0,
+          "Y": 2.0
+        },
+        {
+          "Ce": 1.0,
+          "O": 2.0
+        },
+        {
+          "Ba": 1.0,
+          "C": 1.0,
+          "O": 3.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "fully_resolved",
+      "target": {
+        "Ba": 1.0,
+        "Ce": 0.85,
+        "O": 3.0,
+        "Y": 0.15
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 19111,
+      "doi": "10.1149/1.2789807",
+      "gugen_atmosphere": null,
+      "gugen_duration": null,
+      "gugen_temperature": null,
+      "operation_index": 0,
+      "precursors": [
+        {
+          "O": 3.0,
+          "Y": 2.0
+        },
+        {
+          "Al": 2.0,
+          "O": 3.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "baseline",
+      "target": {
+        "Al": 5.0,
+        "O": 12.0,
+        "Y": 3.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 2342,
+      "doi": "10.1007/s11244-007-9031-6",
+      "gugen_atmosphere": null,
+      "gugen_duration": null,
+      "gugen_temperature": null,
+      "operation_index": 0,
+      "precursors": [
+        {
+          "Fe": 2.0,
+          "O": 3.0
+        },
+        {
+          "Mn": 1.0,
+          "O": 2.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "baseline",
+      "target": {
+        "Fe": 2.0,
+        "Mn": 1.0,
+        "O": 4.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 18766,
+      "doi": "10.1111/j.1551-2916.2010.03683.x",
+      "gugen_atmosphere": null,
+      "gugen_duration": null,
+      "gugen_temperature": {
+        "max_celsius": 1100.0,
+        "min_celsius": 1100.0
+      },
+      "operation_index": 0,
+      "precursors": [
+        {
+          "Nb": 2.0,
+          "O": 5.0
+        },
+        {
+          "C": 1.0,
+          "O": 3.0,
+          "Sr": 1.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "baseline",
+      "target": {
+        "Nb": 2.0,
+        "O": 6.0,
+        "Sr": 1.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 15089,
+      "doi": "10.1016/j.ssc.2010.11.035",
+      "gugen_atmosphere": null,
+      "gugen_duration": {
+        "max_hours": 36.0,
+        "min_hours": 36.0
+      },
+      "gugen_temperature": {
+        "max_celsius": 1200.0,
+        "min_celsius": 1200.0
+      },
+      "operation_index": 0,
+      "precursors": [
+        {
+          "O": 2.0,
+          "Zr": 1.0
+        },
+        {
+          "Nd": 2.0,
+          "O": 3.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "baseline",
+      "target": {
+        "Nd": 2.0,
+        "O": 7.0,
+        "Zr": 2.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 12701,
+      "doi": "10.1016/j.msea.2006.10.018",
+      "gugen_atmosphere": "Air",
+      "gugen_duration": null,
+      "gugen_temperature": null,
+      "operation_index": 0,
+      "precursors": [
+        {
+          "O": 2.0,
+          "Ti": 1.0
+        },
+        {
+          "Nb": 2.0,
+          "O": 5.0
+        },
+        {
+          "Ba": 1.0,
+          "C": 1.0,
+          "O": 3.0
+        },
+        {
+          "La": 2.0,
+          "O": 3.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "baseline",
+      "target": {
+        "Ba": 3.0,
+        "La": 2.0,
+        "Nb": 2.0,
+        "O": 15.0,
+        "Ti": 2.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 13497,
+      "doi": "10.1016/j.optmat.2014.06.020",
+      "gugen_atmosphere": "Air",
+      "gugen_duration": {
+        "max_hours": 6.0,
+        "min_hours": 6.0
+      },
+      "gugen_temperature": {
+        "max_celsius": 1300.0,
+        "min_celsius": 1300.0
+      },
+      "operation_index": 0,
+      "precursors": [
+        {
+          "Ga": 2.0,
+          "O": 3.0
+        },
+        {
+          "Mg": 1.0,
+          "O": 1.0
+        },
+        {
+          "Cr": 1.0,
+          "O": 3.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "baseline",
+      "target": {
+        "Ga": 2.0,
+        "Mg": 1.0,
+        "O": 4.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 3487,
+      "doi": "10.1016/S0921-4534(01)01297-7",
+      "gugen_atmosphere": "Air",
+      "gugen_duration": null,
+      "gugen_temperature": {
+        "max_celsius": 950.0,
+        "min_celsius": 950.0
+      },
+      "operation_index": 0,
+      "precursors": [
+        {
+          "Cu": 2.0,
+          "O": 1.0
+        },
+        {
+          "Gd": 1.0,
+          "O": 6.0,
+          "Ru": 1.0,
+          "Sr": 2.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "baseline",
+      "target": {
+        "Cu": 2.0,
+        "Gd": 1.0,
+        "O": 8.0,
+        "Ru": 1.0,
+        "Sr": 2.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 11102,
+      "doi": "10.1016/j.materresbull.2006.10.013",
+      "gugen_atmosphere": null,
+      "gugen_duration": {
+        "max_hours": 3.0,
+        "min_hours": 3.0
+      },
+      "gugen_temperature": {
+        "max_celsius": 800.0,
+        "min_celsius": 800.0
+      },
+      "operation_index": 0,
+      "precursors": [
+        {
+          "O": 1.0,
+          "Pb": 1.0
+        },
+        {
+          "O": 2.0,
+          "Zr": 1.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "baseline",
+      "target": {
+        "O": 3.0,
+        "Pb": 1.0,
+        "Zr": 1.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 8877,
+      "doi": "10.1016/j.jpowsour.2008.05.041",
+      "gugen_atmosphere": null,
+      "gugen_duration": {
+        "max_hours": 4.0,
+        "min_hours": 4.0
+      },
+      "gugen_temperature": {
+        "max_celsius": 1500.0,
+        "min_celsius": 1500.0
+      },
+      "operation_index": 0,
+      "precursors": [
+        {
+          "Gd": 2.0,
+          "O": 3.0
+        },
+        {
+          "Ce": 0.9,
+          "Gd": 0.1,
+          "O": 1.95
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "baseline",
+      "target": {
+        "Ce": 0.8,
+        "Gd": 0.2,
+        "O": 1.9
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 1074,
+      "doi": "10.1007/s10854-010-0269-6",
+      "gugen_atmosphere": "Air",
+      "gugen_duration": {
+        "max_hours": 3.0,
+        "min_hours": 3.0
+      },
+      "gugen_temperature": {
+        "max_celsius": 1200.0,
+        "min_celsius": 750.0
+      },
+      "operation_index": 0,
+      "precursors": [
+        {
+          "Cu": 1.0,
+          "O": 1.0
+        },
+        {
+          "O": 2.0,
+          "Ti": 1.0
+        },
+        {
+          "Ca": 1.0,
+          "O": 3.0,
+          "Ti": 1.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "baseline",
+      "target": {
+        "Ca": 1.0,
+        "Cu": 3.0,
+        "O": 12.0,
+        "Ti": 4.0
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 333,
+      "doi": "10.1007/s10008-004-0640-8",
+      "gugen_atmosphere": null,
+      "gugen_duration": {
+        "max_hours": 10.0,
+        "min_hours": 10.0
+      },
+      "gugen_temperature": {
+        "max_celsius": 1199.85,
+        "min_celsius": 1199.85
+      },
+      "operation_index": 0,
+      "precursors": [
+        {
+          "Co": 3.0,
+          "O": 4.0
+        },
+        {
+          "La": 2.0,
+          "O": 3.0
+        },
+        {
+          "C": 1.0,
+          "O": 3.0,
+          "Sr": 1.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "baseline",
+      "target": {
+        "Co": 1.0,
+        "La": 0.6,
+        "O": 3.0,
+        "Sr": 0.4
+      },
+      "wave": 1
+    },
+    {
+      "corpus_record_index": 299,
+      "doi": "10.1007/s00339-016-9959-0",
+      "gugen_atmosphere": null,
+      "gugen_duration": null,
+      "gugen_temperature": null,
+      "operation_index": 0,
+      "precursors": [
+        {
+          "C": 1.0,
+          "K": 2.0,
+          "O": 3.0
+        },
+        {
+          "O": 2.0,
+          "Ti": 1.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "stratum": "baseline",
+      "target": {
+        "K": 2.0,
+        "O": 5.0,
+        "Ti": 2.0
+      },
+      "wave": 1
+    }
+  ],
+  "waves": [
+    {
+      "seed": 20260815,
+      "sizes": {
+        "temp_disagree": 10
+      },
+      "wave": 0
+    },
+    {
+      "seed": 20260815,
+      "sizes": {
+        "atm_controlled": 8,
+        "baseline": 12,
+        "fully_resolved": 8,
+        "temp_disagree": 20
+      },
+      "wave": 1
+    }
+  ]
+}

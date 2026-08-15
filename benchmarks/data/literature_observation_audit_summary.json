@@ -1,0 +1,337 @@
+{
+  "n_judgments": 58,
+  "accessibility": {
+    "temp_disagree": {
+      "full_text": 3,
+      "source_inaccessible": 20,
+      "abstract_only": 7
+    },
+    "__all__": {
+      "full_text": 5,
+      "source_inaccessible": 36,
+      "abstract_only": 17
+    },
+    "atm_controlled": {
+      "source_inaccessible": 6,
+      "full_text": 2
+    },
+    "fully_resolved": {
+      "abstract_only": 5,
+      "source_inaccessible": 3
+    },
+    "baseline": {
+      "abstract_only": 5,
+      "source_inaccessible": 7
+    }
+  },
+  "identity_accuracy": {
+    "n": 58,
+    "matches": 41,
+    "mismatches": 3,
+    "unverifiable": 14,
+    "conservative": {
+      "point_estimate": 0.7068965517241379,
+      "ci95_low": 0.5798685554332221,
+      "ci95_high": 0.8082197217135527
+    },
+    "excl_unverifiable": {
+      "point_estimate": 0.9318181818181818,
+      "ci95_low": 0.8177467866338279,
+      "ci95_high": 0.9765410298271597
+    },
+    "mismatch_dois": [
+      "10.1016/j.physc.2013.04.028",
+      "10.1016/j.jpowsour.2008.05.041",
+      "10.1007/s00339-016-9959-0"
+    ]
+  },
+  "inter_reviewer_agreement": {
+    "n_overlap_items": 5,
+    "per_field": {
+      "access_level": {
+        "agree": 2,
+        "n": 5,
+        "rate": 0.4
+      },
+      "identity_match": {
+        "agree": 4,
+        "n": 5,
+        "rate": 0.8
+      },
+      "temperature_verdict": {
+        "agree": 2,
+        "n": 5,
+        "rate": 0.4
+      },
+      "duration_verdict": {
+        "agree": 3,
+        "n": 5,
+        "rate": 0.6
+      },
+      "atmosphere_verdict": {
+        "agree": 3,
+        "n": 5,
+        "rate": 0.6
+      }
+    },
+    "disagreements": [
+      {
+        "doi": "10.1016/j.ssc.2009.01.002",
+        "field": "access_level",
+        "first_pass": "full_text",
+        "second_pass": "source_inaccessible"
+      },
+      {
+        "doi": "10.1016/j.ssc.2009.01.002",
+        "field": "temperature_verdict",
+        "first_pass": "match",
+        "second_pass": "not_checked"
+      },
+      {
+        "doi": "10.1016/j.ssc.2009.01.002",
+        "field": "duration_verdict",
+        "first_pass": "match",
+        "second_pass": "not_checked"
+      },
+      {
+        "doi": "10.1016/j.ssc.2009.01.002",
+        "field": "atmosphere_verdict",
+        "first_pass": "match",
+        "second_pass": "not_checked"
+      },
+      {
+        "doi": "10.1016/j.jeurceramsoc.2005.03.032",
+        "field": "temperature_verdict",
+        "first_pass": "mismatch",
+        "second_pass": "match"
+      },
+      {
+        "doi": "10.1016/j.matchemphys.2004.12.035",
+        "field": "access_level",
+        "first_pass": "abstract_only",
+        "second_pass": "source_inaccessible"
+      },
+      {
+        "doi": "10.1016/j.matchemphys.2004.12.035",
+        "field": "temperature_verdict",
+        "first_pass": "match",
+        "second_pass": "not_checked"
+      },
+      {
+        "doi": "10.1016/j.matchemphys.2004.12.035",
+        "field": "duration_verdict",
+        "first_pass": "match",
+        "second_pass": "not_checked"
+      },
+      {
+        "doi": "10.1016/j.matchemphys.2004.12.035",
+        "field": "atmosphere_verdict",
+        "first_pass": "match",
+        "second_pass": "not_checked"
+      },
+      {
+        "doi": "10.1016/j.jpowsour.2008.05.041",
+        "field": "access_level",
+        "first_pass": "abstract_only",
+        "second_pass": "source_inaccessible"
+      },
+      {
+        "doi": "10.1016/j.jpowsour.2008.05.041",
+        "field": "identity_match",
+        "first_pass": "mismatch",
+        "second_pass": "unverifiable"
+      }
+    ]
+  },
+  "field_accuracy": {
+    "temperature_verdict": {
+      "temp_disagree": {
+        "n_accessible_and_checkable": 9,
+        "matches": 2,
+        "mismatches_incl_unit_and_contamination": 2,
+        "missed_value": 0,
+        "accessible_but_unstated": 5,
+        "ci_trials_n": 4,
+        "point_estimate": 0.5,
+        "ci95_low": 0.15003570882017148,
+        "ci95_high": 0.8499642911798285
+      },
+      "atm_controlled": {
+        "n_accessible_and_checkable": 2,
+        "matches": 1,
+        "mismatches_incl_unit_and_contamination": 1,
+        "missed_value": 0,
+        "accessible_but_unstated": 0,
+        "ci_trials_n": 2,
+        "point_estimate": 0.5,
+        "ci95_low": 0.09452865480086614,
+        "ci95_high": 0.9054713451991339
+      },
+      "fully_resolved": {
+        "n_accessible_and_checkable": 3,
+        "matches": 1,
+        "mismatches_incl_unit_and_contamination": 0,
+        "missed_value": 0,
+        "accessible_but_unstated": 2,
+        "ci_trials_n": 1,
+        "point_estimate": 1.0,
+        "ci95_low": 0.20654329147389294,
+        "ci95_high": 1.0
+      },
+      "baseline": {
+        "n_accessible_and_checkable": 2,
+        "matches": 1,
+        "mismatches_incl_unit_and_contamination": 0,
+        "missed_value": 0,
+        "accessible_but_unstated": 1,
+        "ci_trials_n": 1,
+        "point_estimate": 1.0,
+        "ci95_low": 0.20654329147389294,
+        "ci95_high": 1.0
+      },
+      "__all__": {
+        "n_accessible_and_checkable": 16,
+        "matches": 5,
+        "mismatches_incl_unit_and_contamination": 3,
+        "missed_value": 0,
+        "accessible_but_unstated": 8,
+        "ci_trials_n": 8,
+        "point_estimate": 0.625,
+        "ci95_low": 0.30573785458380187,
+        "ci95_high": 0.863158240538479
+      }
+    },
+    "duration_verdict": {
+      "temp_disagree": {
+        "n_accessible_and_checkable": 9,
+        "matches": 2,
+        "mismatches_incl_unit_and_contamination": 1,
+        "missed_value": 0,
+        "accessible_but_unstated": 6,
+        "ci_trials_n": 3,
+        "point_estimate": 0.6666666666666666,
+        "ci95_low": 0.2076549551264879,
+        "ci95_high": 0.9385096847238394
+      },
+      "atm_controlled": {
+        "n_accessible_and_checkable": 2,
+        "matches": 2,
+        "mismatches_incl_unit_and_contamination": 0,
+        "missed_value": 0,
+        "accessible_but_unstated": 0,
+        "ci_trials_n": 2,
+        "point_estimate": 1.0,
+        "ci95_low": 0.34237195288961925,
+        "ci95_high": 1.0
+      },
+      "fully_resolved": {
+        "n_accessible_and_checkable": 3,
+        "matches": 1,
+        "mismatches_incl_unit_and_contamination": 0,
+        "missed_value": 0,
+        "accessible_but_unstated": 2,
+        "ci_trials_n": 1,
+        "point_estimate": 1.0,
+        "ci95_low": 0.20654329147389294,
+        "ci95_high": 1.0
+      },
+      "baseline": {
+        "n_accessible_and_checkable": 2,
+        "matches": 0,
+        "mismatches_incl_unit_and_contamination": 0,
+        "missed_value": 0,
+        "accessible_but_unstated": 2,
+        "ci_trials_n": 0,
+        "point_estimate": null,
+        "ci95_low": null,
+        "ci95_high": null
+      },
+      "__all__": {
+        "n_accessible_and_checkable": 16,
+        "matches": 5,
+        "mismatches_incl_unit_and_contamination": 1,
+        "missed_value": 0,
+        "accessible_but_unstated": 10,
+        "ci_trials_n": 6,
+        "point_estimate": 0.8333333333333334,
+        "ci95_low": 0.43649056343635395,
+        "ci95_high": 0.9699474141282697
+      }
+    },
+    "atmosphere_verdict": {
+      "temp_disagree": {
+        "n_accessible_and_checkable": 9,
+        "matches": 4,
+        "mismatches_incl_unit_and_contamination": 0,
+        "missed_value": 0,
+        "accessible_but_unstated": 5,
+        "ci_trials_n": 4,
+        "point_estimate": 1.0,
+        "ci95_low": 0.5100999795960008,
+        "ci95_high": 1.0
+      },
+      "atm_controlled": {
+        "n_accessible_and_checkable": 2,
+        "matches": 2,
+        "mismatches_incl_unit_and_contamination": 0,
+        "missed_value": 0,
+        "accessible_but_unstated": 0,
+        "ci_trials_n": 2,
+        "point_estimate": 1.0,
+        "ci95_low": 0.34237195288961925,
+        "ci95_high": 1.0
+      },
+      "fully_resolved": {
+        "n_accessible_and_checkable": 3,
+        "matches": 1,
+        "mismatches_incl_unit_and_contamination": 0,
+        "missed_value": 0,
+        "accessible_but_unstated": 2,
+        "ci_trials_n": 1,
+        "point_estimate": 1.0,
+        "ci95_low": 0.20654329147389294,
+        "ci95_high": 1.0
+      },
+      "baseline": {
+        "n_accessible_and_checkable": 2,
+        "matches": 1,
+        "mismatches_incl_unit_and_contamination": 0,
+        "missed_value": 0,
+        "accessible_but_unstated": 1,
+        "ci_trials_n": 1,
+        "point_estimate": 1.0,
+        "ci95_low": 0.20654329147389294,
+        "ci95_high": 1.0
+      },
+      "__all__": {
+        "n_accessible_and_checkable": 16,
+        "matches": 8,
+        "mismatches_incl_unit_and_contamination": 0,
+        "missed_value": 0,
+        "accessible_but_unstated": 8,
+        "ci_trials_n": 8,
+        "point_estimate": 1.0,
+        "ci95_low": 0.6755843804891231,
+        "ci95_high": 1.0
+      }
+    }
+  },
+  "multi_entry_cause": {
+    "temp_disagree_full_text_n": 3,
+    "classified_n": 2,
+    "unclassified_insufficient_evidence_n": 1,
+    "tally": {
+      "genuine_multi_condition": 2
+    },
+    "classified_dois": [
+      [
+        "10.1016/j.jpowsour.2007.08.077",
+        "genuine_multi_condition"
+      ],
+      [
+        "10.1016/j.ssc.2009.01.002",
+        "genuine_multi_condition"
+      ]
+    ]
+  }
+}
