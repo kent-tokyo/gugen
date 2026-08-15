@@ -53,7 +53,23 @@
 //! explicitly not a route-family prediction-accuracy benchmark (see
 //! `docs/route_suitability_corpus_audit.md`); no production code changed.
 //! Phases 15A/15B/16/17 together are v0.3.0's planned development work.
-//! **v0.3.0 is published** (crates.io, tagged `v0.3.0`). See
+//! **v0.3.0 is published** (crates.io, tagged `v0.3.0`). Post-v0.3.0
+//! development toward v0.4.0 added finite-temperature Gibbs-energy
+//! estimation for gas-free solid systems (Phase 19P/19P.1), deliberately
+//! not connected to ranking (`thermodynamic_support` stays `None`); a
+//! bulk literature-corpus snapshot loader and exact-match observation
+//! provider (Phase 20B); cross-DOI field comparison across independent
+//! sources for that corpus (Phase 20C); a manual extraction-accuracy
+//! audit against original source papers (Phase 20D); and Integration,
+//! which surfaces that cross-DOI evidence on
+//! `SynthesisPlan.literature_evidence` for reference-only display --
+//! never auto-filling `ProcessStep` conditions and never affecting
+//! `score`/`confidence`/ranking. Together these are v0.4.0's planned
+//! development work: gas-free solid finite-temperature thermodynamic
+//! primitives, a bulk literature observation snapshot API, cross-DOI
+//! agreement/conflict classification, and reference-only literature
+//! evidence in `Planner` -- an evidence-infrastructure release, not a
+//! ranking-accuracy or synthesis-success-prediction claim. See
 //! `CHANGELOG.md` for the user-facing summary.
 
 #![forbid(unsafe_code)]
