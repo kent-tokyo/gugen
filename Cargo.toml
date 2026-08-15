@@ -9,6 +9,13 @@ repository = "https://github.com/kent-tokyo/gugen"
 documentation = "https://docs.rs/gugen"
 keywords = ["chemistry", "materials-science", "synthesis", "planning"]
 categories = ["science::computational-chemistry", "command-line-utilities", "algorithms"]
+# Bulk literature-corpus data must never enter the published package (Phase
+# 20B, owner's explicit requirement) -- only small fixtures under
+# tests/fixtures/ ship. This also retroactively excludes
+# benchmarks/data/kononova_sample.jsonl (472 KB, committed since Phase 11 /
+# v0.2.0), which `cargo package --list` confirms was shipping in every
+# published tarball through v0.3.0 with no prior exclusion.
+exclude = ["benchmarks/data/*.json", "benchmarks/data/*.jsonl"]
 
 [package.metadata.docs.rs]
 # default = [] hides most public types (serde impls, the mikiwame adapter)
@@ -48,6 +55,13 @@ chematic_crystal = ["dep:chematic-crystal", "mikiwame"]
 # the default public API surface, the same opt-in convention `mikiwame`
 # uses for its own (dependency-backed) adapter.
 materials_project = []
+# Bulk literature-corpus snapshot loading (src/literature_observations.rs,
+# Phase 20B). Depends on "serde" (JSON parsing) but is kept as its own
+# feature rather than folded into "serde" directly, matching
+# "chematic_crystal"'s "feature requiring another feature" precedent --
+# a caller who wants serde for e.g. JSON report output should not also
+# have to compile this substantial, unrelated subsystem in.
+literature_corpus = ["serde"]
 
 [[test]]
 name = "json_roundtrip"
@@ -64,6 +78,16 @@ name = "large_scale_benchmark"
 path = "tests/large_scale_benchmark.rs"
 required-features = ["serde"]
 
+[[test]]
+name = "literature_observations"
+path = "tests/literature_observations.rs"
+required-features = ["literature_corpus"]
+
+[[test]]
+name = "literature_observation_planner_invariance"
+path = "tests/literature_observation_planner_invariance.rs"
+required-features = ["literature_corpus"]
+
 [[example]]
 name = "large_scale_benchmark"
 path = "examples/large_scale_benchmark.rs"
@@ -73,6 +97,11 @@ required-features = ["serde"]
 name = "route_suitability_policy_audit"
 path = "examples/route_suitability_policy_audit.rs"
 required-features = ["serde"]
+
+[[example]]
+name = "literature_observation_benchmark"
+path = "examples/literature_observation_benchmark.rs"
+required-features = ["literature_corpus"]
 
 [[bin]]
 name = "gugen"

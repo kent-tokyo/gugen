@@ -1,0 +1,374 @@
+{
+  "manifest": {
+    "source": "Kononova, O. et al. 'Text-mined dataset of inorganic materials synthesis recipes.' Scientific Data 6, 203 (2019), DOI 10.1038/s41597-019-0224-1 (figshare DOI 10.6084/m9.figshare.9722159, CC BY 4.0)",
+    "release": "figshare article 9722159, raw file sha256=4be37c9ab9aa23d7ceaaec692e6900f391e628b175d56b89995fa501a5130ab0",
+    "schema_version": "gugen-literature-observation-snapshot-v1",
+    "checksum": "4be37c9ab9aa23d7ceaaec692e6900f391e628b175d56b89995fa501a5130ab0",
+    "record_count": 11
+  },
+  "observations": [
+    {
+      "target": {
+        "Sr": 1.0,
+        "Fe": 12.0,
+        "O": 19.0
+      },
+      "precursors": [
+        {
+          "Fe": 2.0,
+          "O": 3.0
+        },
+        {
+          "Sr": 1.0,
+          "C": 1.0,
+          "O": 3.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "operation_index": 0,
+      "temperature": {
+        "min_celsius": 1000.0,
+        "max_celsius": 1000.0
+      },
+      "duration": null,
+      "atmosphere": null,
+      "doi": "10.1002/0471238961.1920181508090202.a01",
+      "corpus_record_index": 0
+    },
+    {
+      "target": {
+        "Sr": 1.0,
+        "Fe": 12.0,
+        "O": 19.0
+      },
+      "precursors": [
+        {
+          "Fe": 2.0,
+          "O": 3.0
+        },
+        {
+          "Sr": 1.0,
+          "C": 1.0,
+          "O": 3.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "operation_index": 1,
+      "temperature": {
+        "min_celsius": 1200.0,
+        "max_celsius": 1200.0
+      },
+      "duration": null,
+      "atmosphere": null,
+      "doi": "10.1002/0471238961.1920181508090202.a01",
+      "corpus_record_index": 0
+    },
+    {
+      "target": {
+        "Mg": 1.0,
+        "Ti": 2.0,
+        "O": 5.0
+      },
+      "precursors": [
+        {
+          "Ti": 1.0,
+          "O": 2.0
+        },
+        {
+          "Mg": 1.0,
+          "C": 1.0,
+          "O": 3.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "operation_index": 0,
+      "temperature": null,
+      "duration": {
+        "min_hours": 2.0,
+        "max_hours": 2.0
+      },
+      "atmosphere": "Air",
+      "doi": "10.1002/adem.201200049",
+      "corpus_record_index": 1
+    },
+    {
+      "target": {
+        "Ba": 1.0,
+        "Zr": 1.0,
+        "O": 3.0
+      },
+      "precursors": [
+        {
+          "Zr": 1.0,
+          "O": 2.0
+        },
+        {
+          "Ba": 1.0,
+          "C": 1.0,
+          "O": 3.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "operation_index": 1,
+      "temperature": null,
+      "duration": null,
+      "atmosphere": "OxygenRich",
+      "doi": "10.1002/adma.201200127",
+      "corpus_record_index": 20
+    },
+    {
+      "target": {
+        "P": 3.0,
+        "O": 12.0,
+        "Na": 3.0,
+        "V": 2.0
+      },
+      "precursors": [
+        {
+          "Na": 2.0,
+          "C": 1.0,
+          "O": 3.0
+        },
+        {
+          "N": 1.0,
+          "H": 6.0,
+          "P": 1.0,
+          "O": 4.0
+        },
+        {
+          "V": 2.0,
+          "O": 5.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "operation_index": 0,
+      "temperature": {
+        "min_celsius": 850.0,
+        "max_celsius": 850.0
+      },
+      "duration": {
+        "min_hours": 8.0,
+        "max_hours": 8.0
+      },
+      "atmosphere": {
+        "Controlled": {
+          "description": "argon, hydrogen"
+        }
+      },
+      "doi": "10.1002/adma.201502018",
+      "corpus_record_index": 26
+    },
+    {
+      "target": {
+        "Li": 2.0,
+        "Mo": 1.0,
+        "O": 3.0
+      },
+      "precursors": [
+        {
+          "Li": 2.0,
+          "Mo": 1.0,
+          "O": 4.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "operation_index": 1,
+      "temperature": {
+        "min_celsius": 700.0,
+        "max_celsius": 700.0
+      },
+      "duration": null,
+      "atmosphere": {
+        "Inert": {
+          "gas": "Nitrogen"
+        }
+      },
+      "doi": "10.1002/aenm.201100270",
+      "corpus_record_index": 32
+    },
+    {
+      "target": {
+        "V": 1.0,
+        "O": 8.0,
+        "Na": 2.0,
+        "P": 2.0
+      },
+      "precursors": [
+        {
+          "Na": 1.0,
+          "H": 2.0,
+          "P": 1.0,
+          "O": 4.0
+        },
+        {
+          "V": 2.0,
+          "O": 5.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "operation_index": 0,
+      "temperature": {
+        "min_celsius": 400.0,
+        "max_celsius": 400.0
+      },
+      "duration": null,
+      "atmosphere": {
+        "Inert": {
+          "gas": "Argon"
+        }
+      },
+      "doi": "10.1002/celc.201402095",
+      "corpus_record_index": 72
+    },
+    {
+      "target": {
+        "P": 3.0,
+        "O": 12.0,
+        "Ba": 3.0,
+        "Gd": 1.0
+      },
+      "precursors": [
+        {
+          "Ce": 1.0,
+          "O": 2.0
+        },
+        {
+          "Gd": 2.0,
+          "O": 3.0
+        },
+        {
+          "N": 2.0,
+          "H": 9.0,
+          "P": 1.0,
+          "O": 4.0
+        },
+        {
+          "Ba": 1.0,
+          "C": 1.0,
+          "O": 3.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "operation_index": 0,
+      "temperature": {
+        "min_celsius": 600.0,
+        "max_celsius": 600.0
+      },
+      "duration": {
+        "min_hours": 4.0,
+        "max_hours": 4.0
+      },
+      "atmosphere": {
+        "Controlled": {
+          "description": "ambient"
+        }
+      },
+      "doi": "10.1007/s00339-014-8301-y",
+      "corpus_record_index": 243
+    },
+    {
+      "target": {
+        "P": 3.0,
+        "O": 12.0,
+        "Ba": 3.0,
+        "Gd": 1.0
+      },
+      "precursors": [
+        {
+          "Ce": 1.0,
+          "O": 2.0
+        },
+        {
+          "Gd": 2.0,
+          "O": 3.0
+        },
+        {
+          "N": 2.0,
+          "H": 9.0,
+          "P": 1.0,
+          "O": 4.0
+        },
+        {
+          "Ba": 1.0,
+          "C": 1.0,
+          "O": 3.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "operation_index": 1,
+      "temperature": {
+        "min_celsius": 1250.0,
+        "max_celsius": 1250.0
+      },
+      "duration": {
+        "min_hours": 5.0,
+        "max_hours": 5.0
+      },
+      "atmosphere": {
+        "Controlled": {
+          "description": "hydrogen, nitrogen"
+        }
+      },
+      "doi": "10.1007/s00339-014-8301-y",
+      "corpus_record_index": 243
+    },
+    {
+      "target": {
+        "Ba": 9.0,
+        "Lu": 2.0,
+        "Si": 6.0,
+        "O": 24.0
+      },
+      "precursors": [
+        {
+          "Si": 1.0,
+          "O": 2.0
+        },
+        {
+          "Lu": 2.0,
+          "O": 3.0
+        },
+        {
+          "Ba": 1.0,
+          "C": 1.0,
+          "O": 3.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "operation_index": 0,
+      "temperature": null,
+      "duration": null,
+      "atmosphere": null,
+      "doi": "10.1002/adom.201500078",
+      "corpus_record_index": 29
+    },
+    {
+      "target": {
+        "Sr": 1.0,
+        "Fe": 12.0,
+        "O": 19.0
+      },
+      "precursors": [
+        {
+          "Fe": 2.0,
+          "O": 3.0
+        },
+        {
+          "Sr": 1.0,
+          "C": 1.0,
+          "O": 3.0
+        }
+      ],
+      "route_family": "ConventionalSolidState",
+      "operation_index": 0,
+      "temperature": {
+        "min_celsius": 1000.0,
+        "max_celsius": 1000.0
+      },
+      "duration": null,
+      "atmosphere": null,
+      "doi": "10.1002/0471238961.1920181508090202.a01",
+      "corpus_record_index": 0
+    }
+  ]
+}

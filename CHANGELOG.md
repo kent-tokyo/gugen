@@ -80,6 +80,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   boundary), so no plan output was ever affected -- these were latent
   correctness holes in new, not-yet-released public API, not a bug a
   user could have hit through the crate's existing planning surface.
+- **Bulk data shipping in the published crate package (Phase 20B).**
+  `Cargo.toml` had no `exclude`, so `cargo package`/`cargo publish` used
+  its default `git ls-files`-based inclusion with nothing removed --
+  `cargo package --list` confirms `benchmarks/data/kononova_sample.jsonl`
+  (472 KB, committed since Phase 11 / v0.2.0) has been shipping in every
+  published tarball through v0.3.0. Added `exclude =
+  ["benchmarks/data/*.json", "benchmarks/data/*.jsonl"]` under
+  `[package]`; `cargo package --list` before/after confirms this is now
+  the only line removed from the package file list. Only small fixtures
+  under `tests/fixtures/` (already included, always were) ship; bulk
+  corpus data of any kind does not. Note on prior releases:
+  `kononova_sample.jsonl` is CC BY 4.0 data, so shipping it was an
+  attribution-obligation question, not only a size one --
+  `benchmarks/data/ATTRIBUTION.md` (the file's citation/license text) was
+  *also* in the package alongside it in every affected release, so the
+  attribution obligation itself was met; this fix removes bulk data that
+  didn't need to ship, it does not correct a prior missing-attribution
+  problem.
 
 ### Added
 
@@ -143,6 +161,38 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   only cover narrower cases, e.g. a function that now returns `()`), so
   this change is disclosed here rather than machine-verified; every
   other change in this release is confirmed by the tool as noted.
+- **Phase 20B -- bulk literature-corpus snapshot and observation
+  provider**, new `literature_corpus` feature (depends on `serde`).
+  `LiteratureObservationCorpus::load` parses a gugen-native JSON snapshot
+  (built offline by the new `benchmarks/build_literature_observation_snapshot.py`,
+  not part of this crate) into `CorpusHeatingObservation` values --
+  target, precursor set, temperature/duration/atmosphere, DOI, and a
+  corpus-position index -- queryable via `find_exact(route_family,
+  target, precursors)` (exact composition equality, order-invariant
+  precursor-set match, explicit empty result for any route family other
+  than `ConventionalSolidState`, since the source corpus has zero
+  evidence for any other route). **Not connected to `score_plan`,
+  ranking, or `Planner` in any way** -- structurally impossible, not
+  just unwired: `CorpusHeatingObservation::heating_purpose` is always
+  `None` (no field for it exists in the wire schema at all), while
+  `ConditionPrecedent::purpose` is a required, non-optional
+  `HeatingPurpose`, so there is no lossless conversion from one to the
+  other. Checked by a dedicated permanent regression test
+  (`tests/literature_observation_planner_invariance.rs`), mirroring
+  Phase 19P's own `thermodynamics_ranking_invariance.rs`. Deduplicates
+  exact-duplicate corpus entries (same content excluding provenance,
+  order-independent, lowest `corpus_record_index` survives) while never
+  collapsing independently-reported entries that merely share the same
+  conditions but differ in DOI. See `docs/literature_observation_provider.md`
+  for the full schema, matching rules, corpus-wide coverage numbers, and
+  a real local performance measurement (13,982 raw observations from
+  Phase 20A's 9,045 structurally-valid records; 537 ms load, ~328
+  µs/query linear-scan lookup, ~9.2 MB estimated memory, 4.7 MB
+  reserialized). `Composition` gained `Eq`/`PartialOrd`/`Ord` derives (a
+  purely additive, non-breaking change -- confirmed by `cargo
+  semver-checks`; safe because `Composition` stores exact `Frac`
+  amounts, not `f64`) so it can be used directly as a `BTreeSet` key for
+  order-invariant precursor-set identity.
 
 ### Known limitations
 
@@ -189,6 +239,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   lowest finite-temperature one, which the SISSO descriptor's
   volume-only structural input cannot reliably predict (Bartel et al.
   2018's own stated limitation).
+- **Phase 20B**: a `HeatingOperation`'s temperature/duration is left
+  unresolved (`None`) whenever the raw corpus reports 2+ disagreeing
+  candidate readings for it, rather than guessing which is authoritative
+  -- verified live against the full corpus, this happens for 2,311 of
+  13,982 emitted observations (see `docs/literature_observation_provider.md`),
+  a real, material information loss disclosed as such. Only 6 raw
+  atmosphere strings map to a structured `Atmosphere` variant; everything
+  else (including any string reported alongside another one for the same
+  operation) is preserved verbatim as `Atmosphere::Controlled
+  { description }` rather than guessed. `find_exact` is an unindexed
+  linear scan over the whole corpus -- fine for single-target lookups at
+  this corpus's ~14K-observation scale, not benchmarked for a bulk-query
+  workload. No cross-record conflict resolution across independently-
+  reported DOIs for the same route (Phase 20C, not built). No promotion
+  path to `ConditionPrecedent`/`Planner` (by design, see the "Added"
+  entry above). No manual extraction-accuracy audit against original
+  papers (Phase 20D, not built) -- an observation's numbers are exactly
+  what the corpus's own text-mining pipeline reported, gugen never
+  independently re-verifies them.
 
 ## [0.3.0] - 2026-08-14
 

@@ -5,3 +5,4 @@ __pycache__/
 tasks/*.md
 AGENTS.md
 CLAUDE.md
+/benchmarks/data/literature_observation_snapshot.json
