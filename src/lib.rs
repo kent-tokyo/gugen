@@ -68,6 +68,8 @@ mod evidence;
 mod frac;
 mod literature_conditions;
 #[cfg(feature = "literature_corpus")]
+mod literature_observation_conflicts;
+#[cfg(feature = "literature_corpus")]
 mod literature_observations;
 #[cfg(feature = "materials_project")]
 mod materials_project_adapter;
@@ -94,6 +96,11 @@ pub use config::{PlanningConfig, SearchBudget};
 pub use error::{GugenError, ProviderError, Result};
 pub use evidence::{EvidenceKind, EvidenceScope, EvidenceStrength, PlanningEvidence};
 pub use literature_conditions::{CuratedConditionRecord, InMemoryLiteratureConditionProvider};
+#[cfg(feature = "literature_corpus")]
+pub use literature_observation_conflicts::{
+    CrossDoiFieldStatus, RouteObservationAssessment, SourcedValue, StepGroupAssessment,
+    StepGroupKey,
+};
 #[cfg(feature = "literature_corpus")]
 pub use literature_observations::{
     CORPUS_SNAPSHOT_SCHEMA_VERSION, CorpusHeatingObservation, CorpusManifest,
