@@ -7,3 +7,5 @@ AGENTS.md
 CLAUDE.md
 /benchmarks/data/literature_observation_snapshot.json
 /benchmarks/data/SS_rxns_80806.json.gz
+/benchmarks/data/.oqmd_fetch_cache.jsonl
+/benchmarks/data/.oqmd_fetch_cache.jsonl.meta.json
