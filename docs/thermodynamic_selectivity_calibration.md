@@ -298,7 +298,61 @@ not, by itself, restart condition 1, run
 those still require the owner's own separate, explicit instruction,
 same as the rest of this document already requires. See the script's
 own module doc for the exact healthy/unhealthy criteria and retry
-policy.
+policy. **Recovery detection is necessary but not sufficient for a full
+fetch to succeed**: §6.2.2 below shows the service can flap within
+hours of a detected recovery, so a full 795-formula fetch needs a
+*sustained* window, not just a healthy instant — this is exactly why
+the fetcher's resume cache (§6.2.2) matters, since it lets a short
+window make partial, retainable progress instead of an all-or-nothing
+attempt.
+
+### 6.2.2 Condition 1 fetch attempt, 2026-08-16: a second outage before completion
+
+With OQMD confirmed live (§6.2), the owner authorized running condition
+1's real coverage fetch
+(`python3 benchmarks/fetch_oqmd_coverage.py`, 795 distinct formulas).
+Observed uptime profile across roughly two hours:
+
+- Health check (§6.2): up. PR #36 smoke test: up.
+- Real fetch, attempt 1: `HTTP 429` at 50/795 — aborted, wrote nothing,
+  per §6.4's discipline (no partial deliverable file).
+- Real fetch, attempt 2: a network read-timeout at 50/795, a different
+  symptom at the same request count — indicated general post-outage
+  flakiness rather than one fixed rate-limit threshold.
+- **Fix applied**: `query_composition` gained retry-with-backoff (4
+  attempts, exponential) on HTTP 429/5xx/timeout only — non-transient
+  failures (malformed JSON, missing fields) still raise immediately,
+  no retry, unchanged from §6.4's original design. A resumable
+  per-formula JSONL cache was also added, since a full run spans
+  multiple execution windows and one run was killed by the environment
+  partway through (~400/795) with no code-level failure at all.
+- With both in place, resumed fetch runs reached 714/795 (89.8%)
+  formulas cached, successfully riding out further transient errors —
+  then failed persistently on `VNb9O25` with `HTTP 502` across all 4
+  retry attempts.
+- **Verified this was a real, service-wide outage, not one bad
+  formula**: a direct `curl` on `VNb9O25` reproduced the 502 with
+  OQMD's own error-page body ("temporary error... try again in 30
+  seconds"); direct `curl` on two unrelated, simpler formulas
+  (`Nb2O5`, `VO2`) also returned 502; `check_oqmd_recovery.py` (§6.2.1)
+  independently reported `healthy=False: all 3 attempts failed: HTTP
+  502`. A further resume attempt after a wait failed identically at
+  the same point.
+- **Result: condition 1 remains not measured**, per §6.4's own
+  pre-committed rule for exactly this situation. No
+  `oqmd_coverage_manifest.json` exists, so there is no coverage number
+  and no gate verdict (§6.3) to report. The 714/795 raw fetch results
+  live only in the gitignored, uncommitted resume cache
+  (`benchmarks/data/.oqmd_fetch_cache.jsonl`) — **this cache is not a
+  partial coverage result and must never be scored as one**; its only
+  legitimate use is letting the next fetch attempt skip formulas
+  already confirmed, needing only the remaining ~81.
+- This is OQMD's second distinct outage within roughly 24 hours of the
+  first one (§6.2) ending — evidence the service is currently flapping,
+  not durably recovered. The daily recovery-check workflow (§6.2.1)
+  will still flag the *next* healthy instant it observes, but per the
+  note added there, that instant is not by itself grounds to expect a
+  full fetch will complete; only a sustained window will.
 
 ### 6.3 Pre-registered coverage gate and polymorph policy
 
