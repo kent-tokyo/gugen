@@ -25,7 +25,11 @@ whole run with a non-zero exit and no partial manifest/snapshot file --
 a half-populated coverage snapshot would silently become a fake
 denominator for the coverage report, which this project's own
 discipline (docs/thermodynamic_selectivity_dataset_feasibility.md §7,
-"not measured in this phase") exists to prevent.
+"not measured in this phase") exists to prevent. The one exception is
+the gitignored per-formula resume cache (--cache-path, see _load_cache
+below): it persists raw fetched rows across an aborted run so a later
+run can resume without re-querying, but it is never a substitute for
+the two deliverable files above and is deleted once they are written.
 
 Polymorph policy (fixed in advance, mirrors
 MaterialsProjectSnapshotProvider::energy_for's existing "most stable
@@ -84,17 +88,42 @@ def _urlopen(url, timeout):
     return urllib.request.urlopen(req, context=_SSL_CONTEXT, timeout=timeout)
 
 
-def query_composition(formula, timeout=20):
+def query_composition(formula, timeout=20, retries=4, backoff_seconds=(2, 5, 15, 30)):
+    """Retries only on a transient condition (HTTP 429, HTTP 5xx, or a
+    network/timeout error) -- observed live on 2026-08-16: two separate
+    real runs each aborted around the same ~50th request, once with
+    HTTP 429 and once with a plain read timeout, suggesting oqmd.org is
+    still flaky in the days right after its extended outage rather than
+    enforcing one simple fixed rate limit. A non-transient problem
+    (malformed JSON, a response missing expected keys) is a real data
+    issue retrying cannot fix, so it still raises immediately -- this
+    keeps the script's core guarantee (abort and write nothing on any
+    unresolved error) unchanged, only adding resilience to the specific
+    failure modes actually observed to be transient."""
     params = urllib.parse.urlencode({"composition": formula, "limit": 50, "fields": ",".join(QUERY_FIELDS)})
     url = f"{OQMD_BASE}?{params}"
-    try:
-        with _urlopen(url, timeout) as resp:
-            status = resp.status
-            body = resp.read()
-    except urllib.error.HTTPError as e:
-        raise OqmdFetchError(f"HTTP {e.code} for composition={formula!r}: {url}") from e
-    except (urllib.error.URLError, TimeoutError, OSError) as e:
-        raise OqmdFetchError(f"network error for composition={formula!r}: {e}") from e
+    last_error = None
+    for attempt in range(retries):
+        try:
+            with _urlopen(url, timeout) as resp:
+                status = resp.status
+                body = resp.read()
+        except urllib.error.HTTPError as e:
+            if e.code == 429 or 500 <= e.code < 600:
+                last_error = f"HTTP {e.code} for composition={formula!r}: {url}"
+                if attempt < retries - 1:
+                    time.sleep(backoff_seconds[min(attempt, len(backoff_seconds) - 1)])
+                    continue
+                raise OqmdFetchError(f"{last_error} (gave up after {retries} attempts)") from e
+            raise OqmdFetchError(f"HTTP {e.code} for composition={formula!r}: {url}") from e
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            last_error = f"network error for composition={formula!r}: {e}"
+            if attempt < retries - 1:
+                time.sleep(backoff_seconds[min(attempt, len(backoff_seconds) - 1)])
+                continue
+            raise OqmdFetchError(f"{last_error} (gave up after {retries} attempts)") from e
+        else:
+            break
 
     if status != 200:
         raise OqmdFetchError(f"HTTP {status} (non-error-raising) for composition={formula!r}: {url}")
@@ -138,10 +167,35 @@ def select_polymorph(entries):
     return chosen, n_duplicate, n_null_energy
 
 
+def _load_cache(cache_path):
+    """Resume support: a formula -> {"data": ..., "meta": ...} map loaded
+    from a previous, incomplete run's incremental cache (one JSON object
+    per line). Only ever read/written by this script -- not a deliverable
+    artifact, unlike oqmd_coverage_snapshot.json/oqmd_coverage_manifest.json,
+    which stay all-or-nothing (this cache existing has no bearing on
+    whether *those* two files get written -- they still only appear once
+    every formula in this run succeeds)."""
+    cached = {}
+    if cache_path.exists():
+        for line in cache_path.read_text().splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            cached[row["formula"]] = row
+    return cached
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--sleep", type=float, default=0.3, help="seconds between requests (politeness)")
     parser.add_argument("--limit-formulas", type=int, default=None, help="dev-only: cap the number of formulas queried")
+    parser.add_argument(
+        "--cache-path",
+        type=Path,
+        default=DATA_DIR / ".oqmd_fetch_cache.jsonl",
+        help="incremental per-formula cache so a run interrupted partway (e.g. a background "
+        "process time limit) can resume instead of restarting -- gitignored, not a deliverable",
+    )
     args = parser.parse_args()
 
     population = json.loads(CLEAN_POPULATION_PATH.read_text())
@@ -154,36 +208,48 @@ def main():
         formulas = formulas[: args.limit_formulas]
     print(f"{len(formulas)} distinct formulas to query", file=sys.stderr)
 
+    cached = _load_cache(args.cache_path)
+    if cached:
+        print(f"resuming: {len(cached)} formula(s) already cached from a prior run", file=sys.stderr)
+
     retrieved_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
     raw_snapshot = {}
     coverage = {}
     api_meta_seen = None
     schema_validated = False
 
-    for i, formula in enumerate(formulas):
-        payload = query_composition(formula)  # raises OqmdFetchError -> script aborts, nothing written
-        if not schema_validated:
-            validate_first_response_schema(payload, formula)
-            schema_validated = True
-        if api_meta_seen is None:
-            api_meta_seen = payload["meta"]
+    with args.cache_path.open("a") as cache_file:
+        for i, formula in enumerate(formulas):
+            if formula in cached:
+                payload = cached[formula]
+            else:
+                fetched = query_composition(formula)  # raises OqmdFetchError -> script aborts, nothing written
+                payload = {"formula": formula, "data": fetched["data"], "meta": fetched["meta"]}
+                cache_file.write(json.dumps(payload) + "\n")
+                cache_file.flush()
+                time.sleep(args.sleep)
 
-        entries = payload["data"]
-        chosen, n_duplicate, n_null_energy = select_polymorph(entries)
-        raw_snapshot[formula] = entries
-        coverage[formula] = {
-            "n_candidate_entries": len(entries),
-            "n_duplicate_excluded": n_duplicate,
-            "n_null_energy_excluded": n_null_energy,
-            "matched": chosen is not None,
-            "chosen_entry_id": chosen["entry_id"] if chosen else None,
-            "delta_e_ev_per_atom": chosen["delta_e"] if chosen else None,
-            "volume_angstrom3_per_atom": (chosen["volume"] / chosen["natoms"]) if chosen else None,
-            "spacegroup": chosen.get("spacegroup") if chosen else None,
-        }
-        if (i + 1) % 50 == 0:
-            print(f"  {i + 1}/{len(formulas)} queried", file=sys.stderr)
-        time.sleep(args.sleep)
+            if not schema_validated:
+                validate_first_response_schema(payload, formula)
+                schema_validated = True
+            if api_meta_seen is None:
+                api_meta_seen = payload["meta"]
+
+            entries = payload["data"]
+            chosen, n_duplicate, n_null_energy = select_polymorph(entries)
+            raw_snapshot[formula] = entries
+            coverage[formula] = {
+                "n_candidate_entries": len(entries),
+                "n_duplicate_excluded": n_duplicate,
+                "n_null_energy_excluded": n_null_energy,
+                "matched": chosen is not None,
+                "chosen_entry_id": chosen["entry_id"] if chosen else None,
+                "delta_e_ev_per_atom": chosen["delta_e"] if chosen else None,
+                "volume_angstrom3_per_atom": (chosen["volume"] / chosen["natoms"]) if chosen else None,
+                "spacegroup": chosen.get("spacegroup") if chosen else None,
+            }
+            if (i + 1) % 50 == 0:
+                print(f"  {i + 1}/{len(formulas)} queried", file=sys.stderr)
 
     n_matched = sum(1 for c in coverage.values() if c["matched"])
     print(f"per-formula coverage: {n_matched}/{len(formulas)} ({100 * n_matched / len(formulas):.1f}%)", file=sys.stderr)
@@ -227,6 +293,12 @@ def main():
     manifest_path = DATA_DIR / "oqmd_coverage_manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True))
     print(f"wrote {raw_path} and {manifest_path}", file=sys.stderr)
+
+    # Only removed on a fully successful run (past every `return`/abort
+    # path above) -- the resume cache's whole purpose is surviving an
+    # interrupted run, so it must never be cleaned up on anything less
+    # than complete success.
+    args.cache_path.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
