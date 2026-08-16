@@ -13,6 +13,7 @@ vs. non-transient retry boundary.
 """
 
 import json
+import sys
 import tempfile
 import unittest
 import urllib.error
@@ -269,6 +270,73 @@ class QueryCompositionRetryTests(unittest.TestCase):
                 foc.query_composition("TiO2", timeout=1, retries=4, backoff_seconds=(0, 0, 0, 0))
             self.assertEqual(mocked.call_count, 1)
             self.mock_sleep.assert_not_called()
+
+
+class MainAbortReportingTests(unittest.TestCase):
+    """An abort partway through main()'s fetch loop must report only the
+    updated cached-formula count -- never a per-formula coverage
+    percentage or anything resembling a partial gate result (the coverage
+    print statement sits after the fetch loop and is structurally
+    unreachable from an abort, but this pins that behavior explicitly)."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp_path = Path(self._tmp.name)
+        self.population_path = self.tmp_path / "population.json"
+        self.population_path.write_text(
+            json.dumps(
+                [
+                    {"target": "A", "route": ["B"], "verdict": "pure"},
+                    {"target": "C", "route": ["D"], "verdict": "pure"},
+                ]
+            )
+        )
+        self.cache_path = self.tmp_path / "cache.jsonl"
+        self._population_patch = mock.patch.object(foc, "CLEAN_POPULATION_PATH", self.population_path)
+        self._population_patch.start()
+        self._sleep_patch = mock.patch.object(foc.time, "sleep", return_value=None)
+        self._sleep_patch.start()
+
+    def tearDown(self):
+        self._population_patch.stop()
+        self._sleep_patch.stop()
+        self._tmp.cleanup()
+
+    def test_abort_reports_only_cached_count_not_partial_coverage(self):
+        # Distinct formulas sorted: A, B, C, D. Succeed for A, B; fail on C.
+        def fake_query(formula, **kwargs):
+            if formula == "C":
+                raise foc.OqmdFetchError("simulated failure for C")
+            return {"data": [], "meta": {}}
+
+        argv = ["prog", "--cache-path", str(self.cache_path), "--sleep", "0"]
+        with mock.patch.object(sys, "argv", argv), mock.patch.object(foc, "query_composition", side_effect=fake_query):
+            with _capture_stderr() as stderr:
+                with self.assertRaises(foc.OqmdFetchError):
+                    foc.main()
+        output = stderr.getvalue()
+        self.assertIn("stopped early: 2/4 formulas now cached", output)
+        self.assertNotIn("per-formula coverage", output)
+
+    def test_abort_after_resume_counts_seeded_plus_newly_fetched(self):
+        # Pre-seed the cache with formula A already cached from a prior run.
+        # Sorted formulas: A, B, C, D. A comes from cache; B is freshly
+        # fetched; C fails. The reported count must be seeded (1) + newly
+        # fetched-before-failure (1) = 2, not just "new this run" (1).
+        self.cache_path.write_text(json.dumps(_row("A")) + "\n")  # no .meta.json -- a legacy-shaped cache
+
+        def fake_query(formula, **kwargs):
+            if formula == "C":
+                raise foc.OqmdFetchError("simulated failure for C")
+            return {"data": [], "meta": {}}
+
+        argv = ["prog", "--cache-path", str(self.cache_path), "--sleep", "0", "--trust-legacy-cache"]
+        with mock.patch.object(sys, "argv", argv), mock.patch.object(foc, "query_composition", side_effect=fake_query):
+            with _capture_stderr() as stderr:
+                with self.assertRaises(foc.OqmdFetchError):
+                    foc.main()
+        output = stderr.getvalue()
+        self.assertIn("stopped early: 2/4 formulas now cached", output)
 
 
 if __name__ == "__main__":

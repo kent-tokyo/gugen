@@ -531,6 +531,128 @@ project applies once real data exists (commit if comparable to
 `kononova_sample.jsonl`'s ~500KB, gitignore and keep only a manifest
 otherwise).
 
+### 6.5 Completion runbook: what happens when the full 795-formula fetch succeeds
+
+Pre-registered here, 2026-08-16, before any complete manifest exists —
+same discipline as §6.3's gate criterion, applied one stage later so
+the *procedure* for using a real result can't be shaped by having
+already seen it. As of this writing: 714/795 (89.8%) formulas are
+cached (`benchmarks/data/.oqmd_fetch_cache.jsonl`, gitignored), OQMD is
+confirmed down a second time (§6.2.2), and per the owner's own
+instruction no further fetch attempt runs until a *sustained* healthy
+window is confirmed — a single healthy instant (e.g. the daily
+recovery-check workflow opening an issue) is not sufficient grounds by
+itself (§6.2.1's note).
+
+**Step 1 — resume, don't restart.** `python3 benchmarks/fetch_oqmd_coverage.py`
+with no extra flags: it reads the 714 already-cached formulas from
+`--cache-path`'s default location and fetches only the remaining ~81.
+No `--trust-legacy-cache` needed (the cache's fingerprint already
+matches the current code as of PR #38's merge). **If a future code
+change bumps `POLYMORPH_POLICY_VERSION` again** (or any other
+fingerprinted field), the fetch will abort on a fingerprint mismatch --
+that abort path cannot be bypassed by `--trust-legacy-cache` (only a
+*missing* fingerprint can). The fix is not to delete the cache: delete
+only `<cache-path>.meta.json`, keep the `.jsonl` data, and re-run with
+`--trust-legacy-cache` once (this is exactly the recovery used during
+§6.2.3's own polymorph-policy version bump).
+
+**Step 2 — if it stops again before finishing**: per the fetcher's own
+design (unchanged, verified in PR #38's review), an abort:
+- keeps the cache (never deleted except on full success),
+- writes no manifest,
+- reports no partial coverage percentage (the coverage-percentage print
+  statement is unreachable from an abort — it sits after the fetch
+  loop, which raises out of `main()` before reaching it),
+- reports only the updated cached-formula count (added in the same PR:
+  an abort now prints how many formulas are cached *now*, so the
+  operator knows exactly how much of the remaining ~81 is left without
+  needing to inspect the cache file directly),
+- starts no calibration (the fetcher has never called any calibration
+  code).
+
+**Step 3 — once `python3 benchmarks/fetch_oqmd_coverage.py` completes
+without `--limit-formulas` and prints "wrote ... and
+oqmd_coverage_manifest.json"**, confirm manually (all cheap, one
+command each — deliberately not wrapped in a script, since each check
+is a one-liner and a wrapper script would just be a second thing to
+trust):
+
+| Check | How |
+|---|---|
+| `distinct_formulas_queried == 795` | `jq .counts.distinct_formulas_queried benchmarks/data/oqmd_coverage_manifest.json` |
+| Every population formula present in `coverage` | enforced by `analyze_oqmd_coverage_gate.py`'s own guard (step 4) — aborts if not |
+| Cache fingerprint matched throughout the run | enforced live by `resolve_cache_fingerprint`, which aborts the *fetch* on mismatch — nothing to check post-hoc, the cache is gone by this point |
+| Raw snapshot checksum matches the manifest | `shasum -a 256 benchmarks/data/oqmd_coverage_snapshot.json` vs. `jq -r .coverage_snapshot_sha256 benchmarks/data/oqmd_coverage_manifest.json` |
+| `retrieval.first_fetch_at_utc` / `last_fetch_at_utc` / `completed_at_utc` / `resumed_from_cache_count` / `across_multiple_runs` / `unknown_fetch_timestamp_count` all present and sane | `jq .source.retrieval benchmarks/data/oqmd_coverage_manifest.json` |
+| No malformed/missing coverage rows | same guard as row 2 |
+| Resume cache deleted | `ls benchmarks/data/.oqmd_fetch_cache.jsonl*` should report no such file |
+| Raw snapshot committability decided | check its size against the `kononova_sample.jsonl` ~500KB precedent (§6.4); update `.gitignore` accordingly — commit only `oqmd_coverage_manifest.json` if the snapshot is gitignored |
+
+**Step 4 — compute the gate**: `python3 benchmarks/analyze_oqmd_coverage_gate.py`.
+Deliberately does **not** judge coverage by the raw per-formula match
+rate alone (that number was exactly what the corrected-vs-uncorrected
+polymorph policy showed can't be trusted as a proxy for the real gate
+— §6.2.3). Instead it recomputes the pre-registered route-pair gate
+from §6.3 directly against `thermodynamic_selectivity_clean_population.json`
++ the real manifest, and additionally reports (all descriptive, not
+gating, except the one row-pair floor):
+
+- distinct species / target / precursor coverage (three separate
+  denominators — a target can also appear as another row's precursor,
+  so these overlap and are reported separately, not summed)
+- fully-computable route count (a `(target, route)` pair where every
+  formula in it, target included, is matched)
+- targets with ≥2 fully-computable routes (a *weaker* count than the
+  gate itself — includes targets whose covered routes all agree, which
+  the gate excludes)
+- outcome-disagreeing comparable targets (the actual gate metric: ≥2
+  fully-computable routes where at least one is `pure` and one is
+  `impure`; **a target with 3 fully-covered routes that are all `pure`
+  does not count** — proven by a dedicated regression test)
+- independent pairwise comparisons: for each qualifying target,
+  `n_pure_covered × n_impure_covered` (every cross-verdict pair,
+  summed across targets) — this is the number of individual
+  comparisons a future selectivity signal could actually use, not the
+  weaker `C(n_covered, 2)` (all-pairs-regardless-of-verdict) reading
+- unmatched / null-energy-excluded / invalid-volume counts (diagnostic,
+  not gating)
+- multi-polymorph rate among matched species: fraction where more than
+  one *preferred, energy-valid* candidate existed (`n_candidate_entries
+  - n_duplicate_excluded - n_null_energy_excluded > 1`) — deliberately
+  not the raw entry count, which would over-count polymorphism by
+  including non-preferred duplicates the corrected §6.3 policy already
+  excludes
+- a chemical-family breakdown of targets — **explicitly informal and
+  reporting-only**: a first-matching-anion heuristic (O → oxide, S/Se/Te
+  → sulfide/chalcogenide, F/Cl/Br/I → halide, N → nitride, P →
+  phosphide/phosphate, else → other) over crude element-symbol
+  extraction, not a real composition parser or an established
+  taxonomy. This is the one metric in this list that carries a
+  definitional choice rather than being a direct count — flagged as
+  such in the script's own output, never treated as equivalent to the
+  measured coverage numbers around it
+- the route-pair gate verdict itself (GO if ≥30 outcome-disagreeing
+  comparable targets, else NO-GO) and the list of passing targets
+- confirmation that **no other pre-registered gate exists** beyond the
+  route-pair floor (so a future report can't retroactively invent a
+  second criterion)
+
+**Step 5 — report to the owner and stop.** Per the owner's own standing
+instruction (restated because it is the terminal condition for this
+whole phase): report the final 795-formula fetch result, the snapshot
+identity (checksum, retrieval metadata), the corrected
+`duplicate_entry_id` policy, formula/route/target-level coverage, the
+gate verdict (GO or NO-GO) with its passing-target list, exclusions and
+abstentions, remaining label limitations (§2/§4's manual-audit
+caveats, unrelated to condition 1 itself but still load-bearing for
+any eventual calibration), and the PR/commit. **Stop there — whether
+the gate passes or not.** Do not start calibration automatically. Do
+not connect any result to `score_plan`, `RankingWeights`, or `Planner`
+ranking, even on a GO. No version bump. Calibration itself remains a
+separate, later, explicitly-triggered phase, same as every prior
+update in this document has required.
+
 ## 7. Non-goals (unchanged)
 
 No `score_plan` connection, no `RankingWeights` change, no default
