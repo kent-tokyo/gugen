@@ -21,3 +21,4 @@ jobs:
       - uses: taiki-e/install-action@cargo-audit
       - run: cargo audit
       - run: python3 .github/scripts/test_check_oqmd_recovery.py -v
+      - run: python3 benchmarks/test_fetch_oqmd_coverage.py -v

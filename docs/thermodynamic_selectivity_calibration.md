@@ -354,6 +354,92 @@ Observed uptime profile across roughly two hours:
   note added there, that instant is not by itself grounds to expect a
   full fetch will complete; only a sustained window will.
 
+### 6.2.3 Pre-merge hardening review, 2026-08-16: cache honesty, and a real polymorph-policy bug found via the real 714-row cache
+
+Before merging the PR from §6.2.2, the owner requested a review pass on
+the resume cache specifically, reasoning that it isn't just a speed
+optimization -- it's the mechanism assembling the real coverage
+decision's input data across multiple runs, so ambiguity in *when* data
+was fetched and *whether a cache is even valid for this run* was judged
+worth closing before merge, not deferred. Six fixes, plus a schema-
+validation bug found in the same pass:
+
+1. **Retrieval timestamps are now honest about spanning multiple runs**:
+   the manifest's flat `retrieved_at_utc` is replaced with a `retrieval`
+   object (`first_fetch_at_utc`, `last_fetch_at_utc`, `completed_at_utc`,
+   `resumed_from_cache_count`, `across_multiple_runs`,
+   `unknown_fetch_timestamp_count`) built from a real per-row
+   `fetched_at_utc` now stamped on every newly-fetched cache row. Rows
+   from before this change (all 714 currently cached) have no such
+   field and are counted as `unknown`, not guessed.
+2. **Cache tail-corruption resilience**: `_load_cache` now distinguishes
+   a truncated *final* line with no trailing newline (the exact
+   signature of the environment kill described in §6.2.2 -- dropped,
+   warned to stderr, file truncated to the last good line so a later
+   append stays valid) from real corruption anywhere else (raises,
+   never silently discards data). Each cache write is flushed and
+   `fsync`'d.
+3. **Cache identity fingerprinting**: a sidecar `<cache>.meta.json`
+   records the OQMD endpoint, requested fields, the clean population's
+   SHA-256, the cache schema version, and the polymorph-policy version.
+   A mismatch aborts with a clear error rather than silently reusing
+   data fetched under a different shape. The real, pre-existing 714-row
+   cache had no such fingerprint (written before this feature existed)
+   -- adopted via a new, explicit `--trust-legacy-cache` flag (only
+   needed once; the meta file is then stamped for future runs), not
+   auto-trusted.
+4. **Retry-duration wording corrected**: the worst case for
+   `query_composition`'s defaults is `4*20 + (2+5+15) = 102s`, not the
+   ~52s an earlier description claimed (that number omitted the
+   per-attempt timeout itself, counting only the backoff sleeps).
+5. **Schema-validation bug fixed**: `validate_first_response_schema`
+   being called once and unconditionally setting a "validated" flag
+   meant an empty first response (`data: []`, which proves nothing
+   about the schema) permanently skipped validation for every later
+   response, including the first non-empty one. `maybe_validate_schema`
+   now only marks validation done once a non-empty response is actually
+   checked.
+6. **A real, independent bug found while smoke-testing fix #3 against
+   the actual 714-row cache** (not a hypothetical -- this is why the
+   owner's "verify against real data" instinct mattered here):
+   `select_polymorph` treated *any* non-null `duplicate_entry_id` as
+   "this entry is a duplicate, exclude it." OQMD's own `restful.html`
+   docs say otherwise: `duplicate_entry_id` is "the OQMD ID of the
+   *preferred* entry with this same crystal structure" -- a
+   self-referencing value (`duplicate_entry_id == entry_id`, confirmed
+   ~75% of entries in the real cache) means *this entry is preferred*,
+   not a duplicate to drop. The old logic silently excluded 475 of 714
+   formulas' otherwise-valid matches for exactly this reason. Fixed
+   (§6.3 below has the corrected policy text); `POLYMORPH_POLICY_VERSION`
+   bumped so the fingerprint (#3) forces every existing cache to be
+   re-validated under the corrected policy rather than silently mixed
+   with results computed under the old, wrong one.
+
+**Corrected smoke-test number, not a gate result**: re-running the
+per-formula match rate over the same 714 real cached rows under the
+fixed policy gives **583/714 (81.7%) matched**, up from an incorrect
+15.1% the old policy would have produced on the same data. This is a
+per-formula rate over a partial (714/795) cache, computed with
+`--limit-formulas` specifically to avoid writing a deliverable manifest
+-- **it is not the route-pair-level coverage gate result** (§6.3 defines
+that separately, and it needs the full 795-formula population plus
+route-pair aggregation, not just a per-formula rate), **and 714/795 is
+not a random sample**: the missing 81 are exactly the alphabetically
+last formulas (`V`-`Zr`, e.g. `VNb9O25`, `WO3`, `ZrSiO4`), a
+chemistry-correlated tail, not a uniform draw from the population. It
+is reported here only as evidence the fetcher and policy are now behaving
+sensibly on real data, not as any form of GO/NO-GO signal. The
+remaining 131/714 (18.3%) genuine zero-`data` responses were checked
+for a degraded-service pattern (a cache written partly during an
+outage window could show long contiguous runs of spurious empty
+responses): they don't cluster -- the longest consecutive run is 5,
+scattered across otherwise-matched formulas, consistent with real
+"OQMD doesn't have this exact composition string" outcomes rather than
+a service-health artifact. Condition 1
+remains not measured (§6.2.2); the next real, unrestricted run against
+all 795 formulas is what actually produces a manifest and a gate
+verdict.
+
 ### 6.3 Pre-registered coverage gate and polymorph policy
 
 Fixed here, before any successful fetch, so a later result can't be
@@ -372,14 +458,30 @@ discipline as Phase 21A's 30-target sample gate):
   stated explicitly here so the conversion is never silently assumed.
 - **Polymorph policy**: OQMD returns multiple entries per composition
   (distinct `spacegroup`/`entry_id`). Policy: **take the lowest
-  `delta_e` among matches** — mirrors `MaterialsProjectSnapshotProvider::energy_for`'s
+  `delta_e` among preferred entries** — mirrors `MaterialsProjectSnapshotProvider::energy_for`'s
   existing "most stable known phase" convention exactly
   (`src/materials_project_adapter.rs`), order-independent by
   construction. This is a **modeling convention, never an experimental
   phase identification** — stated here so it cannot later be described
-  as "the phase this route actually formed." `duplicate_entry_id` rows
-  (OQMD's own explicit duplicate-calculation marker) are excluded before
-  this selection, not counted as independent entries.
+  as "the phase this route actually formed." **`duplicate_entry_id`
+  semantics, corrected 2026-08-16**: OQMD's own `restful.html` docs
+  define this field as "the OQMD ID of the *preferred* entry with this
+  same crystal structure," not a duplicate/not-duplicate flag. An entry
+  is preferred (kept as a candidate) when `duplicate_entry_id` is null
+  or equals its own `entry_id` (self-referencing -- confirmed the common
+  case, ~75% of entries in a real 714-formula sample); only an entry
+  whose `duplicate_entry_id` points at a *different* entry_id is a
+  non-preferred duplicate and excluded. **This document's original text
+  and the fetcher's first implementation (PR #31) both assumed any
+  non-null `duplicate_entry_id` meant "exclude" -- wrong, and confirmed
+  by direct inspection of real fetched data to have silently discarded
+  the majority of otherwise-valid matches** (475 of 714 formulas in the
+  same real sample) purely because their preferred entry happened to be
+  self-referencing. Fixed in `benchmarks/fetch_oqmd_coverage.py`
+  (`select_polymorph`, `POLYMORPH_POLICY_VERSION` bumped so a cache built
+  under the old policy is never silently reused as if it reflected this
+  one) before any real coverage manifest was ever produced -- no
+  published gate result exists to retract.
 - **Dataset-mixing prevention**: OQMD entries are tagged with their own
   `ThermodynamicDatasetIdentity` (`source: "OQMD"`), distinct from any
   Materials Project identity. `balanced_reaction_delta_ev_per_atom`'s
