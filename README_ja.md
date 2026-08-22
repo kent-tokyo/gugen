@@ -14,16 +14,19 @@
 （evidence）・仮定（assumption）・未確定条件（unresolved）を明示したまま、
 機械可読な形で返します。実験の成功を保証するものではありません。
 
-> **ステータス：v0.4.2 公開済み**。
+> **ステータス：v0.5.0 公開済み**（破壊的変更を含むAPI強化リリース、
+> planningの新機能なし。詳細はCHANGELOG.md参照）。
 > [crates.io](https://crates.io/crates/gugen) /
 > [docs.rs](https://docs.rs/gugen) /
-> [v0.4.2リリース](https://github.com/kent-tokyo/gugen/releases/tag/v0.4.2)。
-> v0.4.2では、デフォルトoffのoptional feature `commercial_catalog`
-> （Commercial Precursor Catalog）を追加しました。既存のsynthesis planの
-> 前駆体を、呼び出し側が用意したcommercial offerカタログと突き合わせる、
-> planning後の別stageです。planのscore・confidence・reaction・process
-> stepsには一切触れません。詳細は下記「Commercial Precursor Catalog」と
-> [`CHANGELOG.md`](CHANGELOG.md)を参照してください。
+> [v0.5.0リリース](https://github.com/kent-tokyo/gugen/releases/tag/v0.5.0)。
+> v0.5.0では、`BalancedReaction`/`ReactionSpecies`の検証バイパスを解消
+> （フィールドをprivate化し、元素保存則チェックを必須化）、4種類の
+> optional providerを任意に組み合わせられる`Planner::builder(...)`を追加、
+> `ProcessEvidenceProvider::precedents`にも既存のprovider呼び出し
+> 重複排除を拡張、5個のenumを`#[non_exhaustive]`化しました。詳細は
+> [`CHANGELOG.md`](CHANGELOG.md)と
+> [`docs/api_stability_policy.md`](docs/api_stability_policy.md)を
+> 参照してください。
 
 ## gugenが保証すること・しないこと
 

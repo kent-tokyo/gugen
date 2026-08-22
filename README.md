@@ -15,16 +15,18 @@ solid-state process plans — each with its evidence, assumptions, and
 unresolved conditions kept explicit and machine-readable. It does not
 predict experimental success.
 
-> **Status: v0.4.2 published.**
+> **Status: v0.5.0 published** (breaking API-hardening release, no new
+> planning capability -- see CHANGELOG.md).
 > [crates.io](https://crates.io/crates/gugen) /
-> [docs.rs](https://docs.rs/gugen) / [v0.4.2 release](https://github.com/kent-tokyo/gugen/releases/tag/v0.4.2).
-> v0.4.2 adds an optional, off-by-default Commercial Precursor Catalog
-> feature (`commercial_catalog`): matches an existing synthesis plan's
-> precursors against a caller-supplied catalog of commercial offers, as a
-> post-planning stage that never affects the plan's score, confidence,
-> reaction, or process steps -- see "Commercial Precursor Catalog" below
-> and [`CHANGELOG.md`](CHANGELOG.md) for the full list and known
-> limitations.
+> [docs.rs](https://docs.rs/gugen) / [v0.5.0 release](https://github.com/kent-tokyo/gugen/releases/tag/v0.5.0).
+> v0.5.0 closes a validation-bypass gap in `BalancedReaction`/
+> `ReactionSpecies` (private fields, a required element-conservation
+> check), adds `Planner::builder(...)` covering any combination of the 4
+> optional providers, extends existing provider-call deduplication to
+> `ProcessEvidenceProvider::precedents`, and marks 5 enums
+> `#[non_exhaustive]` -- see [`CHANGELOG.md`](CHANGELOG.md) and
+> [`docs/api_stability_policy.md`](docs/api_stability_policy.md) for the
+> full list.
 
 ## What gugen does and doesn't guarantee
 

@@ -75,8 +75,19 @@
 //! Precursor Catalog: matches an existing `SynthesisPlan`'s precursors
 //! against a caller-supplied catalog of commercial offers, as
 //! post-planning processing that never affects the plan's score,
-//! confidence, reaction, or process steps). See `CHANGELOG.md` for the
-//! user-facing summary.
+//! confidence, reaction, or process steps). Phase 23 (v0.5.0) is a
+//! breaking, core-API-hardening release, independent of the commercial
+//! catalog work: `BalancedReaction`/`ReactionSpecies` close a
+//! validation-bypass gap (private fields, a required element-
+//! conservation check, Phase 23A); `Planner::builder(...)` covers any
+//! combination of the 4 optional providers, deprecating the 5 named
+//! constructors that didn't (Phase 23B); the existing provider-call
+//! dedup extends to `ProcessEvidenceProvider::precedents` (Phase 23C);
+//! and 5 enums are marked `#[non_exhaustive]` where their own doc
+//! comments already anticipated new variants, alongside a new
+//! `docs/api_stability_policy.md` (Phase 23D). **v0.5.0 is published**
+//! (crates.io, tagged `v0.5.0`). See `CHANGELOG.md` for the user-facing
+//! summary.
 
 #![forbid(unsafe_code)]
 
