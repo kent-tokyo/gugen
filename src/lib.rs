@@ -70,9 +70,13 @@
 //! agreement/conflict classification, and reference-only literature
 //! evidence in `Planner` -- an evidence-infrastructure release, not a
 //! ranking-accuracy or synthesis-success-prediction claim.
-//! **v0.4.1 is published** (crates.io, tagged `v0.4.1`) -- a bug-fix
-//! patch, no new capabilities. See `CHANGELOG.md` for the user-facing
-//! summary.
+//! **v0.4.2 is published** (crates.io, tagged `v0.4.2`) -- adds the
+//! optional, off-by-default `commercial_catalog` feature (Commercial
+//! Precursor Catalog: matches an existing `SynthesisPlan`'s precursors
+//! against a caller-supplied catalog of commercial offers, as
+//! post-planning processing that never affects the plan's score,
+//! confidence, reaction, or process steps). See `CHANGELOG.md` for the
+//! user-facing summary.
 
 #![forbid(unsafe_code)]
 

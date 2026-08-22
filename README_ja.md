@@ -14,16 +14,15 @@
 （evidence）・仮定（assumption）・未確定条件（unresolved）を明示したまま、
 機械可読な形で返します。実験の成功を保証するものではありません。
 
-> **ステータス：v0.4.1 公開済み**（バグ修正のみのパッチリリース、新機能
-> なし。詳細はCHANGELOG.md参照）。
+> **ステータス：v0.4.2 公開済み**。
 > [crates.io](https://crates.io/crates/gugen) /
 > [docs.rs](https://docs.rs/gugen) /
-> [v0.4.1リリース](https://github.com/kent-tokyo/gugen/releases/tag/v0.4.1)。
-> v0.4.0では、ガスを含まない固相系向けの有限温度熱力学プリミティブ、
-> DOI間のagreement/conflict分類を備えた大規模文献観測スナップショット
-> API、`Planner`のレポートへ参照専用として表示される文献証拠（プロセス
-> 条件の自動補完やscore・confidence・rankingへの影響は一切ありません）
-> を追加しました。詳細な一覧と既知の制限は
+> [v0.4.2リリース](https://github.com/kent-tokyo/gugen/releases/tag/v0.4.2)。
+> v0.4.2では、デフォルトoffのoptional feature `commercial_catalog`
+> （Commercial Precursor Catalog）を追加しました。既存のsynthesis planの
+> 前駆体を、呼び出し側が用意したcommercial offerカタログと突き合わせる、
+> planning後の別stageです。planのscore・confidence・reaction・process
+> stepsには一切触れません。詳細は下記「Commercial Precursor Catalog」と
 > [`CHANGELOG.md`](CHANGELOG.md)を参照してください。
 
 ## gugenが保証すること・しないこと
