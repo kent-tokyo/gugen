@@ -3768,6 +3768,145 @@ mod tests {
         assert!(assessment.search_budget.combinations_omitted > 0);
     }
 
+    /// A catalog with `n` BaCO3 offers and `n` TiO2 offers, each offer
+    /// individually priced (never tied) so ranking has something real to
+    /// discriminate on. Paired with a small `max_combinations_evaluated`
+    /// (`n * n` comfortably exceeds any reasonable budget for `n >= 5`),
+    /// this forces `search_combinations` into the heuristic tier -- used
+    /// by the tests below, which check that the *heuristic* tier (not
+    /// just the exact tier, already covered by the brute-force oracle
+    /// test) is itself deterministic, input-order-independent, and never
+    /// emits a duplicate combination.
+    fn large_baco3_tio2_catalog(n: u64) -> CommercialPrecursorCatalog {
+        let mut offers = Vec::new();
+        for i in 0..n {
+            offers.push(priced_offer(
+                &format!("BACO3-{i}"),
+                "BaCO3",
+                "Example Materials Ltd.",
+                Some(0.9),
+                Some(100.0),
+                Some((1000 + i, "USD")),
+                Some(5),
+                Some(AvailabilityStatus::InStock),
+            ));
+            offers.push(priced_offer(
+                &format!("TIO2-{i}"),
+                "TiO2",
+                "Example Materials Ltd.",
+                Some(0.9),
+                Some(50.0),
+                Some((800 + i, "USD")),
+                Some(5),
+                Some(AvailabilityStatus::InStock),
+            ));
+        }
+        baco3_tio2_catalog(offers)
+    }
+
+    fn heuristic_tier_config() -> CommercialPlanningConfig {
+        CommercialPlanningConfig {
+            max_combinations_evaluated: 50,
+            max_results_returned: 5,
+            ..CommercialPlanningConfig::default()
+        }
+    }
+
+    #[test]
+    fn heuristic_search_tier_is_actually_what_this_test_exercises() {
+        // A precondition check for the three tests below: if this ever
+        // stops being true (e.g. someone lowers the offer count or raises
+        // the default budget), those tests would silently start
+        // exercising the exact tier instead and no longer cover what
+        // their names say they cover.
+        let plan = barium_titanate_plan();
+        let catalog = large_baco3_tio2_catalog(20);
+        let assessment = assess_commercial_precursors(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &heuristic_tier_config(),
+        )
+        .unwrap();
+        assert!(
+            !assessment.search_budget.is_exhaustive,
+            "fixture must be large enough (20x20=400) to exceed the 50-combination budget"
+        );
+    }
+
+    #[test]
+    fn heuristic_search_is_deterministic_across_repeated_calls() {
+        let plan = barium_titanate_plan();
+        let catalog = large_baco3_tio2_catalog(20);
+        let config = heuristic_tier_config();
+        let a = assess_commercial_precursors(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &config,
+        )
+        .unwrap();
+        let b = assess_commercial_precursors(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &config,
+        )
+        .unwrap();
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn heuristic_search_ordering_is_independent_of_catalog_input_order() {
+        let plan = barium_titanate_plan();
+        let catalog_forward = large_baco3_tio2_catalog(20);
+        let mut reversed_offers: Vec<CommercialPrecursorOffer> = catalog_forward.offers().to_vec();
+        reversed_offers.reverse();
+        let (catalog_reversed, _) = CommercialPrecursorCatalog::from_offers(reversed_offers);
+        let config = heuristic_tier_config();
+
+        let a = assess_commercial_precursors(
+            &plan,
+            &catalog_forward,
+            &CommercialPlanningRequest::default(),
+            &config,
+        )
+        .unwrap();
+        let b = assess_commercial_precursors(
+            &plan,
+            &catalog_reversed,
+            &CommercialPlanningRequest::default(),
+            &config,
+        )
+        .unwrap();
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn heuristic_search_never_returns_a_duplicate_combination() {
+        let plan = barium_titanate_plan();
+        let catalog = large_baco3_tio2_catalog(20);
+        let assessment = assess_commercial_precursors(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &heuristic_tier_config(),
+        )
+        .unwrap();
+        let ids: Vec<&str> = assessment
+            .combinations
+            .iter()
+            .map(|c| c.combination_id.as_str())
+            .collect();
+        let unique: BTreeSet<&str> = ids.iter().copied().collect();
+        assert_eq!(
+            ids.len(),
+            unique.len(),
+            "the frontier search's visited-set dedup must prevent the same combination \
+             from being emitted twice: {ids:?}"
+        );
+    }
+
     #[test]
     fn assess_commercial_precursors_is_deterministic_across_repeated_calls() {
         let plan = barium_titanate_plan();
