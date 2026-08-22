@@ -25,6 +25,50 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `Deserialize` could construct an invalid value directly from untrusted
   JSON, bypassing every check `::new` performed).
 
+### Added (Phase 23B)
+
+- `Planner::builder(catalog, config)` returns a new `PlannerBuilder` with
+  `.thermodynamic_provider(...)`, `.process_evidence_provider(...)`,
+  `.route_suitability_provider(...)`, `.literature_evidence_provider(...)`,
+  and `.build()` (infallible) — covers any combination of `Planner`'s 4
+  optional providers, including combinations none of the 5 named
+  constructors below covered.
+
+### Deprecated (Phase 23B)
+
+- `Planner::new`, `Planner::offline_minimal`,
+  `Planner::with_process_evidence_provider`,
+  `Planner::with_route_suitability_provider`, and
+  `Planner::with_literature_evidence_provider` are deprecated in favor of
+  `Planner::builder(...)` above. Each still works, unchanged, as a thin
+  wrapper around the builder — no removal planned for a specific release
+  yet.
+
+### Fixed (Phase 23C)
+
+- `Planner::plan` no longer calls `ProcessEvidenceProvider::precedents`
+  once per route family sharing an accepted precursor set — it's now
+  cached once per accepted set, the same way `ThermodynamicProvider::
+  reaction_energy`/`competing_phases` were deduplicated in v0.4.2 (PR
+  #37), which deliberately left this provider untouched at the time. No
+  behavior change for a single-route-family plan; a target that produces
+  plans under more than one route family (e.g. both
+  ConventionalSolidState and Mechanochemical) now makes one
+  `precedents` call per accepted set instead of one per resulting plan.
+
+### Changed (breaking, Phase 23D)
+
+- `RouteFamily`, `InertGas`, `MixingMethod`, `GrindingMethod`, and
+  `FormingMethod` are now `#[non_exhaustive]` — each already had a doc
+  comment stating "add a variant only when a real fixture needs one";
+  this marks that intent in the type system. Exhaustive `match`
+  expressions on these enums outside this crate need a wildcard `_`
+  arm. Matches the existing `SuitabilityVerdict`/`RouteRecommendation`
+  precedent (Phase 15A).
+- New `docs/api_stability_policy.md`: states what `SCHEMA_VERSION` does
+  and doesn't guarantee, what `#[non_exhaustive]` covers in this crate
+  going forward, and a known `cargo semver-checks` blind spot.
+
 ## [0.4.2] - 2026-08-22
 
 Adds the Commercial Precursor Catalog: an optional, off-by-default

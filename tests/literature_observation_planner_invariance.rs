@@ -61,10 +61,11 @@ fn target(composition: Composition) -> TargetSpecification {
 
 #[test]
 fn loading_and_querying_the_corpus_does_not_change_planning_output() {
-    let planner = Planner::offline_minimal(
+    let planner = Planner::builder(
         InMemoryPrecursorCatalog::new(barium_titanate_catalog()),
         PlanningConfig::default(),
-    );
+    )
+    .build();
     let target_spec = target(composition(&[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)]));
 
     let report_before = planner.plan(&target_spec, "2026-08-15T00:00:00Z").unwrap();
@@ -97,10 +98,11 @@ fn loading_and_querying_the_corpus_does_not_change_planning_output() {
 
 #[test]
 fn cross_doi_comparisons_does_not_change_planning_output() {
-    let planner = Planner::offline_minimal(
+    let planner = Planner::builder(
         InMemoryPrecursorCatalog::new(barium_titanate_catalog()),
         PlanningConfig::default(),
-    );
+    )
+    .build();
     let target_spec = target(composition(&[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)]));
 
     let report_before = planner.plan(&target_spec, "2026-08-15T00:00:00Z").unwrap();

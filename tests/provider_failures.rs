@@ -78,14 +78,12 @@ impl ProcessEvidenceProvider for NoPrecedents {
 fn plan_with_thermodynamic_provider(
     result: std::result::Result<Option<ReactionEnergy>, ProviderError>,
 ) -> gugen::SynthesisPlanningReport {
-    Planner::new(
-        two_route_catalog(),
-        NoPrecedents,
-        FixedThermodynamicProvider(result),
-        PlanningConfig::default(),
-    )
-    .plan(&batio3_target(), "2026-08-14T00:00:00Z")
-    .unwrap()
+    Planner::builder(two_route_catalog(), PlanningConfig::default())
+        .process_evidence_provider(NoPrecedents)
+        .thermodynamic_provider(FixedThermodynamicProvider(result))
+        .build()
+        .plan(&batio3_target(), "2026-08-14T00:00:00Z")
+        .unwrap()
 }
 
 /// "provider timeout相当": no dedicated `ProviderError::Timeout` variant
@@ -169,14 +167,12 @@ impl ThermodynamicProvider for PartialCoverageProvider {
 
 #[test]
 fn partial_thermodynamic_coverage_across_candidates_in_one_report_does_not_crash_or_fail() {
-    let report = Planner::new(
-        two_route_catalog(),
-        NoPrecedents,
-        PartialCoverageProvider,
-        PlanningConfig::default(),
-    )
-    .plan(&batio3_target(), "2026-08-14T00:00:00Z")
-    .unwrap();
+    let report = Planner::builder(two_route_catalog(), PlanningConfig::default())
+        .process_evidence_provider(NoPrecedents)
+        .thermodynamic_provider(PartialCoverageProvider)
+        .build()
+        .plan(&batio3_target(), "2026-08-14T00:00:00Z")
+        .unwrap();
 
     assert_eq!(
         report.plans.len(),
@@ -264,14 +260,12 @@ impl ProcessEvidenceProvider for DuplicatingPrecedentProvider {
 
 #[test]
 fn duplicated_evidence_does_not_crash_and_is_not_silently_deduplicated() {
-    let report = Planner::new(
-        two_route_catalog(),
-        DuplicatingPrecedentProvider,
-        FixedThermodynamicProvider(Ok(None)),
-        PlanningConfig::default(),
-    )
-    .plan(&batio3_target(), "2026-08-14T00:00:00Z")
-    .unwrap();
+    let report = Planner::builder(two_route_catalog(), PlanningConfig::default())
+        .process_evidence_provider(DuplicatingPrecedentProvider)
+        .thermodynamic_provider(FixedThermodynamicProvider(Ok(None)))
+        .build()
+        .plan(&batio3_target(), "2026-08-14T00:00:00Z")
+        .unwrap();
 
     assert!(!report.plans.is_empty());
     for plan in &report.plans {
@@ -312,14 +306,12 @@ impl ThermodynamicProvider for WrongScaleProvider {
 #[test]
 fn thermodynamic_provider_has_no_unit_consistency_check_a_documented_gap() {
     let normal = plan_with_thermodynamic_provider(Ok(Some(ReactionEnergy::new(-0.5).unwrap())));
-    let wrong_scale = Planner::new(
-        two_route_catalog(),
-        NoPrecedents,
-        WrongScaleProvider,
-        PlanningConfig::default(),
-    )
-    .plan(&batio3_target(), "2026-08-14T00:00:00Z")
-    .unwrap();
+    let wrong_scale = Planner::builder(two_route_catalog(), PlanningConfig::default())
+        .process_evidence_provider(NoPrecedents)
+        .thermodynamic_provider(WrongScaleProvider)
+        .build()
+        .plan(&batio3_target(), "2026-08-14T00:00:00Z")
+        .unwrap();
 
     assert!(!normal.plans.is_empty());
     assert!(!wrong_scale.plans.is_empty());
@@ -365,14 +357,12 @@ impl ProcessEvidenceProvider for AlwaysUnavailable {
 /// two-route target rather than a single-candidate one.
 #[test]
 fn both_optional_providers_unavailable_still_produces_a_full_report() {
-    let report = Planner::new(
-        two_route_catalog(),
-        AlwaysUnavailable,
-        AlwaysUnavailable,
-        PlanningConfig::default(),
-    )
-    .plan(&batio3_target(), "2026-08-14T00:00:00Z")
-    .unwrap();
+    let report = Planner::builder(two_route_catalog(), PlanningConfig::default())
+        .process_evidence_provider(AlwaysUnavailable)
+        .thermodynamic_provider(AlwaysUnavailable)
+        .build()
+        .plan(&batio3_target(), "2026-08-14T00:00:00Z")
+        .unwrap();
 
     assert_eq!(
         report.plans.len(),
@@ -427,14 +417,12 @@ impl ThermodynamicProvider for CompetingPhasesFails {
 
 #[test]
 fn a_failing_competing_phases_lookup_degrades_to_a_warning_not_a_failure() {
-    let report = Planner::new(
-        two_route_catalog(),
-        NoPrecedents,
-        CompetingPhasesFails,
-        PlanningConfig::default(),
-    )
-    .plan(&batio3_target(), "2026-08-14T00:00:00Z")
-    .unwrap();
+    let report = Planner::builder(two_route_catalog(), PlanningConfig::default())
+        .process_evidence_provider(NoPrecedents)
+        .thermodynamic_provider(CompetingPhasesFails)
+        .build()
+        .plan(&batio3_target(), "2026-08-14T00:00:00Z")
+        .unwrap();
 
     assert!(!report.plans.is_empty());
     for plan in &report.plans {
@@ -477,13 +465,11 @@ impl RouteSuitabilityProvider for AlwaysUnavailableSuitability {
 
 #[test]
 fn a_failing_route_suitability_provider_degrades_to_a_report_level_warning() {
-    let report = Planner::with_route_suitability_provider(
-        two_route_catalog(),
-        AlwaysUnavailableSuitability,
-        PlanningConfig::default(),
-    )
-    .plan(&batio3_target(), "2026-08-14T00:00:00Z")
-    .unwrap();
+    let report = Planner::builder(two_route_catalog(), PlanningConfig::default())
+        .route_suitability_provider(AlwaysUnavailableSuitability)
+        .build()
+        .plan(&batio3_target(), "2026-08-14T00:00:00Z")
+        .unwrap();
 
     assert_eq!(
         report.plans.len(),

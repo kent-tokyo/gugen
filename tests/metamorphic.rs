@@ -56,7 +56,7 @@ fn target_element_order_does_not_affect_the_report() {
     );
 
     let catalog = InMemoryPrecursorCatalog::new(barium_titanate_catalog());
-    let planner = Planner::offline_minimal(catalog, PlanningConfig::default());
+    let planner = Planner::builder(catalog, PlanningConfig::default()).build();
     let report_a = planner.plan(&target(a), "2026-08-14T00:00:00Z").unwrap();
     let report_b = planner.plan(&target(b), "2026-08-14T00:00:00Z").unwrap();
     assert_eq!(report_a, report_b);
@@ -72,16 +72,18 @@ fn catalog_insertion_order_does_not_affect_the_ranked_report() {
     let mut reversed = barium_titanate_catalog();
     reversed.reverse();
 
-    let forward = Planner::offline_minimal(
+    let forward = Planner::builder(
         InMemoryPrecursorCatalog::new(barium_titanate_catalog()),
         PlanningConfig::default(),
     )
+    .build()
     .plan(&target_spec, "2026-08-14T00:00:00Z")
     .unwrap();
-    let backward = Planner::offline_minimal(
+    let backward = Planner::builder(
         InMemoryPrecursorCatalog::new(reversed),
         PlanningConfig::default(),
     )
+    .build()
     .plan(&target_spec, "2026-08-14T00:00:00Z")
     .unwrap();
 
@@ -96,19 +98,21 @@ fn catalog_insertion_order_does_not_affect_the_ranked_report() {
 #[test]
 fn adding_an_unrelated_precursor_does_not_change_the_target_relevant_plans() {
     let target_spec = target(composition(&[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)]));
-    let baseline = Planner::offline_minimal(
+    let baseline = Planner::builder(
         InMemoryPrecursorCatalog::new(barium_titanate_catalog()),
         PlanningConfig::default(),
     )
+    .build()
     .plan(&target_spec, "2026-08-14T00:00:00Z")
     .unwrap();
 
     let mut augmented_candidates = barium_titanate_catalog();
     augmented_candidates.push(candidate("NaCl", &[("Na", 1.0), ("Cl", 1.0)]));
-    let augmented = Planner::offline_minimal(
+    let augmented = Planner::builder(
         InMemoryPrecursorCatalog::new(augmented_candidates),
         PlanningConfig::default(),
     )
+    .build()
     .plan(&target_spec, "2026-08-14T00:00:00Z")
     .unwrap();
 
@@ -156,24 +160,26 @@ impl gugen::ThermodynamicProvider for NoThermodynamicData {
 #[test]
 fn provider_return_order_does_not_affect_score_or_confidence() {
     let target_spec = target(composition(&[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)]));
-    let forward = Planner::new(
+    let forward = Planner::builder(
         InMemoryPrecursorCatalog::new(barium_titanate_catalog()),
-        OrderedPrecedentProvider {
-            descriptions: vec!["precedent A", "precedent B"],
-        },
-        NoThermodynamicData,
         PlanningConfig::default(),
     )
+    .process_evidence_provider(OrderedPrecedentProvider {
+        descriptions: vec!["precedent A", "precedent B"],
+    })
+    .thermodynamic_provider(NoThermodynamicData)
+    .build()
     .plan(&target_spec, "2026-08-14T00:00:00Z")
     .unwrap();
-    let backward = Planner::new(
+    let backward = Planner::builder(
         InMemoryPrecursorCatalog::new(barium_titanate_catalog()),
-        OrderedPrecedentProvider {
-            descriptions: vec!["precedent B", "precedent A"],
-        },
-        NoThermodynamicData,
         PlanningConfig::default(),
     )
+    .process_evidence_provider(OrderedPrecedentProvider {
+        descriptions: vec!["precedent B", "precedent A"],
+    })
+    .thermodynamic_provider(NoThermodynamicData)
+    .build()
     .plan(&target_spec, "2026-08-14T00:00:00Z")
     .unwrap();
 
@@ -248,22 +254,24 @@ fn sintering_precedent() -> ConditionPrecedent {
 fn provider_return_order_does_not_affect_resolved_step_conditions() {
     let target_spec = target(composition(&[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)]));
 
-    let forward = Planner::with_process_evidence_provider(
+    let forward = Planner::builder(
         InMemoryPrecursorCatalog::new(barium_titanate_catalog()),
-        OrderedConditionProvider {
-            precedents: vec![calcination_precedent(), sintering_precedent()],
-        },
         PlanningConfig::default(),
     )
+    .process_evidence_provider(OrderedConditionProvider {
+        precedents: vec![calcination_precedent(), sintering_precedent()],
+    })
+    .build()
     .plan(&target_spec, "2026-08-14T00:00:00Z")
     .unwrap();
-    let backward = Planner::with_process_evidence_provider(
+    let backward = Planner::builder(
         InMemoryPrecursorCatalog::new(barium_titanate_catalog()),
-        OrderedConditionProvider {
-            precedents: vec![sintering_precedent(), calcination_precedent()],
-        },
         PlanningConfig::default(),
     )
+    .process_evidence_provider(OrderedConditionProvider {
+        precedents: vec![sintering_precedent(), calcination_precedent()],
+    })
+    .build()
     .plan(&target_spec, "2026-08-14T00:00:00Z")
     .unwrap();
 
@@ -318,14 +326,16 @@ fn formula_unit_scale_is_not_currently_normalized_a_documented_gap() {
         (and its accompanying tasks/todo.md report) needs to be revisited, not just deleted"
     );
 
-    let planner_a = Planner::offline_minimal(
+    let planner_a = Planner::builder(
         InMemoryPrecursorCatalog::new(barium_titanate_catalog()),
         PlanningConfig::default(),
-    );
-    let planner_b = Planner::offline_minimal(
+    )
+    .build();
+    let planner_b = Planner::builder(
         InMemoryPrecursorCatalog::new(barium_titanate_catalog()),
         PlanningConfig::default(),
-    );
+    )
+    .build();
     let report_a = planner_a
         .plan(&target(one_unit), "2026-08-14T00:00:00Z")
         .unwrap();

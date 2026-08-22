@@ -120,8 +120,12 @@ pub struct ConditionPrecedent {
 /// variant only with real literature grounding for its process structure
 /// (never invented from memory, AGENTS.md §21.3), following the process
 /// used for `Mechanochemical` (Phase 12) -- not pre-added speculatively.
+/// `#[non_exhaustive]` (v0.5.0, Phase 23D) since this doc comment already
+/// states the growth expectation; matches this crate's existing
+/// `SuitabilityVerdict`/`RouteRecommendation` precedent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
 pub enum RouteFamily {
     ConventionalSolidState,
     /// AGENTS.md §3 keeps *detailed* mechanochemical conditions (milling
@@ -161,8 +165,11 @@ pub enum Atmosphere {
 /// Not given verbatim by AGENTS.md §12 -- kept to the two gases a v0.1
 /// atmosphere heuristic actually needs to name. Add a variant only when a
 /// real curated fixture (Phase 8) needs one this doesn't cover.
+/// `#[non_exhaustive]` (v0.5.0, Phase 23D) since this doc comment already
+/// states the growth expectation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
 pub enum InertGas {
     Nitrogen,
     Argon,
@@ -179,8 +186,11 @@ pub enum ReducingAgent {
 /// given verbatim -- each is kept to the standard techniques the §11
 /// template outline itself needs, not an exhaustive taxonomy. Add a variant
 /// only when a real curated fixture (Phase 8) needs one this doesn't cover.
+/// `#[non_exhaustive]` on all three (v0.5.0, Phase 23D) since this doc
+/// comment already states the growth expectation for all three.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
 pub enum MixingMethod {
     DryMixing,
     WetMixing,
@@ -188,6 +198,7 @@ pub enum MixingMethod {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
 pub enum GrindingMethod {
     MortarAndPestle,
     BallMilling,
@@ -195,6 +206,7 @@ pub enum GrindingMethod {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
 pub enum FormingMethod {
     UniaxialPressing,
     ColdIsostaticPressing,

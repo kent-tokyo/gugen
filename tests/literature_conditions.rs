@@ -41,11 +41,12 @@ fn plan_with_literature_conditions(
     target_spec: &TargetSpecification,
     catalog: Vec<PrecursorCandidate>,
 ) -> gugen::SynthesisPlanningReport {
-    Planner::with_process_evidence_provider(
+    Planner::builder(
         InMemoryPrecursorCatalog::new(catalog),
-        InMemoryLiteratureConditionProvider::from_curated_records(),
         PlanningConfig::default(),
     )
+    .process_evidence_provider(InMemoryLiteratureConditionProvider::from_curated_records())
+    .build()
     .plan(target_spec, "2026-08-14T00:00:00Z")
     .unwrap()
 }
@@ -292,10 +293,11 @@ fn a_target_with_no_curated_coverage_still_leaves_every_condition_unresolved() {
     let catalog = vec![candidate("ZnO", &[("Zn", 1.0), ("O", 1.0)])];
 
     let with_provider = plan_with_literature_conditions(&target_spec, catalog.clone());
-    let offline = Planner::offline_minimal(
+    let offline = Planner::builder(
         InMemoryPrecursorCatalog::new(catalog),
         PlanningConfig::default(),
     )
+    .build()
     .plan(&target_spec, "2026-08-14T00:00:00Z")
     .unwrap();
 
@@ -383,11 +385,12 @@ fn conflicting_precedents_from_one_provider_call_leave_the_field_unresolved_end_
         candidate("MgO", &[("Mg", 1.0), ("O", 1.0)]),
         candidate("Al2O3", &[("Al", 2.0), ("O", 3.0)]),
     ];
-    let report = Planner::with_process_evidence_provider(
+    let report = Planner::builder(
         InMemoryPrecursorCatalog::new(catalog),
-        ConflictingConditionsProvider,
         PlanningConfig::default(),
     )
+    .process_evidence_provider(ConflictingConditionsProvider)
+    .build()
     .plan(&target_spec, "2026-08-14T00:00:00Z")
     .unwrap();
 

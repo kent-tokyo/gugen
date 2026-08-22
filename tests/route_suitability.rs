@@ -52,11 +52,12 @@ fn plan_with_route_suitability(
     target_spec: &TargetSpecification,
     catalog: Vec<PrecursorCandidate>,
 ) -> gugen::SynthesisPlanningReport {
-    Planner::with_route_suitability_provider(
+    Planner::builder(
         InMemoryPrecursorCatalog::new(catalog),
-        InMemoryRouteSuitabilityProvider::from_curated_records(),
         PlanningConfig::default(),
     )
+    .route_suitability_provider(InMemoryRouteSuitabilityProvider::from_curated_records())
+    .build()
     .plan(target_spec, "2026-08-14T00:00:00Z")
     .unwrap()
 }
@@ -175,10 +176,11 @@ fn offline_minimal_report_has_no_route_suitability_assessments() {
         candidate("BaCO3", &[("Ba", 1.0), ("C", 1.0), ("O", 3.0)]),
         candidate("TiO2", &[("Ti", 1.0), ("O", 2.0)]),
     ];
-    let report = Planner::offline_minimal(
+    let report = Planner::builder(
         InMemoryPrecursorCatalog::new(catalog),
         PlanningConfig::default(),
     )
+    .build()
     .plan(&target_spec, "2026-08-14T00:00:00Z")
     .unwrap();
 
@@ -200,10 +202,11 @@ fn configuring_the_provider_does_not_change_any_plans_score_or_confidence() {
     ];
 
     let with_provider = plan_with_route_suitability(&target_spec, catalog.clone());
-    let offline = Planner::offline_minimal(
+    let offline = Planner::builder(
         InMemoryPrecursorCatalog::new(catalog),
         PlanningConfig::default(),
     )
+    .build()
     .plan(&target_spec, "2026-08-14T00:00:00Z")
     .unwrap();
 
@@ -284,11 +287,12 @@ fn batio3_catalog() -> Vec<PrecursorCandidate> {
 fn plan_with_fixed_route_suitability(
     findings_by_family: Vec<(RouteFamily, Vec<SuitabilityFinding>)>,
 ) -> gugen::SynthesisPlanningReport {
-    Planner::with_route_suitability_provider(
+    Planner::builder(
         InMemoryPrecursorCatalog::new(batio3_catalog()),
-        FixedRouteSuitabilityProvider { findings_by_family },
         PlanningConfig::default(),
     )
+    .route_suitability_provider(FixedRouteSuitabilityProvider { findings_by_family })
+    .build()
     .plan(&batio3_target(), "2026-08-14T00:00:00Z")
     .unwrap()
 }
@@ -299,10 +303,11 @@ fn plan_with_fixed_route_suitability(
 /// route family's plan is completely unaffected.
 #[test]
 fn a_strong_exact_target_contradicts_moves_the_plan_to_not_recommended() {
-    let baseline = Planner::offline_minimal(
+    let baseline = Planner::builder(
         InMemoryPrecursorCatalog::new(batio3_catalog()),
         PlanningConfig::default(),
     )
+    .build()
     .plan(&batio3_target(), "2026-08-14T00:00:00Z")
     .unwrap();
     assert_eq!(
@@ -361,10 +366,11 @@ fn a_strong_exact_target_contradicts_moves_the_plan_to_not_recommended() {
 /// would have had in `plans`, not a stripped-down or re-derived one.
 #[test]
 fn the_not_recommended_plan_carries_its_real_unmodified_score_and_confidence() {
-    let baseline = Planner::offline_minimal(
+    let baseline = Planner::builder(
         InMemoryPrecursorCatalog::new(batio3_catalog()),
         PlanningConfig::default(),
     )
+    .build()
     .plan(&batio3_target(), "2026-08-14T00:00:00Z")
     .unwrap();
     let baseline_conventional = baseline

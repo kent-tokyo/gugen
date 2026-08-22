@@ -24,7 +24,7 @@ fn composition(pairs: &[(&str, f64)]) -> Composition {
 
 fn main() {
     // Stage 1: chemical planning, entirely unaware commercial data exists.
-    let planner = Planner::offline_minimal(
+    let planner = Planner::builder(
         InMemoryPrecursorCatalog::new(vec![
             PrecursorCandidate {
                 id: PrecursorId("BaCO3".to_string()),
@@ -38,7 +38,8 @@ fn main() {
             },
         ]),
         PlanningConfig::default(),
-    );
+    )
+    .build();
     let target = TargetSpecification {
         composition: composition(&[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)]),
         structure: None,

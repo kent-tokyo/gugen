@@ -85,10 +85,11 @@ fn commercial_offer(id: &str, formula: &str, price_minor_units: u64) -> Commerci
 
 #[test]
 fn assessing_commercial_precursors_does_not_change_planning_output() {
-    let planner = Planner::offline_minimal(
+    let planner = Planner::builder(
         InMemoryPrecursorCatalog::new(barium_titanate_catalog()),
         PlanningConfig::default(),
-    );
+    )
+    .build();
     let target_spec = target();
 
     let report_before = planner.plan(&target_spec, "2026-08-22T00:00:00Z").unwrap();
@@ -128,10 +129,11 @@ fn assessing_commercial_precursors_does_not_change_planning_output() {
 
 #[test]
 fn the_same_plan_under_two_different_catalogs_stays_byte_identical() {
-    let planner = Planner::offline_minimal(
+    let planner = Planner::builder(
         InMemoryPrecursorCatalog::new(barium_titanate_catalog()),
         PlanningConfig::default(),
-    );
+    )
+    .build();
     let report = planner.plan(&target(), "2026-08-22T00:00:00Z").unwrap();
     let plan = report
         .plans

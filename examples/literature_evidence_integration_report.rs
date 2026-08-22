@@ -197,12 +197,10 @@ fn main() {
             })
             .collect();
         let catalog_for = || InMemoryPrecursorCatalog::new(candidates.clone());
-        let baseline_planner = Planner::offline_minimal(catalog_for(), config.clone());
-        let with_evidence_planner = Planner::with_literature_evidence_provider(
-            catalog_for(),
-            SharedProvider(Rc::clone(&provider)),
-            config.clone(),
-        );
+        let baseline_planner = Planner::builder(catalog_for(), config.clone()).build();
+        let with_evidence_planner = Planner::builder(catalog_for(), config.clone())
+            .literature_evidence_provider(SharedProvider(Rc::clone(&provider)))
+            .build();
 
         let t0 = Instant::now();
         let baseline_report = baseline_planner

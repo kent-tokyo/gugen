@@ -80,14 +80,12 @@ fn a_full_snapshot_produces_both_reaction_energy_and_competing_phase_evidence() 
         candidate("BaCO3", &[("Ba", 1.0), ("C", 1.0), ("O", 3.0)]),
         candidate("TiO2", &[("Ti", 1.0), ("O", 2.0)]),
     ]);
-    let report = Planner::new(
-        catalog,
-        NoPrecedents,
-        snapshot_provider(),
-        PlanningConfig::default(),
-    )
-    .plan(&batio3_target(), "2026-08-14T00:00:00Z")
-    .unwrap();
+    let report = Planner::builder(catalog, PlanningConfig::default())
+        .process_evidence_provider(NoPrecedents)
+        .thermodynamic_provider(snapshot_provider())
+        .build()
+        .plan(&batio3_target(), "2026-08-14T00:00:00Z")
+        .unwrap();
 
     assert_eq!(
         report.plans.len(),
@@ -144,14 +142,12 @@ fn a_snapshot_missing_one_species_produces_no_reaction_energy_evidence() {
         CompetingPhase::new(composition(&[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)]), -3.5).unwrap(),
         CompetingPhase::new(composition(&[("C", 1.0), ("O", 2.0)]), -4.1).unwrap(),
     ]);
-    let report = Planner::new(
-        catalog,
-        NoPrecedents,
-        incomplete_provider,
-        PlanningConfig::default(),
-    )
-    .plan(&batio3_target(), "2026-08-14T00:00:00Z")
-    .unwrap();
+    let report = Planner::builder(catalog, PlanningConfig::default())
+        .process_evidence_provider(NoPrecedents)
+        .thermodynamic_provider(incomplete_provider)
+        .build()
+        .plan(&batio3_target(), "2026-08-14T00:00:00Z")
+        .unwrap();
 
     assert!(!report.plans.is_empty());
     for plan in &report.plans {

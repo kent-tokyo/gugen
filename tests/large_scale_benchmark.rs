@@ -172,7 +172,8 @@ fn every_row_plans_without_panicking_or_erroring() {
             desired_phase: None,
             constraints: PlanningConstraints::default(),
         };
-        let result = Planner::offline_minimal(catalog, PlanningConfig::default())
+        let result = Planner::builder(catalog, PlanningConfig::default())
+            .build()
             .plan(&target_spec, "2026-08-14T00:00:00Z");
         assert!(
             result.is_ok(),

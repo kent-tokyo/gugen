@@ -217,18 +217,16 @@ fn plan_row(row: &ParsedRow, pool: &[PrecursorCandidate]) -> SynthesisPlanningRe
         desired_phase: None,
         constraints: PlanningConstraints::default(),
     };
-    Planner::with_process_evidence_provider(
-        catalog,
-        InMemoryLiteratureConditionProvider::from_curated_records(),
-        PlanningConfig::default(),
-    )
-    .plan(&target_spec, "2026-08-14T00:00:00Z")
-    .unwrap_or_else(|e| {
-        panic!(
-            "planning must not fail for a pre-validated row ({}, DOI {}): {e}",
-            row.target_formula, row.doi
-        )
-    })
+    Planner::builder(catalog, PlanningConfig::default())
+        .process_evidence_provider(InMemoryLiteratureConditionProvider::from_curated_records())
+        .build()
+        .plan(&target_spec, "2026-08-14T00:00:00Z")
+        .unwrap_or_else(|e| {
+            panic!(
+                "planning must not fail for a pre-validated row ({}, DOI {}): {e}",
+                row.target_formula, row.doi
+            )
+        })
 }
 
 /// Re-verifies exact element conservation on a produced reaction, same

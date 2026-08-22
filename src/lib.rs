@@ -147,7 +147,7 @@ pub use literature_observations::{
 pub use materials_project_adapter::MaterialsProjectSnapshotProvider;
 #[cfg(feature = "mikiwame")]
 pub use mikiwame_adapter::{StructuralDiagnosticEffects, structural_effects};
-pub use planner::Planner;
+pub use planner::{Planner, PlannerBuilder};
 pub use precursor::{
     AcceptedPrecursorSet, AvailabilityMetadata, InMemoryPrecursorCatalog, PrecursorCandidate,
     PrecursorId, PrecursorSearchOutcome, PrecursorSelection, search_precursor_sets,
