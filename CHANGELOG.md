@@ -4,6 +4,31 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-22
+
+Validated Core API: closes a long-standing gap where `BalancedReaction`/
+`ReactionSpecies` could be hand-constructed (or deserialized from
+untrusted JSON) with a zero coefficient, an empty side, or a
+non-element-conserving reaction, silently relying on downstream
+consumers to catch it (Phase 23A); adds `Planner::builder(...)`
+covering any combination of the 4 optional providers, deprecating the
+5 named constructors that didn't (Phase 23B); extends the existing
+provider-call dedup (v0.4.2, PR #37) to `ProcessEvidenceProvider::
+precedents` (Phase 23C); and marks 5 enums `#[non_exhaustive]` where
+their own doc comments already anticipated new variants, plus a new
+`docs/api_stability_policy.md` (Phase 23D). Breaking (hence the minor
+version bump under this crate's pre-1.0 SemVer convention) — `cargo
+semver-checks` against the 0.4.2 baseline flags exactly 3 lint rules,
+covering exactly the intended changes and nothing else: the 3 newly
+private fields (Phase 23A, `BalancedReaction::reactants`/`products`,
+`ReactionSpecies::coefficient`, reported under both
+`struct_pub_field_missing` and `struct_pub_field_now_doc_hidden`) and
+the 5 new `#[non_exhaustive]` enums (Phase 23D, `enum_marked_
+non_exhaustive`) — `#[deprecated]` alone is correctly not flagged as
+breaking. `SCHEMA_VERSION` stays `2` — no
+`SynthesisPlanningReport`/`SynthesisPlan` shape change. Full detail in
+the entries below and in `docs/api_stability_policy.md`.
+
 ### Changed (breaking, Phase 23A)
 
 - `BalancedReaction`'s `reactants`/`products` fields and `ReactionSpecies`'s
