@@ -238,6 +238,7 @@ pub(crate) fn parse_formula(formula: &str) -> Result<Composition, CommercialCata
 mod tests {
     use super::*;
     use crate::commercial_catalog::test_support::*;
+    use proptest::prelude::*;
 
     #[test]
     fn parses_a_simple_formula() {
@@ -415,5 +416,67 @@ mod tests {
         // different code points -- only the exact U+00B7 is recognized as
         // a hydrate separator; a bullet is just an unrecognized character.
         assert!(parse_formula("CuSO4\u{2022}5H2O").is_err());
+    }
+
+    const ELEMENT_POOL: &[&str] = &[
+        "H", "He", "Li", "C", "N", "O", "F", "Na", "Mg", "Al", "Si", "S", "Cl", "K", "Ca", "Fe",
+        "Cu", "Zn", "Ba", "Ti", "La", "Sr", "Mn",
+    ];
+
+    proptest! {
+        /// Rendering a randomly-generated Composition to a formula string
+        /// (element+amount concatenation, no parens/hydrate needed to
+        /// exercise this property) and parsing it back must reconstruct an
+        /// equal Composition. Amounts are computed as `n / 100.0` for
+        /// integer `n` -- Rust's f64 Display/FromStr round-trip exactly
+        /// (shortest-string-that-reparses-identically), so the rendered
+        /// string reparses to the *same f64 bit pattern* fed into the
+        /// original, making both sides call `Frac::from_f64` on identical
+        /// input -- this property is robust by construction, not just
+        /// "usually passes" (mirrors composition.rs's own
+        /// `ordinary_decimal_amounts_round_trip_exactly` mechanism).
+        #[test]
+        fn round_trips_through_render_and_parse(
+            pairs in prop::collection::hash_map(
+                prop::sample::select(ELEMENT_POOL),
+                1u32..=9999u32,
+                1..=6,
+            )
+        ) {
+            let composition_pairs: Vec<(&str, f64)> = pairs
+                .iter()
+                .map(|(&sym, &n)| (sym, n as f64 / 100.0))
+                .collect();
+            let original = composition(&composition_pairs);
+            let rendered: String = composition_pairs
+                .iter()
+                .map(|(sym, amt)| format!("{sym}{amt}"))
+                .collect();
+            let parsed = parse_formula(&rendered).unwrap();
+            prop_assert_eq!(parsed, original);
+        }
+
+        /// The parser must never panic on arbitrary input -- it always
+        /// returns a `Result`. This module already found one real
+        /// stack-overflow bug by hand (unbounded paren-nesting recursion);
+        /// a broad fuzz-style sweep over arbitrary Unicode strings covers
+        /// digit-run, malformed-fragment, and character-mix variations the
+        /// hand-written edge-case tests don't enumerate.
+        #[test]
+        fn never_panics_on_arbitrary_input(chars in prop::collection::vec(any::<char>(), 0..200)) {
+            let s: String = chars.into_iter().collect();
+            let _ = parse_formula(&s);
+        }
+
+        /// Same no-panic property, but biased specifically toward deep
+        /// paren nesting at randomized depths -- the hand-written
+        /// regression test only pins one fixed depth (10,000); this
+        /// exercises the MAX_FORMULA_NESTING_DEPTH guard's correctness
+        /// across the whole range around and beyond the boundary.
+        #[test]
+        fn never_panics_on_randomized_nesting_depth(depth in 0usize..5_000) {
+            let formula = format!("{}Fe{}", "(".repeat(depth), ")".repeat(depth));
+            let _ = parse_formula(&formula);
+        }
     }
 }
