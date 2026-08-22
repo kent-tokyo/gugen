@@ -73,7 +73,7 @@ use std::collections::BTreeMap;
 /// known isotope" designation legitimately drifts between reference
 /// snapshots as new isotopes are characterized; irrelevant to any real
 /// solid-state synthesis target). [amu]
-const ATOMIC_WEIGHTS: [(&str, f64); 118] = [
+pub(crate) const ATOMIC_WEIGHTS: [(&str, f64); 118] = [
     ("H", 1.008),
     ("He", 4.002602),
     ("Li", 6.94),
@@ -194,7 +194,7 @@ const ATOMIC_WEIGHTS: [(&str, f64); 118] = [
     ("Og", 294.0),
 ];
 
-fn atomic_weight_amu(element: Element) -> f64 {
+pub(crate) fn atomic_weight_amu(element: Element) -> f64 {
     ATOMIC_WEIGHTS
         .iter()
         .find(|&&(sym, _)| sym == element.symbol())
