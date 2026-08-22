@@ -44,6 +44,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   wrapper around the builder — no removal planned for a specific release
   yet.
 
+### Fixed (Phase 23C)
+
+- `Planner::plan` no longer calls `ProcessEvidenceProvider::precedents`
+  once per route family sharing an accepted precursor set — it's now
+  cached once per accepted set, the same way `ThermodynamicProvider::
+  reaction_energy`/`competing_phases` were deduplicated in v0.4.2 (PR
+  #37), which deliberately left this provider untouched at the time. No
+  behavior change for a single-route-family plan; a target that produces
+  plans under more than one route family (e.g. both
+  ConventionalSolidState and Mechanochemical) now makes one
+  `precedents` call per accepted set instead of one per resulting plan.
+
 ## [0.4.2] - 2026-08-22
 
 Adds the Commercial Precursor Catalog: an optional, off-by-default
