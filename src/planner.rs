@@ -315,9 +315,9 @@ impl Planner {
                     // compare against).
                     let this_reaction_species: Vec<_> = accepted
                         .reaction
-                        .reactants
+                        .reactants()
                         .iter()
-                        .chain(&accepted.reaction.products)
+                        .chain(accepted.reaction.products())
                         .map(|s| s.composition.clone())
                         .collect();
                     match cached_phases.clone() {
@@ -361,10 +361,10 @@ impl Planner {
                 let precursors: Vec<PrecursorSelection> = accepted
                     .precursors
                     .iter()
-                    .zip(&accepted.reaction.reactants)
+                    .zip(accepted.reaction.reactants())
                     .map(|(id, species)| PrecursorSelection {
                         precursor: id.clone(),
-                        formula_units: species.coefficient,
+                        formula_units: species.coefficient(),
                     })
                     .collect();
 
@@ -446,7 +446,7 @@ impl Planner {
                     if let Some(provider) = &self.literature_evidence_provider {
                         let precursor_compositions: Vec<_> = accepted
                             .reaction
-                            .reactants
+                            .reactants()
                             .iter()
                             .map(|s| s.composition.clone())
                             .collect();
@@ -744,12 +744,12 @@ fn derive_plan_id(
     for id in &ids {
         id.hash(&mut hasher);
     }
-    for species in reaction.reactants.iter().chain(&reaction.products) {
+    for species in reaction.reactants().iter().chain(reaction.products()) {
         for (element, amount) in species.composition.iter() {
             element.symbol().hash(&mut hasher);
             amount.to_bits().hash(&mut hasher);
         }
-        species.coefficient.hash(&mut hasher);
+        species.coefficient().hash(&mut hasher);
     }
     format!("{route_family:?}").hash(&mut hasher);
     PlanId(format!("plan-{:016x}", hasher.finish()))

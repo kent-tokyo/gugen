@@ -136,14 +136,14 @@ fn is_element_balanced(plan: &SynthesisPlan) -> bool {
     };
     let mut lhs: BTreeMap<Element, f64> = BTreeMap::new();
     let mut rhs: BTreeMap<Element, f64> = BTreeMap::new();
-    for species in &reaction.reactants {
+    for species in reaction.reactants() {
         for (el, amt) in species.composition.iter() {
-            *lhs.entry(el).or_insert(0.0) += amt * species.coefficient as f64;
+            *lhs.entry(el).or_insert(0.0) += amt * species.coefficient() as f64;
         }
     }
-    for species in &reaction.products {
+    for species in reaction.products() {
         for (el, amt) in species.composition.iter() {
-            *rhs.entry(el).or_insert(0.0) += amt * species.coefficient as f64;
+            *rhs.entry(el).or_insert(0.0) += amt * species.coefficient() as f64;
         }
     }
     lhs.len() == rhs.len()

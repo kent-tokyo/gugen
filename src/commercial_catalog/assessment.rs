@@ -67,7 +67,7 @@ fn resolve_target_scale(
         return 1.0;
     };
     let Some(target_species) = reaction
-        .products
+        .products()
         .iter()
         .find(|species| &species.composition == target_composition)
     else {
@@ -81,7 +81,7 @@ fn resolve_target_scale(
         return 1.0;
     };
     let target_basis_grams =
-        target_species.coefficient as f64 * molar_mass_g_per_mol(&target_species.composition);
+        target_species.coefficient() as f64 * molar_mass_g_per_mol(&target_species.composition);
     if target_basis_grams <= 0.0 {
         return 1.0;
     }
@@ -104,14 +104,14 @@ pub fn assess_commercial_precursors(
         ));
     };
 
-    if plan.precursors.len() != reaction.reactants.len() {
+    if plan.precursors.len() != reaction.reactants().len() {
         return Ok(degraded_assessment(
             plan,
             format!(
                 "plan.precursors (len {}) and plan.balanced_reaction.reactants (len {}) are not \
                  the same length; cannot align precursor identities with reaction stoichiometry",
                 plan.precursors.len(),
-                reaction.reactants.len()
+                reaction.reactants().len()
             ),
             WarningSeverity::Severe,
         ));
@@ -126,13 +126,13 @@ pub fn assess_commercial_precursors(
     let mut rows: Vec<Vec<OfferCandidate>> = Vec::new();
     let mut row_meta: Vec<(PrecursorId, Composition, u64, f64)> = Vec::new();
 
-    for (selection, species) in plan.precursors.iter().zip(&reaction.reactants) {
+    for (selection, species) in plan.precursors.iter().zip(reaction.reactants()) {
         let theoretical_pure_mass_required_grams =
-            scale * species.coefficient as f64 * molar_mass_g_per_mol(&species.composition);
+            scale * species.coefficient() as f64 * molar_mass_g_per_mol(&species.composition);
         row_meta.push((
             selection.precursor.clone(),
             species.composition.clone(),
-            species.coefficient,
+            species.coefficient(),
             theoretical_pure_mass_required_grams,
         ));
 
@@ -428,11 +428,18 @@ mod tests {
         // unmatched precursors), so without the `evaluated > 0` guard the
         // max_total_cost-excluded-everything warning would incorrectly
         // fire for a plan where nothing was ever searched.
+        //
+        // Built via the `balanced_reaction: None` degraded path (v0.5.0,
+        // Phase 23A) rather than an empty-reactants `Some(BalancedReaction)`
+        // -- `BalancedReaction`'s fields are private and there is no
+        // mutable accessor, so a reaction can no longer be mutated into a
+        // degenerate empty-reactants shape after construction. The `None`
+        // path already exercises the same "nothing to procure" behavior
+        // this test checks (`assess_commercial_precursors`'s own
+        // `degraded_assessment` for a missing reaction).
         let mut plan = barium_titanate_plan();
         plan.precursors.clear();
-        if let Some(reaction) = plan.balanced_reaction.as_mut() {
-            reaction.reactants.clear();
-        }
+        plan.balanced_reaction = None;
         let catalog = baco3_tio2_catalog(default_baco3_tio2_offers());
         let request = CommercialPlanningRequest {
             max_total_cost: Some(money(1, "USD")),

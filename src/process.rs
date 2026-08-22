@@ -309,22 +309,22 @@ pub fn conventional_solid_state_template(
     accepted: &AcceptedPrecursorSet,
 ) -> ProcessTemplateResult {
     let reaction = &accepted.reaction;
-    let releases_byproduct = reaction.products.iter().any(|p| &p.composition != target);
+    let releases_byproduct = reaction.products().iter().any(|p| &p.composition != target);
 
     // `zip` silently truncates to the shorter side. `search_precursor_sets`
     // now guarantees equal lengths, but this is a public function taking a
     // public struct with public fields -- a hand-built `AcceptedPrecursorSet`
     // with mismatched lengths must not produce a `Weigh` step that quietly
     // omits materials (that reads as a complete list when it isn't).
-    let materials_resolved = accepted.precursors.len() == reaction.reactants.len();
+    let materials_resolved = accepted.precursors.len() == reaction.reactants().len();
     let materials: Vec<MaterialAmount> = if materials_resolved {
         accepted
             .precursors
             .iter()
-            .zip(&reaction.reactants)
+            .zip(reaction.reactants())
             .map(|(id, species)| MaterialAmount {
                 precursor: id.clone(),
-                formula_units: species.coefficient,
+                formula_units: species.coefficient(),
                 mass_grams: None,
             })
             .collect()
@@ -340,7 +340,7 @@ pub fn conventional_solid_state_template(
                 reaction.reactants ({} entries) have different lengths; \
                 the Weigh step's material list could not be determined",
                 accepted.precursors.len(),
-                reaction.reactants.len(),
+                reaction.reactants().len(),
             ),
             severity: WarningSeverity::Severe,
         });
@@ -529,17 +529,17 @@ pub fn mechanochemical_template(
     const SURYANARAYANA_2001: &str = "10.1016/S0079-6425(99)00010-9";
 
     let reaction = &accepted.reaction;
-    let releases_byproduct = reaction.products.iter().any(|p| &p.composition != target);
+    let releases_byproduct = reaction.products().iter().any(|p| &p.composition != target);
 
-    let materials_resolved = accepted.precursors.len() == reaction.reactants.len();
+    let materials_resolved = accepted.precursors.len() == reaction.reactants().len();
     let materials: Vec<MaterialAmount> = if materials_resolved {
         accepted
             .precursors
             .iter()
-            .zip(&reaction.reactants)
+            .zip(reaction.reactants())
             .map(|(id, species)| MaterialAmount {
                 precursor: id.clone(),
-                formula_units: species.coefficient,
+                formula_units: species.coefficient(),
                 mass_grams: None,
             })
             .collect()
@@ -555,7 +555,7 @@ pub fn mechanochemical_template(
                 reaction.reactants ({} entries) have different lengths; \
                 the Weigh step's material list could not be determined",
                 accepted.precursors.len(),
-                reaction.reactants.len(),
+                reaction.reactants().len(),
             ),
             severity: WarningSeverity::Severe,
         });

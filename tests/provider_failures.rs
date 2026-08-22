@@ -156,7 +156,7 @@ impl ThermodynamicProvider for PartialCoverageProvider {
         _conditions: &ThermodynamicConditions,
     ) -> std::result::Result<Option<ReactionEnergy>, ProviderError> {
         let has_carbonate = reaction
-            .reactants
+            .reactants()
             .iter()
             .any(|s| s.composition.amount_of(element("C")).is_some());
         if has_carbonate {

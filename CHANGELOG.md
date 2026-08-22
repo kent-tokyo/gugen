@@ -4,6 +4,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed (breaking, Phase 23A)
+
+- `BalancedReaction`'s `reactants`/`products` fields and `ReactionSpecies`'s
+  `coefficient` field are now private. Construct via `BalancedReaction::new`/
+  `ReactionSpecies::new` (both already existed) and read via new
+  `BalancedReaction::reactants()`/`products()` and
+  `ReactionSpecies::coefficient()` accessors. `ReactionSpecies::composition`
+  stays a public field (already a validated type).
+- `BalancedReaction::new` now also rejects a reaction whose reactant- and
+  product-side element totals don't conserve
+  (`GugenError::UnbalancedReaction`, reusing the existing variant) — a
+  category of chemically-invalid input it previously accepted silently,
+  relying on downstream consumers
+  (`thermodynamics::balanced_reaction_delta_ev_per_atom`,
+  `MaterialsProjectSnapshotProvider::reaction_energy`) to catch it instead.
+  Those downstream checks still run, now redundantly.
+- JSON deserialization of `BalancedReaction`/`ReactionSpecies` now re-runs
+  the same validation as the constructors (previously a derived
+  `Deserialize` could construct an invalid value directly from untrusted
+  JSON, bypassing every check `::new` performed).
+
 ## [0.4.2] - 2026-08-22
 
 Adds the Commercial Precursor Catalog: an optional, off-by-default

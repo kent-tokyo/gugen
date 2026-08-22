@@ -142,9 +142,9 @@ fn a_precursor_identical_to_the_target_plans_as_a_trivial_identity() {
     assert_eq!(report.plans.len(), 2, "{:?}", report.plans);
     for plan in &report.plans {
         let reaction = plan.balanced_reaction.as_ref().unwrap();
-        assert_eq!(reaction.reactants.len(), 1);
-        assert_eq!(reaction.reactants[0].coefficient, 1);
-        assert_eq!(reaction.products[0].coefficient, 1);
+        assert_eq!(reaction.reactants().len(), 1);
+        assert_eq!(reaction.reactants()[0].coefficient(), 1);
+        assert_eq!(reaction.products()[0].coefficient(), 1);
     }
     let route_families: std::collections::BTreeSet<_> =
         report.plans.iter().map(|p| p.route_family).collect();

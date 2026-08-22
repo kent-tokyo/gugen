@@ -82,14 +82,8 @@ fn computing_phase_19p_quantities_does_not_change_planning_output() {
 
     let _ = relative_solid_gibbs_ev_per_atom(&target_entry, t);
     let toy_reaction = gugen::BalancedReaction::new(
-        vec![gugen::ReactionSpecies {
-            composition: bao_entry.composition.clone(),
-            coefficient: 1,
-        }],
-        vec![gugen::ReactionSpecies {
-            composition: bao_entry.composition.clone(),
-            coefficient: 1,
-        }],
+        vec![gugen::ReactionSpecies::new(bao_entry.composition.clone(), 1).unwrap()],
+        vec![gugen::ReactionSpecies::new(bao_entry.composition.clone(), 1).unwrap()],
     )
     .unwrap();
     let entries = [bao_entry.clone(), tio2_entry.clone()];
