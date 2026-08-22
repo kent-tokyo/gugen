@@ -404,49 +404,65 @@ def main():
     fetch_timestamps = []
     unknown_timestamp_count = 0
 
-    with args.cache_path.open("a") as cache_file:
-        for i, formula in enumerate(formulas):
-            if formula in cached:
-                payload = cached[formula]
-                resumed_from_cache_count += 1
-            else:
-                fetched = query_composition(formula)  # raises OqmdFetchError -> script aborts, nothing written
-                payload = {
-                    "formula": formula,
-                    "data": fetched["data"],
-                    "meta": fetched["meta"],
-                    "fetched_at_utc": _now_utc_iso(),
+    try:
+        with args.cache_path.open("a") as cache_file:
+            for i, formula in enumerate(formulas):
+                if formula in cached:
+                    payload = cached[formula]
+                    resumed_from_cache_count += 1
+                else:
+                    fetched = query_composition(formula)  # raises OqmdFetchError -> abort, see except below
+                    payload = {
+                        "formula": formula,
+                        "data": fetched["data"],
+                        "meta": fetched["meta"],
+                        "fetched_at_utc": _now_utc_iso(),
+                    }
+                    cache_file.write(json.dumps(payload) + "\n")
+                    cache_file.flush()
+                    os.fsync(cache_file.fileno())
+                    time.sleep(args.sleep)
+
+                fetched_at_utc = payload.get("fetched_at_utc")
+                if fetched_at_utc:
+                    fetch_timestamps.append(fetched_at_utc)
+                else:
+                    unknown_timestamp_count += 1
+
+                schema_validated = maybe_validate_schema(schema_validated, payload, formula)
+                if api_meta_seen is None:
+                    api_meta_seen = payload["meta"]
+
+                entries = payload["data"]
+                chosen, n_duplicate, n_null_energy = select_polymorph(entries)
+                raw_snapshot[formula] = entries
+                coverage[formula] = {
+                    "n_candidate_entries": len(entries),
+                    "n_duplicate_excluded": n_duplicate,
+                    "n_null_energy_excluded": n_null_energy,
+                    "matched": chosen is not None,
+                    "chosen_entry_id": chosen["entry_id"] if chosen else None,
+                    "delta_e_ev_per_atom": chosen["delta_e"] if chosen else None,
+                    "volume_angstrom3_per_atom": (chosen["volume"] / chosen["natoms"]) if chosen else None,
+                    "spacegroup": chosen.get("spacegroup") if chosen else None,
                 }
-                cache_file.write(json.dumps(payload) + "\n")
-                cache_file.flush()
-                os.fsync(cache_file.fileno())
-                time.sleep(args.sleep)
-
-            fetched_at_utc = payload.get("fetched_at_utc")
-            if fetched_at_utc:
-                fetch_timestamps.append(fetched_at_utc)
-            else:
-                unknown_timestamp_count += 1
-
-            schema_validated = maybe_validate_schema(schema_validated, payload, formula)
-            if api_meta_seen is None:
-                api_meta_seen = payload["meta"]
-
-            entries = payload["data"]
-            chosen, n_duplicate, n_null_energy = select_polymorph(entries)
-            raw_snapshot[formula] = entries
-            coverage[formula] = {
-                "n_candidate_entries": len(entries),
-                "n_duplicate_excluded": n_duplicate,
-                "n_null_energy_excluded": n_null_energy,
-                "matched": chosen is not None,
-                "chosen_entry_id": chosen["entry_id"] if chosen else None,
-                "delta_e_ev_per_atom": chosen["delta_e"] if chosen else None,
-                "volume_angstrom3_per_atom": (chosen["volume"] / chosen["natoms"]) if chosen else None,
-                "spacegroup": chosen.get("spacegroup") if chosen else None,
-            }
-            if (i + 1) % 50 == 0:
-                print(f"  {i + 1}/{len(formulas)} queried", file=sys.stderr)
+                if (i + 1) % 50 == 0:
+                    print(f"  {i + 1}/{len(formulas)} queried", file=sys.stderr)
+    except OqmdFetchError:
+        # Report only the updated cached count, never a partial coverage
+        # percentage or anything resembling a gate result -- a line count
+        # is used rather than _load_cache so a corrupt-cache warning can't
+        # turn a clean abort into a confusing double failure.
+        try:
+            n_cached_now = sum(1 for line in args.cache_path.read_text().splitlines() if line.strip())
+            print(
+                f"stopped early: {n_cached_now}/{len(formulas)} formulas now cached in "
+                f"{args.cache_path} (resume later with the same --cache-path to continue)",
+                file=sys.stderr,
+            )
+        except OSError:
+            pass
+        raise
 
     n_matched = sum(1 for c in coverage.values() if c["matched"])
     print(f"per-formula coverage: {n_matched}/{len(formulas)} ({100 * n_matched / len(formulas):.1f}%)", file=sys.stderr)
