@@ -40,6 +40,9 @@ thiserror = "2.0.20"
 # `.symbol()` on a value it already has. Not gated by any feature: dev-
 # dependencies never enter the published dependency graph regardless.
 chematic-core = "0.15.0"
+# Property-based tests for commercial_catalog's formula parser and
+# canonical-ratio matching (Phase 22.1).
+proptest = "1"
 
 [features]
 default = []
