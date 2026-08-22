@@ -722,6 +722,18 @@ impl CommercialPrecursorCatalog {
     pub fn get(&self, id: &CommercialOfferId) -> Option<&CommercialPrecursorOffer> {
         self.offers.iter().find(|o| &o.offer_id == id)
     }
+
+    /// Exact `Composition` match -- the *only* matching policy Phase 22
+    /// implements. Two formulas at different formula-unit scale (`Fe2O3` vs
+    /// `Fe4O6`) do not match; see the module doc comment.
+    pub(crate) fn offers_matching<'a>(
+        &'a self,
+        composition: &'a Composition,
+    ) -> impl Iterator<Item = &'a CommercialPrecursorOffer> + 'a {
+        self.offers
+            .iter()
+            .filter(move |o| &o.composition == composition)
+    }
 }
 
 /// Both-or-neither: price and currency must be present together (spec: a
@@ -1166,6 +1178,1035 @@ fn load_json_impl(
     ))
 }
 
+// =======================================================================
+// Plan assessment (Phase 22B/22C): matches a SynthesisPlan's precursors
+// against a catalog, applies commercial constraints, computes purchase
+// quantities and costs, and searches a bounded space of complete
+// combinations. Never touches SynthesisPlan/BalancedReaction/ProcessStep --
+// see the module doc comment.
+// =======================================================================
+
+use crate::precursor::PrecursorId;
+use crate::reaction::BalancedReaction;
+use crate::report::{PlanId, SynthesisPlan, WarningSeverity};
+
+// ---------------------------------------------------------------------
+// Request / config
+// ---------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MissingCommercialDataPolicy {
+    /// A hard-constrained field the offer doesn't report excludes the
+    /// offer. Conservative default: a request constraint that can't be
+    /// verified is treated as unsatisfied, not as satisfied-by-omission.
+    #[default]
+    Reject,
+    /// A hard-constrained field the offer doesn't report is treated as
+    /// "does not violate" -- only fields the offer actually reports are
+    /// checked against the constraint.
+    KeepWithWarning,
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct CommercialPlanningRequest {
+    /// Required only if `target_batch_mass_grams` is `Some` -- identifies
+    /// which entry in the plan's `balanced_reaction.products` is the
+    /// target, since `products` also holds curated byproducts.
+    pub target_composition: Option<Composition>,
+    pub target_batch_mass_grams: Option<f64>,
+    pub allowed_manufacturers: Option<BTreeSet<String>>,
+    pub excluded_manufacturers: BTreeSet<String>,
+    pub min_purity: Option<PurityFraction>,
+    pub max_lead_time_days: Option<u32>,
+    /// `None` = unrestricted (including `Discontinued`).
+    pub allowed_availability_statuses: Option<BTreeSet<AvailabilityStatus>>,
+    pub allowed_physical_forms: Option<BTreeSet<String>>,
+    pub required_tags: BTreeSet<String>,
+    pub excluded_tags: BTreeSet<String>,
+    /// Its own currency further constrains matching: a combination whose
+    /// total isn't comparable to this (different or unknown currency) can't
+    /// be checked against it, and is kept with a warning rather than
+    /// silently passed or failed.
+    pub max_total_cost: Option<Money>,
+    pub allowed_currencies: Option<BTreeSet<CurrencyCode>>,
+    pub require_known_price: bool,
+    pub require_known_package_size: bool,
+    pub missing_data_policy: MissingCommercialDataPolicy,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CommercialPlanningConfig {
+    pub max_offers_per_precursor: usize,
+    pub max_combinations_evaluated: usize,
+    pub max_results_returned: usize,
+}
+
+impl Default for CommercialPlanningConfig {
+    fn default() -> Self {
+        // ponytail: arbitrary-but-documented starting bounds; revisit once
+        // measured against a real catalog.
+        Self {
+            max_offers_per_precursor: 50,
+            max_combinations_evaluated: 10_000,
+            max_results_returned: 5,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------
+// Exclusions, warnings
+// ---------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum CommercialExclusionCode {
+    PurityBelowMinimum,
+    ManufacturerNotAllowed,
+    LeadTimeExceedsMaximum,
+    /// `missing_data_policy: Reject`, on a hard-constrained optional field
+    /// (purity/lead time/availability/physical form/currency).
+    MissingConstrainedField,
+    /// `request.require_known_price` and the offer's `unit_price` is `None`.
+    PriceRequiredButUnknown,
+    /// `request.require_known_package_size` and the offer's `package_mass`
+    /// is `None`.
+    PackageSizeRequiredButUnknown,
+    AvailabilityExcluded,
+    RequiredTagMissing,
+    ExcludedTagPresent,
+    CurrencyNotAllowed,
+    PhysicalFormNotAllowed,
+    OfferCountCapExceeded,
+    EvaluationBudgetExhausted,
+    /// `Money::checked_mul_quantity`/`checked_add` returned `None` -- the
+    /// offer is excluded, never treated as costing 0 and never panicked on.
+    CostOverflow,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CommercialExclusion {
+    pub precursor: PrecursorId,
+    /// `None` for a whole-row exclusion (zero surviving offers), not a
+    /// specific offer.
+    pub offer_id: Option<CommercialOfferId>,
+    pub reason_codes: Vec<CommercialExclusionCode>,
+    pub explanation: String,
+}
+
+/// Its own type (not a reuse of `PlanningWarning`), deliberately -- keeps
+/// this module's return type structurally separate from anything
+/// `score_plan` could ever consume, reinforcing at the type level that
+/// commercial data can never leak into scientific scoring.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CommercialWarning {
+    pub message: String,
+    pub severity: WarningSeverity,
+}
+
+// ---------------------------------------------------------------------
+// Result types
+// ---------------------------------------------------------------------
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CommercialOfferSelection {
+    pub precursor: PrecursorId,
+    pub precursor_composition: Composition,
+    pub reaction_coefficient: u64,
+    pub offer_id: CommercialOfferId,
+    /// Stoichiometric theoretical requirement -- purity-agnostic, always
+    /// computable from the plan alone. Never a yield claim, never adjusted
+    /// for process loss or weighing margin.
+    pub theoretical_pure_mass_required_grams: f64,
+    /// `None` if the offer's purity is unknown.
+    pub purity_adjusted_purchase_mass_grams: Option<f64>,
+    /// `None` if the offer's package mass is unknown.
+    pub package_count: Option<u64>,
+    pub purchased_mass_grams: Option<f64>,
+    pub excess_mass_grams: Option<f64>,
+    /// `None` if price or package size is unknown, or the multiplication
+    /// overflowed -- never 0.
+    pub subtotal: Option<Money>,
+    pub unresolved_fields: Vec<&'static str>,
+    pub assumptions: Vec<String>,
+    pub warnings: Vec<CommercialWarning>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CommercialCombination {
+    /// Offer ids joined in precursor-row order with `|` -- plain string
+    /// concatenation, not a hash: hash algorithms like `DefaultHasher`
+    /// aren't guaranteed stable across Rust versions, which would silently
+    /// break determinism tests later. String concatenation is trivially,
+    /// permanently deterministic.
+    pub combination_id: String,
+    pub selections: Vec<CommercialOfferSelection>,
+    /// `Some` only if every selection's subtotal is known and they all
+    /// share one currency.
+    pub total_cost: Option<Money>,
+    pub all_costs_known: bool,
+    /// `None` if any selection's lead time is unknown.
+    pub max_lead_time_days: Option<u32>,
+    pub all_availability_acceptable: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SearchBudgetSummary {
+    pub combinations_evaluated: usize,
+    pub combinations_omitted: u64,
+    /// `false` if the evaluation budget was hit *or* any row was truncated
+    /// by `max_offers_per_precursor` -- either one means the result set is
+    /// not a complete accounting of every possible combination.
+    pub is_exhaustive: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct UnresolvedCommercialField {
+    pub precursor: PrecursorId,
+    pub offer_id: CommercialOfferId,
+    pub field: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CommercialPlanAssessment {
+    pub plan_id: PlanId,
+    pub every_precursor_has_a_match: bool,
+    /// Ranked best-first, up to `max_results_returned`.
+    pub combinations: Vec<CommercialCombination>,
+    pub unmatched_precursors: Vec<(PrecursorId, Composition)>,
+    pub rejected_offers: Vec<CommercialExclusion>,
+    pub unresolved_commercial_fields: Vec<UnresolvedCommercialField>,
+    pub warnings: Vec<CommercialWarning>,
+    pub search_budget: SearchBudgetSummary,
+}
+
+// ---------------------------------------------------------------------
+// Quantity / cost math (all checked, never panics)
+// ---------------------------------------------------------------------
+
+/// Sum of atomic weights over a `Composition`'s amounts -- the one thing
+/// this module needs that nothing else in the crate exposes publicly (the
+/// IUPAC atomic-weight table is `pub(crate)` specifically for this reuse).
+pub(crate) fn molar_mass_g_per_mol(composition: &Composition) -> f64 {
+    composition
+        .iter()
+        .map(|(element, amount)| crate::thermodynamics::atomic_weight_amu(element) * amount)
+        .sum()
+}
+
+fn unresolved_fields_for(offer: &CommercialPrecursorOffer) -> Vec<&'static str> {
+    let mut fields = Vec::new();
+    if offer.purity.is_none() {
+        fields.push("purity");
+    }
+    if offer.package_mass.is_none() {
+        fields.push("package_mass");
+    }
+    if offer.unit_price.is_none() {
+        fields.push("unit_price");
+    }
+    if offer.lead_time_days.is_none() {
+        fields.push("lead_time_days");
+    }
+    fields
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct OfferQuantity {
+    purity_adjusted_purchase_mass_grams: Option<f64>,
+    package_count: Option<u64>,
+    purchased_mass_grams: Option<f64>,
+    excess_mass_grams: Option<f64>,
+    subtotal: Option<Money>,
+    cost_overflowed: bool,
+}
+
+fn compute_offer_quantity(
+    offer: &CommercialPrecursorOffer,
+    theoretical_pure_mass_required_grams: f64,
+) -> OfferQuantity {
+    let purity_adjusted_purchase_mass_grams = offer
+        .purity
+        .map(|p| theoretical_pure_mass_required_grams / p.value());
+    let package_count = match (purity_adjusted_purchase_mass_grams, offer.package_mass) {
+        (Some(mass), Some(pkg)) => Some((mass / pkg.grams()).ceil().max(0.0) as u64),
+        _ => None,
+    };
+    let purchased_mass_grams = package_count
+        .zip(offer.package_mass)
+        .map(|(count, pkg)| count as f64 * pkg.grams());
+    let excess_mass_grams = purchased_mass_grams
+        .zip(purity_adjusted_purchase_mass_grams)
+        .map(|(purchased, required)| purchased - required);
+    let mut cost_overflowed = false;
+    let subtotal = match (offer.unit_price, package_count) {
+        (Some(price), Some(count)) => match price.checked_mul_quantity(count) {
+            Some(money) => Some(money),
+            None => {
+                cost_overflowed = true;
+                None
+            }
+        },
+        _ => None,
+    };
+    OfferQuantity {
+        purity_adjusted_purchase_mass_grams,
+        package_count,
+        purchased_mass_grams,
+        excess_mass_grams,
+        subtotal,
+        cost_overflowed,
+    }
+}
+
+/// A lexicographic, totally-ordered cost key: comparable offers/combinations
+/// (known price, and -- for combinations -- one shared currency) always sort
+/// before incomparable ones, then by currency code, then by amount.
+///
+/// This is *not* the naive "compare cost only when comparable, else Equal"
+/// reading of "全価格が既知かつ同一通貨ならtotal costが低い" -- that reading
+/// is not transitive (verified with a concrete counterexample during
+/// implementation: A priced $200, B price-unknown, C priced $100, all
+/// otherwise tied. `Equal`-on-incomparable plus a later offer_id tiebreak
+/// gives A < B < C by id, but a direct A-vs-C cost comparison gives C < A --
+/// contradictory, and `sort_by` cannot resolve it deterministically). A
+/// fixed, total lexicographic ordering over the key tuple has no such
+/// bridge-collapse cases, by construction.
+fn cost_rank_key(subtotal: Option<Money>) -> (u8, Option<CurrencyCode>, u64) {
+    match subtotal {
+        Some(money) => (0, Some(money.currency()), money.minor_units()),
+        None => (1, None, 0),
+    }
+}
+
+// ---------------------------------------------------------------------
+// Hard constraints
+// ---------------------------------------------------------------------
+
+fn hard_constraint_violations(
+    offer: &CommercialPrecursorOffer,
+    request: &CommercialPlanningRequest,
+) -> Vec<CommercialExclusionCode> {
+    let mut codes = Vec::new();
+    let missing_is_reject = request.missing_data_policy == MissingCommercialDataPolicy::Reject;
+
+    if let Some(min_purity) = request.min_purity {
+        match offer.purity {
+            Some(p) if p.value() < min_purity.value() => {
+                codes.push(CommercialExclusionCode::PurityBelowMinimum)
+            }
+            None if missing_is_reject => {
+                codes.push(CommercialExclusionCode::MissingConstrainedField)
+            }
+            _ => {}
+        }
+    }
+
+    if request
+        .allowed_manufacturers
+        .as_ref()
+        .is_some_and(|allowed| !allowed.contains(&offer.manufacturer))
+        || request.excluded_manufacturers.contains(&offer.manufacturer)
+    {
+        codes.push(CommercialExclusionCode::ManufacturerNotAllowed);
+    }
+
+    if let Some(max_lead_time) = request.max_lead_time_days {
+        match offer.lead_time_days {
+            Some(lt) if lt > max_lead_time => {
+                codes.push(CommercialExclusionCode::LeadTimeExceedsMaximum)
+            }
+            None if missing_is_reject => {
+                codes.push(CommercialExclusionCode::MissingConstrainedField)
+            }
+            _ => {}
+        }
+    }
+
+    if let Some(allowed) = &request.allowed_availability_statuses {
+        match offer.availability {
+            Some(status) if !allowed.contains(&status) => {
+                codes.push(CommercialExclusionCode::AvailabilityExcluded)
+            }
+            None if missing_is_reject => {
+                codes.push(CommercialExclusionCode::MissingConstrainedField)
+            }
+            _ => {}
+        }
+    }
+
+    if let Some(allowed) = &request.allowed_physical_forms {
+        match &offer.physical_form {
+            Some(form) if !allowed.contains(form) => {
+                codes.push(CommercialExclusionCode::PhysicalFormNotAllowed)
+            }
+            None if missing_is_reject => {
+                codes.push(CommercialExclusionCode::MissingConstrainedField)
+            }
+            _ => {}
+        }
+    }
+
+    if request
+        .required_tags
+        .iter()
+        .any(|tag| !offer.tags.contains(tag))
+    {
+        codes.push(CommercialExclusionCode::RequiredTagMissing);
+    }
+    if offer
+        .tags
+        .iter()
+        .any(|tag| request.excluded_tags.contains(tag))
+    {
+        codes.push(CommercialExclusionCode::ExcludedTagPresent);
+    }
+
+    if let Some(allowed_currencies) = &request.allowed_currencies {
+        match offer.unit_price {
+            Some(price) if !allowed_currencies.contains(&price.currency()) => {
+                codes.push(CommercialExclusionCode::CurrencyNotAllowed)
+            }
+            None if missing_is_reject => {
+                codes.push(CommercialExclusionCode::MissingConstrainedField)
+            }
+            _ => {}
+        }
+    }
+
+    if request.require_known_price && offer.unit_price.is_none() {
+        codes.push(CommercialExclusionCode::PriceRequiredButUnknown);
+    }
+    if request.require_known_package_size && offer.package_mass.is_none() {
+        codes.push(CommercialExclusionCode::PackageSizeRequiredButUnknown);
+    }
+
+    codes
+}
+
+// ---------------------------------------------------------------------
+// Per-row candidate ranking
+// ---------------------------------------------------------------------
+
+struct OfferCandidate<'a> {
+    offer: &'a CommercialPrecursorOffer,
+    unresolved_fields: Vec<&'static str>,
+    quantity: OfferQuantity,
+}
+
+/// Total order, ascending = better: fewer unresolved fields, then cheaper
+/// (within a comparable cost bucket), then shorter lead time, then higher
+/// purity, then manufacturer/catalog_number/offer_id as final deterministic
+/// tiebreaks (offer_id is always unique, so this never returns `Equal` for
+/// two distinct offers).
+fn offer_rank_order(a: &OfferCandidate, b: &OfferCandidate) -> std::cmp::Ordering {
+    a.unresolved_fields
+        .len()
+        .cmp(&b.unresolved_fields.len())
+        .then_with(|| cost_rank_key(a.quantity.subtotal).cmp(&cost_rank_key(b.quantity.subtotal)))
+        .then_with(|| {
+            a.offer
+                .lead_time_days
+                .unwrap_or(u32::MAX)
+                .cmp(&b.offer.lead_time_days.unwrap_or(u32::MAX))
+        })
+        .then_with(|| {
+            let pa = a.offer.purity.map(|p| p.value()).unwrap_or(0.0);
+            let pb = b.offer.purity.map(|p| p.value()).unwrap_or(0.0);
+            pb.total_cmp(&pa) // descending: higher purity first
+        })
+        .then_with(|| a.offer.manufacturer.cmp(&b.offer.manufacturer))
+        .then_with(|| a.offer.catalog_number.cmp(&b.offer.catalog_number))
+        .then_with(|| a.offer.offer_id.0.cmp(&b.offer.offer_id.0))
+}
+
+// ---------------------------------------------------------------------
+// Bounded combination search
+// ---------------------------------------------------------------------
+
+/// A materialized, pre-computed rank key for one complete combination (one
+/// candidate index chosen per row) -- `Ord` compares only these precomputed
+/// fields, never needing external context once constructed, which is what
+/// lets it live directly inside a `BinaryHeap`.
+struct HeapEntry {
+    indices: Vec<usize>,
+    unresolved_sum: usize,
+    cost_key: (u8, Option<CurrencyCode>, u64),
+    max_lead_time: u32,
+    min_purity: f64,
+    manufacturers: Vec<String>,
+    catalog_numbers: Vec<String>,
+    offer_ids: Vec<String>,
+}
+
+impl HeapEntry {
+    fn new(indices: Vec<usize>, rows: &[Vec<OfferCandidate>]) -> Self {
+        let selected: Vec<&OfferCandidate> =
+            indices.iter().zip(rows).map(|(&i, row)| &row[i]).collect();
+        let unresolved_sum = selected.iter().map(|c| c.unresolved_fields.len()).sum();
+        let total_cost = combination_total_cost(&selected);
+        let cost_key = cost_rank_key(total_cost);
+        let max_lead_time = selected
+            .iter()
+            .map(|c| c.offer.lead_time_days.unwrap_or(u32::MAX))
+            .max()
+            .unwrap_or(0);
+        let min_purity = selected
+            .iter()
+            .map(|c| c.offer.purity.map(|p| p.value()).unwrap_or(0.0))
+            .fold(f64::INFINITY, f64::min);
+        let mut manufacturers: Vec<String> = selected
+            .iter()
+            .map(|c| c.offer.manufacturer.clone())
+            .collect();
+        manufacturers.sort();
+        let mut catalog_numbers: Vec<String> = selected
+            .iter()
+            .map(|c| c.offer.catalog_number.clone().unwrap_or_default())
+            .collect();
+        catalog_numbers.sort();
+        let mut offer_ids: Vec<String> = selected
+            .iter()
+            .map(|c| c.offer.offer_id.0.clone())
+            .collect();
+        offer_ids.sort();
+        Self {
+            indices,
+            unresolved_sum,
+            cost_key,
+            max_lead_time,
+            min_purity,
+            manufacturers,
+            catalog_numbers,
+            offer_ids,
+        }
+    }
+}
+
+impl PartialEq for HeapEntry {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == std::cmp::Ordering::Equal
+    }
+}
+impl Eq for HeapEntry {}
+impl PartialOrd for HeapEntry {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for HeapEntry {
+    /// Reversed vs. the "ascending = better" convention used elsewhere in
+    /// this module, so that `BinaryHeap` (a max-heap) pops the *best*
+    /// combination first -- `self` compares `Greater` exactly when `self`
+    /// is better than `other`.
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        other
+            .unresolved_sum
+            .cmp(&self.unresolved_sum)
+            .then_with(|| other.cost_key.cmp(&self.cost_key))
+            .then_with(|| other.max_lead_time.cmp(&self.max_lead_time))
+            .then_with(|| self.min_purity.total_cmp(&other.min_purity))
+            .then_with(|| other.manufacturers.cmp(&self.manufacturers))
+            .then_with(|| other.catalog_numbers.cmp(&self.catalog_numbers))
+            .then_with(|| other.offer_ids.cmp(&self.offer_ids))
+    }
+}
+
+fn combination_total_cost(selected: &[&OfferCandidate]) -> Option<Money> {
+    let mut iter = selected.iter();
+    let mut total = iter.next()?.quantity.subtotal?;
+    for candidate in iter {
+        total = total.checked_add(&candidate.quantity.subtotal?)?;
+    }
+    Some(total)
+}
+
+/// Enumerates complete combinations (one offer per row), best-first, up to
+/// `config.max_results_returned`, evaluating at most
+/// `config.max_combinations_evaluated`. Returns
+/// `(combinations, combinations_evaluated, total_combination_space)` -- the
+/// caller combines this with whether any row was truncated by
+/// `max_offers_per_precursor` to determine `is_exhaustive`.
+///
+/// Two-tier, not a single "k smallest combinations from k sorted lists"
+/// frontier search throughout: that lazy-heap technique is only provably
+/// correct when every row's pre-sort order is monotonic with respect to
+/// *every* combination-level aggregate it's used for -- true for
+/// unresolved-field-count (sum), lead time (max), and purity (min), but
+/// **false** for total-cost comparability. "Same currency as every other
+/// selected offer" is a joint property across rows, not a per-row-local
+/// one, so no fixed per-row order can make it monotonic (verified with a
+/// concrete failure caught by this module's own test suite during
+/// implementation: a two-currency catalog where the lazy search emitted a
+/// mixed-currency, cost-unknown combination as its first/best result, when
+/// a same-currency, cost-known combination existed and correctly outranks
+/// it under `HeapEntry::Ord` once actually compared).
+///
+/// So: whenever the *entire* combination space fits within
+/// `max_combinations_evaluated`, enumerate it exactly and rank by the real
+/// `HeapEntry::Ord` -- no monotonicity assumption needed, provably correct,
+/// and this is the common case for realistic per-precursor offer counts.
+/// Only when the space is too large to enumerate does this fall back to
+/// the lazy frontier search as a bounded, honest best-effort heuristic --
+/// `is_exhaustive: false` already tells the caller the result may not be
+/// the true global best in that case, which is now an accurate, not just
+/// a budget-exhaustion, caveat.
+fn search_combinations(
+    rows: &[Vec<OfferCandidate>],
+    config: &CommercialPlanningConfig,
+) -> (Vec<Vec<usize>>, usize, u64) {
+    if rows.is_empty() || rows.iter().any(|row| row.is_empty()) {
+        return (Vec::new(), 0, 0);
+    }
+
+    let total_space: u64 = rows
+        .iter()
+        .fold(1u64, |acc, row| acc.saturating_mul(row.len() as u64));
+
+    if total_space <= config.max_combinations_evaluated as u64 {
+        exhaustive_search(rows, config, total_space)
+    } else {
+        heuristic_search(rows, config, total_space)
+    }
+}
+
+/// Decodes every `combo_index` in `0..total_space` as a mixed-radix
+/// (per-row base) index vector, scores each exactly, and returns the top
+/// `max_results_returned` by the real `HeapEntry::Ord` -- correct by
+/// direct enumeration, no monotonicity assumption. `total_space` is
+/// guaranteed `<= config.max_combinations_evaluated` by the caller, so this
+/// never allocates more than the caller's own configured budget.
+fn exhaustive_search(
+    rows: &[Vec<OfferCandidate>],
+    config: &CommercialPlanningConfig,
+    total_space: u64,
+) -> (Vec<Vec<usize>>, usize, u64) {
+    let mut all: Vec<HeapEntry> = Vec::with_capacity(total_space as usize);
+    for combo_index in 0..total_space {
+        let mut remainder = combo_index;
+        let mut indices = vec![0usize; rows.len()];
+        for (row_i, row) in rows.iter().enumerate() {
+            let len = row.len() as u64;
+            indices[row_i] = (remainder % len) as usize;
+            remainder /= len;
+        }
+        all.push(HeapEntry::new(indices, rows));
+    }
+    all.sort_by(|a, b| b.cmp(a)); // descending: best (greatest) first
+    all.truncate(config.max_results_returned);
+    let results = all.into_iter().map(|e| e.indices).collect();
+    (results, total_space as usize, total_space)
+}
+
+/// Lazy frontier search (the "k smallest combinations from k sorted lists"
+/// technique, the same family as Dijkstra/A* optimality), used only when
+/// `total_space` exceeds the evaluation budget. Bounded (never visits more
+/// than `max_combinations_evaluated` states, never materializes the full
+/// product), and correct with respect to the aggregates that genuinely are
+/// per-row-monotonic (unresolved-field count, lead time, purity) -- but see
+/// `search_combinations`'s doc comment for why it is a best-effort
+/// heuristic, not a proof of global optimality, specifically for total-cost
+/// ranking across a catalog spanning more than one currency.
+fn heuristic_search(
+    rows: &[Vec<OfferCandidate>],
+    config: &CommercialPlanningConfig,
+    total_space: u64,
+) -> (Vec<Vec<usize>>, usize, u64) {
+    use std::collections::{BTreeSet, BinaryHeap};
+
+    let mut heap = BinaryHeap::new();
+    let mut visited: BTreeSet<Vec<usize>> = BTreeSet::new();
+    let start = vec![0usize; rows.len()];
+    visited.insert(start.clone());
+    heap.push(HeapEntry::new(start, rows));
+
+    let mut results = Vec::new();
+    let mut evaluated = 0usize;
+
+    while let Some(entry) = heap.pop() {
+        if evaluated >= config.max_combinations_evaluated {
+            break;
+        }
+        evaluated += 1;
+        results.push(entry.indices.clone());
+        if results.len() >= config.max_results_returned {
+            break;
+        }
+        for row_i in 0..rows.len() {
+            let mut neighbor = entry.indices.clone();
+            neighbor[row_i] += 1;
+            if neighbor[row_i] >= rows[row_i].len() {
+                continue;
+            }
+            if visited.insert(neighbor.clone()) {
+                heap.push(HeapEntry::new(neighbor, rows));
+            }
+        }
+    }
+
+    (results, evaluated, total_space)
+}
+
+fn build_combination(
+    indices: &[usize],
+    rows: &[Vec<OfferCandidate>],
+    row_meta: &[(PrecursorId, Composition, u64, f64)],
+) -> CommercialCombination {
+    let selected: Vec<&OfferCandidate> = indices
+        .iter()
+        .enumerate()
+        .map(|(row_i, &idx)| &rows[row_i][idx])
+        .collect();
+
+    let selections: Vec<CommercialOfferSelection> = indices
+        .iter()
+        .enumerate()
+        .map(|(row_i, &idx)| {
+            let candidate = &rows[row_i][idx];
+            let (precursor, composition, coefficient, theoretical_mass) = &row_meta[row_i];
+            let mut assumptions = Vec::new();
+            if candidate
+                .quantity
+                .purity_adjusted_purchase_mass_grams
+                .is_some()
+            {
+                assumptions.push(
+                    "Purchase mass was adjusted using the catalog purity value. This does not \
+                     establish that the unspecified impurities are inert or acceptable for the \
+                     synthesis."
+                        .to_string(),
+                );
+            }
+            CommercialOfferSelection {
+                precursor: precursor.clone(),
+                precursor_composition: composition.clone(),
+                reaction_coefficient: *coefficient,
+                offer_id: candidate.offer.offer_id.clone(),
+                theoretical_pure_mass_required_grams: *theoretical_mass,
+                purity_adjusted_purchase_mass_grams: candidate
+                    .quantity
+                    .purity_adjusted_purchase_mass_grams,
+                package_count: candidate.quantity.package_count,
+                purchased_mass_grams: candidate.quantity.purchased_mass_grams,
+                excess_mass_grams: candidate.quantity.excess_mass_grams,
+                subtotal: candidate.quantity.subtotal,
+                unresolved_fields: candidate.unresolved_fields.clone(),
+                assumptions,
+                warnings: Vec::new(),
+            }
+        })
+        .collect();
+
+    let total_cost = combination_total_cost(&selected);
+    let all_costs_known = selections.iter().all(|s| s.subtotal.is_some());
+    let (mut max_lead_time, mut lead_time_known) = (0u32, true);
+    for candidate in &selected {
+        match candidate.offer.lead_time_days {
+            Some(lt) => max_lead_time = max_lead_time.max(lt),
+            None => lead_time_known = false,
+        }
+    }
+    // "Acceptable" here is a fixed, documented judgment independent of the
+    // request's own availability filter (which may not have restricted
+    // availability at all): known and not Discontinued.
+    let all_availability_acceptable = selected
+        .iter()
+        .all(|c| matches!(c.offer.availability, Some(status) if status != AvailabilityStatus::Discontinued));
+    let combination_id = selected
+        .iter()
+        .map(|c| c.offer.offer_id.0.as_str())
+        .collect::<Vec<_>>()
+        .join("|");
+
+    CommercialCombination {
+        combination_id,
+        selections,
+        total_cost,
+        all_costs_known,
+        max_lead_time_days: lead_time_known.then_some(max_lead_time),
+        all_availability_acceptable,
+    }
+}
+
+// ---------------------------------------------------------------------
+// Public assessment API
+// ---------------------------------------------------------------------
+
+fn validate_request(request: &CommercialPlanningRequest) -> Result<(), CommercialCatalogError> {
+    if request.target_batch_mass_grams.is_some() && request.target_composition.is_none() {
+        return Err(CommercialCatalogError::InconsistentRequest {
+            reason: "target_batch_mass_grams was set without target_composition".to_string(),
+        });
+    }
+    Ok(())
+}
+
+fn degraded_assessment(
+    plan: &SynthesisPlan,
+    message: String,
+    severity: WarningSeverity,
+) -> CommercialPlanAssessment {
+    CommercialPlanAssessment {
+        plan_id: plan.plan_id.clone(),
+        every_precursor_has_a_match: false,
+        combinations: Vec::new(),
+        unmatched_precursors: Vec::new(),
+        rejected_offers: Vec::new(),
+        unresolved_commercial_fields: Vec::new(),
+        warnings: vec![CommercialWarning { message, severity }],
+        search_budget: SearchBudgetSummary {
+            combinations_evaluated: 0,
+            combinations_omitted: 0,
+            is_exhaustive: true,
+        },
+    }
+}
+
+/// Resolves the target's stoichiometric scale factor from
+/// `request.target_batch_mass_grams`/`target_composition`, if both are set
+/// and the target composition is actually found among this specific plan's
+/// reaction products. Falls back to `1.0` (the reaction's own minimal
+/// integer scale) otherwise, with a warning explaining why -- this is a
+/// per-plan condition, not a request-level error (a batch mass request
+/// legitimately doesn't apply to every plan in a heterogeneous batch).
+fn resolve_target_scale(
+    request: &CommercialPlanningRequest,
+    reaction: &BalancedReaction,
+    warnings: &mut Vec<CommercialWarning>,
+) -> f64 {
+    let (Some(target_mass), Some(target_composition)) =
+        (request.target_batch_mass_grams, &request.target_composition)
+    else {
+        return 1.0;
+    };
+    let Some(target_species) = reaction
+        .products
+        .iter()
+        .find(|species| &species.composition == target_composition)
+    else {
+        warnings.push(CommercialWarning {
+            message: "target_composition was not found among this plan's reaction products; \
+                stoichiometric quantities use the reaction's own minimal integer scale instead \
+                of the requested batch mass"
+                .to_string(),
+            severity: WarningSeverity::Caution,
+        });
+        return 1.0;
+    };
+    let target_basis_grams =
+        target_species.coefficient as f64 * molar_mass_g_per_mol(&target_species.composition);
+    if target_basis_grams <= 0.0 {
+        return 1.0;
+    }
+    target_mass / target_basis_grams
+}
+
+pub fn assess_commercial_precursors(
+    plan: &SynthesisPlan,
+    catalog: &CommercialPrecursorCatalog,
+    request: &CommercialPlanningRequest,
+    config: &CommercialPlanningConfig,
+) -> Result<CommercialPlanAssessment, CommercialCatalogError> {
+    validate_request(request)?;
+
+    let Some(reaction) = &plan.balanced_reaction else {
+        return Ok(degraded_assessment(
+            plan,
+            "plan has no balanced reaction; nothing to match against the catalog".to_string(),
+            WarningSeverity::Caution,
+        ));
+    };
+
+    if plan.precursors.len() != reaction.reactants.len() {
+        return Ok(degraded_assessment(
+            plan,
+            format!(
+                "plan.precursors (len {}) and plan.balanced_reaction.reactants (len {}) are not \
+                 the same length; cannot align precursor identities with reaction stoichiometry",
+                plan.precursors.len(),
+                reaction.reactants.len()
+            ),
+            WarningSeverity::Severe,
+        ));
+    }
+
+    let mut warnings = Vec::new();
+    let scale = resolve_target_scale(request, reaction, &mut warnings);
+
+    let mut unmatched_precursors = Vec::new();
+    let mut rejected_offers = Vec::new();
+    let mut unresolved_commercial_fields = Vec::new();
+    let mut any_row_truncated = false;
+    let mut rows: Vec<Vec<OfferCandidate>> = Vec::new();
+    let mut row_meta: Vec<(PrecursorId, Composition, u64, f64)> = Vec::new();
+
+    for (selection, species) in plan.precursors.iter().zip(&reaction.reactants) {
+        let theoretical_pure_mass_required_grams =
+            scale * species.coefficient as f64 * molar_mass_g_per_mol(&species.composition);
+        row_meta.push((
+            selection.precursor.clone(),
+            species.composition.clone(),
+            species.coefficient,
+            theoretical_pure_mass_required_grams,
+        ));
+
+        let raw_candidates: Vec<&CommercialPrecursorOffer> =
+            catalog.offers_matching(&species.composition).collect();
+        if raw_candidates.is_empty() {
+            unmatched_precursors.push((selection.precursor.clone(), species.composition.clone()));
+            rows.push(Vec::new());
+            continue;
+        }
+
+        let mut survivors: Vec<OfferCandidate> = Vec::new();
+        for offer in raw_candidates {
+            let quantity = compute_offer_quantity(offer, theoretical_pure_mass_required_grams);
+            let mut codes = hard_constraint_violations(offer, request);
+            if quantity.cost_overflowed {
+                codes.push(CommercialExclusionCode::CostOverflow);
+            }
+            if codes.is_empty() {
+                survivors.push(OfferCandidate {
+                    offer,
+                    unresolved_fields: unresolved_fields_for(offer),
+                    quantity,
+                });
+            } else {
+                rejected_offers.push(CommercialExclusion {
+                    precursor: selection.precursor.clone(),
+                    offer_id: Some(offer.offer_id.clone()),
+                    reason_codes: codes,
+                    explanation: format!(
+                        "offer {} excluded from precursor {}",
+                        offer.offer_id, selection.precursor
+                    ),
+                });
+            }
+        }
+
+        survivors.sort_by(offer_rank_order);
+
+        if survivors.len() > config.max_offers_per_precursor {
+            any_row_truncated = true;
+            for dropped in survivors.split_off(config.max_offers_per_precursor) {
+                rejected_offers.push(CommercialExclusion {
+                    precursor: selection.precursor.clone(),
+                    offer_id: Some(dropped.offer.offer_id.clone()),
+                    reason_codes: vec![CommercialExclusionCode::OfferCountCapExceeded],
+                    explanation: format!(
+                        "more than max_offers_per_precursor ({}) offers matched this precursor; \
+                         lower-ranked offers were dropped",
+                        config.max_offers_per_precursor
+                    ),
+                });
+            }
+            warnings.push(CommercialWarning {
+                message: format!(
+                    "precursor {} had more matching offers than max_offers_per_precursor; \
+                     the result set is not exhaustive for this precursor",
+                    selection.precursor
+                ),
+                severity: WarningSeverity::Info,
+            });
+        }
+
+        for candidate in &survivors {
+            for &field in &candidate.unresolved_fields {
+                unresolved_commercial_fields.push(UnresolvedCommercialField {
+                    precursor: selection.precursor.clone(),
+                    offer_id: candidate.offer.offer_id.clone(),
+                    field,
+                });
+            }
+        }
+
+        if survivors.is_empty() {
+            unmatched_precursors.push((selection.precursor.clone(), species.composition.clone()));
+        }
+        rows.push(survivors);
+    }
+
+    let every_precursor_has_a_match = unmatched_precursors.is_empty();
+    let (index_vectors, evaluated, total_space) = if every_precursor_has_a_match {
+        search_combinations(&rows, config)
+    } else {
+        (Vec::new(), 0, 0)
+    };
+
+    let combinations_omitted = total_space.saturating_sub(evaluated as u64);
+    let is_exhaustive =
+        every_precursor_has_a_match && !any_row_truncated && combinations_omitted == 0;
+    if every_precursor_has_a_match && !is_exhaustive {
+        warnings.push(CommercialWarning {
+            message: format!(
+                "combination search is not exhaustive: {evaluated} combination(s) evaluated, \
+                 {combinations_omitted} omitted"
+            ),
+            severity: WarningSeverity::Info,
+        });
+    }
+
+    let mut combinations: Vec<CommercialCombination> = index_vectors
+        .iter()
+        .map(|indices| build_combination(indices, &rows, &row_meta))
+        .collect();
+
+    if let Some(max_total_cost) = request.max_total_cost {
+        combinations.retain(|combination| match combination.total_cost {
+            Some(cost) if cost.currency() == max_total_cost.currency() => {
+                cost.minor_units() <= max_total_cost.minor_units()
+            }
+            // Not comparable (different/unknown currency): can't verify the
+            // ceiling, so keep the combination rather than silently
+            // passing or failing it, and say so.
+            _ => true,
+        });
+        if combinations.iter().any(|c| {
+            c.total_cost
+                .is_none_or(|cost| cost.currency() != max_total_cost.currency())
+        }) {
+            warnings.push(CommercialWarning {
+                message: "max_total_cost could not be verified for one or more combinations \
+                    whose total cost is unknown or in a different currency"
+                    .to_string(),
+                severity: WarningSeverity::Caution,
+            });
+        }
+    }
+
+    Ok(CommercialPlanAssessment {
+        plan_id: plan.plan_id.clone(),
+        every_precursor_has_a_match,
+        combinations,
+        unmatched_precursors,
+        rejected_offers,
+        unresolved_commercial_fields,
+        warnings,
+        search_budget: SearchBudgetSummary {
+            combinations_evaluated: evaluated,
+            combinations_omitted,
+            is_exhaustive,
+        },
+    })
+}
+
+/// Maps `assess_commercial_precursors` over each plan independently (fresh
+/// `max_combinations_evaluated` budget per plan). `Err` is reserved for a
+/// self-contradictory `request` -- checked once, up front, since it is
+/// identical for every plan in the batch; a single malformed *plan* never
+/// aborts the batch (see `assess_commercial_precursors`'s degraded-`Ok`
+/// handling for plan-shape issues).
+pub fn assess_commercial_plans(
+    plans: &[SynthesisPlan],
+    catalog: &CommercialPrecursorCatalog,
+    request: &CommercialPlanningRequest,
+    config: &CommercialPlanningConfig,
+) -> Result<Vec<CommercialPlanAssessment>, CommercialCatalogError> {
+    validate_request(request)?;
+    plans
+        .iter()
+        .map(|plan| assess_commercial_precursors(plan, catalog, request, config))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1486,5 +2527,864 @@ mod tests {
                 .unwrap();
         assert!(catalog.offers().is_empty());
         assert_eq!(report.rejected.len(), 1);
+    }
+
+    // ===================================================================
+    // Assessment: exact match, hard constraints, quantity/cost, search
+    // ===================================================================
+
+    #[test]
+    fn offers_matching_uses_exact_composition_equality() {
+        let (catalog, _) =
+            CommercialPrecursorCatalog::from_offers(vec![offer("A", "Fe2O3"), offer("B", "Fe4O6")]);
+        let target = parse_formula("Fe2O3").unwrap();
+        let matches: Vec<&str> = catalog
+            .offers_matching(&target)
+            .map(|o| o.offer_id.0.as_str())
+            .collect();
+        assert_eq!(matches, vec!["A"]);
+    }
+
+    fn money(minor_units: u64, currency: &str) -> Money {
+        Money::new(minor_units, CurrencyCode::new(currency).unwrap())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn priced_offer(
+        id: &str,
+        formula: &str,
+        manufacturer: &str,
+        purity: Option<f64>,
+        package_mass_g: Option<f64>,
+        price: Option<(u64, &str)>,
+        lead_time_days: Option<u32>,
+        availability: Option<AvailabilityStatus>,
+    ) -> CommercialPrecursorOffer {
+        let mut o = offer(id, formula);
+        o.manufacturer = manufacturer.to_string();
+        o.purity = purity.map(|p| PurityFraction::new(p).unwrap());
+        o.package_mass = package_mass_g.map(|m| PackageMass::new(m).unwrap());
+        o.unit_price = price.map(|(units, cur)| money(units, cur));
+        o.lead_time_days = lead_time_days;
+        o.availability = availability;
+        o
+    }
+
+    fn barium_titanate_plan() -> crate::report::SynthesisPlan {
+        use crate::config::PlanningConfig;
+        use crate::planner::Planner;
+        use crate::precursor::{
+            AvailabilityMetadata, InMemoryPrecursorCatalog, PrecursorCandidate,
+        };
+        use crate::target::{PlanningConstraints, TargetSpecification};
+
+        let planner = Planner::offline_minimal(
+            InMemoryPrecursorCatalog::new(vec![
+                PrecursorCandidate {
+                    id: PrecursorId("BaCO3".to_string()),
+                    composition: composition(&[("Ba", 1.0), ("C", 1.0), ("O", 3.0)]),
+                    availability: Some(AvailabilityMetadata {
+                        source: "curated_fixture".to_string(),
+                    }),
+                },
+                PrecursorCandidate {
+                    id: PrecursorId("TiO2".to_string()),
+                    composition: composition(&[("Ti", 1.0), ("O", 2.0)]),
+                    availability: Some(AvailabilityMetadata {
+                        source: "curated_fixture".to_string(),
+                    }),
+                },
+            ]),
+            PlanningConfig::default(),
+        );
+        let target_spec = TargetSpecification {
+            composition: composition(&[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)]),
+            structure: None,
+            desired_phase: None,
+            constraints: PlanningConstraints::default(),
+        };
+        let report = planner.plan(&target_spec, "2026-08-22T00:00:00Z").unwrap();
+        report
+            .plans
+            .into_iter()
+            .next()
+            .expect("BaCO3 + TiO2 -> BaTiO3 must produce at least one plan")
+    }
+
+    fn baco3_tio2_catalog(offers: Vec<CommercialPrecursorOffer>) -> CommercialPrecursorCatalog {
+        CommercialPrecursorCatalog::from_offers(offers).0
+    }
+
+    fn default_baco3_tio2_offers() -> Vec<CommercialPrecursorOffer> {
+        vec![
+            priced_offer(
+                "BACO3-CHEAP",
+                "BaCO3",
+                "Example Materials Ltd.",
+                Some(0.99),
+                Some(100.0),
+                Some((1000, "USD")),
+                Some(5),
+                Some(AvailabilityStatus::InStock),
+            ),
+            priced_offer(
+                "BACO3-PREMIUM",
+                "BaCO3",
+                "Demo Chemical Supply Co.",
+                Some(0.999),
+                Some(100.0),
+                Some((5000, "USD")),
+                Some(20),
+                Some(AvailabilityStatus::InStock),
+            ),
+            priced_offer(
+                "BACO3-NOPRICE",
+                "BaCO3",
+                "Example Materials Ltd.",
+                Some(0.98),
+                Some(100.0),
+                None,
+                Some(3),
+                Some(AvailabilityStatus::InStock),
+            ),
+            priced_offer(
+                "TIO2-CHEAP",
+                "TiO2",
+                "Example Materials Ltd.",
+                Some(0.99),
+                Some(50.0),
+                Some((800, "USD")),
+                Some(5),
+                Some(AvailabilityStatus::InStock),
+            ),
+            priced_offer(
+                "TIO2-EUR",
+                "TiO2",
+                "Osaka Demo Reagents",
+                Some(0.97),
+                Some(50.0),
+                Some((700, "EUR")),
+                Some(10),
+                Some(AvailabilityStatus::InStock),
+            ),
+        ]
+    }
+
+    #[test]
+    fn assess_commercial_precursors_matches_and_ranks_offers() {
+        let plan = barium_titanate_plan();
+        let catalog = baco3_tio2_catalog(default_baco3_tio2_offers());
+        let assessment = assess_commercial_precursors(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &CommercialPlanningConfig::default(),
+        )
+        .unwrap();
+
+        assert!(assessment.every_precursor_has_a_match);
+        assert!(!assessment.combinations.is_empty());
+        let best = &assessment.combinations[0];
+        // The cheapest USD-priced offer for each row should win the top combination.
+        let selected_ids: Vec<&str> = best
+            .selections
+            .iter()
+            .map(|s| s.offer_id.0.as_str())
+            .collect();
+        assert!(selected_ids.contains(&"BACO3-CHEAP"));
+        assert!(selected_ids.contains(&"TIO2-CHEAP"));
+        assert_eq!(best.total_cost, Some(money(3600, "USD"))); // 1000*2 + 800*2, see quantity test below
+    }
+
+    #[test]
+    fn assess_commercial_precursors_hand_checked_quantity_math() {
+        let plan = barium_titanate_plan();
+        let catalog = baco3_tio2_catalog(default_baco3_tio2_offers());
+        let assessment = assess_commercial_precursors(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &CommercialPlanningConfig::default(),
+        )
+        .unwrap();
+        let best = &assessment.combinations[0];
+        let baco3 = best
+            .selections
+            .iter()
+            .find(|s| s.offer_id.0 == "BACO3-CHEAP")
+            .unwrap();
+        // BaCO3 molar mass = 137.327 + 12.011 + 3*15.999 = 197.335 g/mol,
+        // coefficient 1, scale 1.0 -> theoretical requirement 197.335 g.
+        assert!((baco3.theoretical_pure_mass_required_grams - 197.335).abs() < 1e-6);
+        // purity-adjusted: 197.335 / 0.99 = 199.328...
+        let adjusted = baco3.purity_adjusted_purchase_mass_grams.unwrap();
+        assert!((adjusted - 197.335 / 0.99).abs() < 1e-6);
+        // package_mass 100g -> ceil(199.33.../100) = 2 packages
+        assert_eq!(baco3.package_count, Some(2));
+        assert_eq!(baco3.purchased_mass_grams, Some(200.0));
+        assert!(baco3.excess_mass_grams.unwrap() > 0.0);
+        assert_eq!(baco3.subtotal, Some(money(2000, "USD")));
+        assert!(
+            !baco3.assumptions.is_empty(),
+            "a purity adjustment was applied, so the caveat must be present"
+        );
+    }
+
+    #[test]
+    fn assess_commercial_precursors_no_balanced_reaction_is_a_degraded_ok_not_an_error() {
+        let mut plan = barium_titanate_plan();
+        plan.balanced_reaction = None;
+        let catalog = baco3_tio2_catalog(default_baco3_tio2_offers());
+        let assessment = assess_commercial_precursors(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &CommercialPlanningConfig::default(),
+        )
+        .unwrap();
+        assert!(!assessment.every_precursor_has_a_match);
+        assert!(assessment.combinations.is_empty());
+        assert!(!assessment.warnings.is_empty());
+    }
+
+    #[test]
+    fn assess_commercial_precursors_precursor_reactant_length_mismatch_is_a_degraded_ok() {
+        let mut plan = barium_titanate_plan();
+        plan.precursors.push(plan.precursors[0].clone());
+        let catalog = baco3_tio2_catalog(default_baco3_tio2_offers());
+        let assessment = assess_commercial_precursors(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &CommercialPlanningConfig::default(),
+        )
+        .unwrap();
+        assert!(!assessment.every_precursor_has_a_match);
+        assert!(assessment.combinations.is_empty());
+    }
+
+    #[test]
+    fn assess_commercial_precursors_unmatched_precursor_is_reported_not_silently_dropped() {
+        let plan = barium_titanate_plan();
+        // Only BaCO3 offers -- TiO2 has nothing in the catalog.
+        let catalog = baco3_tio2_catalog(vec![priced_offer(
+            "BACO3-ONLY",
+            "BaCO3",
+            "Example Materials Ltd.",
+            Some(0.99),
+            Some(100.0),
+            Some((1000, "USD")),
+            Some(5),
+            Some(AvailabilityStatus::InStock),
+        )]);
+        let assessment = assess_commercial_precursors(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &CommercialPlanningConfig::default(),
+        )
+        .unwrap();
+        assert!(!assessment.every_precursor_has_a_match);
+        assert_eq!(assessment.unmatched_precursors.len(), 1);
+        assert!(assessment.combinations.is_empty());
+    }
+
+    #[test]
+    fn assess_commercial_precursors_minimum_purity_filtering() {
+        let plan = barium_titanate_plan();
+        let mut offers = default_baco3_tio2_offers();
+        // A high-purity TiO2 offer so the 0.995 threshold below isolates
+        // the BaCO3-side filtering this test actually targets, rather than
+        // also starving the TiO2 row (both default TiO2 offers are < 0.995).
+        offers.push(priced_offer(
+            "TIO2-HIGHPURITY",
+            "TiO2",
+            "Example Materials Ltd.",
+            Some(0.999),
+            Some(50.0),
+            Some((900, "USD")),
+            Some(5),
+            Some(AvailabilityStatus::InStock),
+        ));
+        let catalog = baco3_tio2_catalog(offers);
+        let request = CommercialPlanningRequest {
+            min_purity: Some(PurityFraction::new(0.995).unwrap()),
+            ..Default::default()
+        };
+        let assessment = assess_commercial_precursors(
+            &plan,
+            &catalog,
+            &request,
+            &CommercialPlanningConfig::default(),
+        )
+        .unwrap();
+        let best = &assessment.combinations[0];
+        // Only BACO3-PREMIUM (0.999) clears the 0.995 bar for BaCO3.
+        assert!(
+            best.selections
+                .iter()
+                .any(|s| s.offer_id.0 == "BACO3-PREMIUM")
+        );
+        assert!(assessment.rejected_offers.iter().any(|r| {
+            r.offer_id.as_ref().map(|o| o.0.as_str()) == Some("BACO3-CHEAP")
+                && r.reason_codes
+                    .contains(&CommercialExclusionCode::PurityBelowMinimum)
+        }));
+    }
+
+    #[test]
+    fn assess_commercial_precursors_max_lead_time_filtering() {
+        let plan = barium_titanate_plan();
+        let catalog = baco3_tio2_catalog(default_baco3_tio2_offers());
+        let request = CommercialPlanningRequest {
+            max_lead_time_days: Some(10),
+            ..Default::default()
+        };
+        let assessment = assess_commercial_precursors(
+            &plan,
+            &catalog,
+            &request,
+            &CommercialPlanningConfig::default(),
+        )
+        .unwrap();
+        assert!(assessment.rejected_offers.iter().any(|r| {
+            r.offer_id.as_ref().map(|o| o.0.as_str()) == Some("BACO3-PREMIUM")
+                && r.reason_codes
+                    .contains(&CommercialExclusionCode::LeadTimeExceedsMaximum)
+        }));
+    }
+
+    #[test]
+    fn assess_commercial_precursors_availability_filtering() {
+        let plan = barium_titanate_plan();
+        let mut offers = default_baco3_tio2_offers();
+        offers.push(priced_offer(
+            "BACO3-DISCONTINUED",
+            "BaCO3",
+            "Example Materials Ltd.",
+            Some(0.9999),
+            Some(100.0),
+            Some((1, "USD")),
+            Some(1),
+            Some(AvailabilityStatus::Discontinued),
+        ));
+        let catalog = baco3_tio2_catalog(offers);
+        let request = CommercialPlanningRequest {
+            allowed_availability_statuses: Some(
+                [
+                    AvailabilityStatus::InStock,
+                    AvailabilityStatus::LimitedStock,
+                ]
+                .into_iter()
+                .collect(),
+            ),
+            ..Default::default()
+        };
+        let assessment = assess_commercial_precursors(
+            &plan,
+            &catalog,
+            &request,
+            &CommercialPlanningConfig::default(),
+        )
+        .unwrap();
+        assert!(assessment.rejected_offers.iter().any(|r| {
+            r.offer_id.as_ref().map(|o| o.0.as_str()) == Some("BACO3-DISCONTINUED")
+                && r.reason_codes
+                    .contains(&CommercialExclusionCode::AvailabilityExcluded)
+        }));
+    }
+
+    #[test]
+    fn assess_commercial_precursors_missing_price_reject_excludes_offer() {
+        let plan = barium_titanate_plan();
+        let catalog = baco3_tio2_catalog(default_baco3_tio2_offers());
+        let request = CommercialPlanningRequest {
+            require_known_price: true,
+            ..Default::default()
+        };
+        let assessment = assess_commercial_precursors(
+            &plan,
+            &catalog,
+            &request,
+            &CommercialPlanningConfig::default(),
+        )
+        .unwrap();
+        assert!(assessment.rejected_offers.iter().any(|r| {
+            r.offer_id.as_ref().map(|o| o.0.as_str()) == Some("BACO3-NOPRICE")
+                && r.reason_codes
+                    .contains(&CommercialExclusionCode::PriceRequiredButUnknown)
+        }));
+    }
+
+    #[test]
+    fn assess_commercial_precursors_missing_price_keep_with_warning_stays_selectable() {
+        let plan = barium_titanate_plan();
+        // Only the no-price BaCO3 offer, so it must be selected (or reported
+        // unresolved), never simply dropped, when the policy keeps it.
+        let catalog = baco3_tio2_catalog(vec![
+            priced_offer(
+                "BACO3-NOPRICE",
+                "BaCO3",
+                "Example Materials Ltd.",
+                Some(0.98),
+                Some(100.0),
+                None,
+                Some(3),
+                Some(AvailabilityStatus::InStock),
+            ),
+            priced_offer(
+                "TIO2-CHEAP",
+                "TiO2",
+                "Example Materials Ltd.",
+                Some(0.99),
+                Some(50.0),
+                Some((800, "USD")),
+                Some(5),
+                Some(AvailabilityStatus::InStock),
+            ),
+        ]);
+        let request = CommercialPlanningRequest::default(); // require_known_price: false
+        let assessment = assess_commercial_precursors(
+            &plan,
+            &catalog,
+            &request,
+            &CommercialPlanningConfig::default(),
+        )
+        .unwrap();
+        assert!(assessment.every_precursor_has_a_match);
+        let best = &assessment.combinations[0];
+        assert!(
+            best.selections
+                .iter()
+                .any(|s| s.offer_id.0 == "BACO3-NOPRICE")
+        );
+        assert_eq!(
+            best.total_cost, None,
+            "one selection's price is unknown, so no total cost"
+        );
+        assert!(
+            assessment
+                .unresolved_commercial_fields
+                .iter()
+                .any(|f| f.offer_id.0 == "BACO3-NOPRICE" && f.field == "unit_price")
+        );
+    }
+
+    #[test]
+    fn assess_commercial_precursors_mixed_currency_total_is_none_with_a_warning() {
+        let plan = barium_titanate_plan();
+        // Force selection of the EUR TiO2 offer by removing the USD one.
+        let catalog = baco3_tio2_catalog(vec![
+            priced_offer(
+                "BACO3-CHEAP",
+                "BaCO3",
+                "Example Materials Ltd.",
+                Some(0.99),
+                Some(100.0),
+                Some((1000, "USD")),
+                Some(5),
+                Some(AvailabilityStatus::InStock),
+            ),
+            priced_offer(
+                "TIO2-EUR",
+                "TiO2",
+                "Osaka Demo Reagents",
+                Some(0.97),
+                Some(50.0),
+                Some((700, "EUR")),
+                Some(10),
+                Some(AvailabilityStatus::InStock),
+            ),
+        ]);
+        let assessment = assess_commercial_precursors(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &CommercialPlanningConfig::default(),
+        )
+        .unwrap();
+        let best = &assessment.combinations[0];
+        assert_eq!(
+            best.total_cost, None,
+            "mixed currency must never be silently summed"
+        );
+        assert!(!best.all_costs_known || best.total_cost.is_none());
+    }
+
+    #[test]
+    fn assess_commercial_precursors_cost_overflow_excludes_the_offer_not_panics() {
+        let plan = barium_titanate_plan();
+        let mut offers = default_baco3_tio2_offers();
+        // An astronomically large unit price combined with a tiny package
+        // size drives package_count * price past u64::MAX.
+        offers.push(priced_offer(
+            "BACO3-OVERFLOW",
+            "BaCO3",
+            "Example Materials Ltd.",
+            Some(0.5),
+            Some(0.0000001),
+            Some((u64::MAX, "USD")),
+            Some(1),
+            Some(AvailabilityStatus::InStock),
+        ));
+        let catalog = baco3_tio2_catalog(offers);
+        let assessment = assess_commercial_precursors(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &CommercialPlanningConfig::default(),
+        )
+        .unwrap();
+        assert!(assessment.rejected_offers.iter().any(|r| {
+            r.offer_id.as_ref().map(|o| o.0.as_str()) == Some("BACO3-OVERFLOW")
+                && r.reason_codes
+                    .contains(&CommercialExclusionCode::CostOverflow)
+        }));
+    }
+
+    #[test]
+    fn assess_commercial_precursors_max_offers_per_precursor_truncates_and_warns() {
+        let plan = barium_titanate_plan();
+        let mut offers = default_baco3_tio2_offers();
+        for i in 0..10 {
+            offers.push(priced_offer(
+                &format!("BACO3-EXTRA-{i}"),
+                "BaCO3",
+                "Example Materials Ltd.",
+                Some(0.9),
+                Some(100.0),
+                Some((9999, "USD")),
+                Some(30),
+                Some(AvailabilityStatus::InStock),
+            ));
+        }
+        let catalog = baco3_tio2_catalog(offers);
+        let config = CommercialPlanningConfig {
+            max_offers_per_precursor: 2,
+            ..CommercialPlanningConfig::default()
+        };
+        let assessment = assess_commercial_precursors(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &config,
+        )
+        .unwrap();
+        assert!(!assessment.search_budget.is_exhaustive);
+        assert!(assessment.rejected_offers.iter().any(|r| {
+            r.reason_codes
+                .contains(&CommercialExclusionCode::OfferCountCapExceeded)
+        }));
+    }
+
+    #[test]
+    fn assess_commercial_precursors_max_combinations_evaluated_is_reported_not_silent() {
+        let plan = barium_titanate_plan();
+        let mut baco3_offers = Vec::new();
+        let mut tio2_offers = Vec::new();
+        for i in 0..5 {
+            baco3_offers.push(priced_offer(
+                &format!("BACO3-{i}"),
+                "BaCO3",
+                "Example Materials Ltd.",
+                Some(0.9),
+                Some(100.0),
+                Some((1000 + i, "USD")),
+                Some(5),
+                Some(AvailabilityStatus::InStock),
+            ));
+            tio2_offers.push(priced_offer(
+                &format!("TIO2-{i}"),
+                "TiO2",
+                "Example Materials Ltd.",
+                Some(0.9),
+                Some(50.0),
+                Some((800 + i, "USD")),
+                Some(5),
+                Some(AvailabilityStatus::InStock),
+            ));
+        }
+        let mut offers = baco3_offers;
+        offers.extend(tio2_offers);
+        let catalog = baco3_tio2_catalog(offers);
+        let config = CommercialPlanningConfig {
+            max_combinations_evaluated: 2,
+            max_results_returned: 100,
+            ..CommercialPlanningConfig::default()
+        };
+        let assessment = assess_commercial_precursors(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &config,
+        )
+        .unwrap();
+        assert_eq!(assessment.search_budget.combinations_evaluated, 2);
+        assert!(!assessment.search_budget.is_exhaustive);
+        assert!(assessment.search_budget.combinations_omitted > 0);
+    }
+
+    #[test]
+    fn assess_commercial_precursors_is_deterministic_across_repeated_calls() {
+        let plan = barium_titanate_plan();
+        let catalog = baco3_tio2_catalog(default_baco3_tio2_offers());
+        let a = assess_commercial_precursors(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &CommercialPlanningConfig::default(),
+        )
+        .unwrap();
+        let b = assess_commercial_precursors(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &CommercialPlanningConfig::default(),
+        )
+        .unwrap();
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn assess_commercial_precursors_ordering_is_independent_of_catalog_input_order() {
+        let plan = barium_titanate_plan();
+        let mut offers = default_baco3_tio2_offers();
+        let catalog_forward = baco3_tio2_catalog(offers.clone());
+        offers.reverse();
+        let catalog_reversed = baco3_tio2_catalog(offers);
+
+        let a = assess_commercial_precursors(
+            &plan,
+            &catalog_forward,
+            &CommercialPlanningRequest::default(),
+            &CommercialPlanningConfig::default(),
+        )
+        .unwrap();
+        let b = assess_commercial_precursors(
+            &plan,
+            &catalog_reversed,
+            &CommercialPlanningRequest::default(),
+            &CommercialPlanningConfig::default(),
+        )
+        .unwrap();
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn assess_commercial_precursors_deterministic_combination_id_is_row_ordered_not_sorted() {
+        let plan = barium_titanate_plan();
+        let catalog = baco3_tio2_catalog(default_baco3_tio2_offers());
+        let assessment = assess_commercial_precursors(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &CommercialPlanningConfig::default(),
+        )
+        .unwrap();
+        let best = &assessment.combinations[0];
+        let expected_id = best
+            .selections
+            .iter()
+            .map(|s| s.offer_id.0.as_str())
+            .collect::<Vec<_>>()
+            .join("|");
+        assert_eq!(best.combination_id, expected_id);
+    }
+
+    #[test]
+    fn assess_commercial_precursors_target_batch_mass_scales_quantities() {
+        let plan = barium_titanate_plan();
+        let catalog = baco3_tio2_catalog(default_baco3_tio2_offers());
+        let target_composition = composition(&[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)]);
+        let request = CommercialPlanningRequest {
+            target_composition: Some(target_composition),
+            // BaTiO3 molar mass ~= 233.192 g/mol; ask for 10x that in grams
+            // so the scale factor should come out to ~10.
+            target_batch_mass_grams: Some(2331.92),
+            ..Default::default()
+        };
+        let assessment = assess_commercial_precursors(
+            &plan,
+            &catalog,
+            &request,
+            &CommercialPlanningConfig::default(),
+        )
+        .unwrap();
+        let best = &assessment.combinations[0];
+        let baco3 = best
+            .selections
+            .iter()
+            .find(|s| s.offer_id.0 == "BACO3-CHEAP")
+            .unwrap();
+        // Without scaling this would be ~197.335g; with ~10x batch mass it
+        // should be roughly 10x that.
+        assert!(baco3.theoretical_pure_mass_required_grams > 1900.0);
+    }
+
+    #[test]
+    fn assess_commercial_precursors_target_not_found_among_products_warns_and_falls_back() {
+        let plan = barium_titanate_plan();
+        let catalog = baco3_tio2_catalog(default_baco3_tio2_offers());
+        let request = CommercialPlanningRequest {
+            target_composition: Some(composition(&[("Na", 1.0), ("Cl", 1.0)])),
+            target_batch_mass_grams: Some(100.0),
+            ..Default::default()
+        };
+        let assessment = assess_commercial_precursors(
+            &plan,
+            &catalog,
+            &request,
+            &CommercialPlanningConfig::default(),
+        )
+        .unwrap();
+        assert!(assessment.every_precursor_has_a_match);
+        assert!(assessment.warnings.iter().any(|w| {
+            w.message
+                .contains("was not found among this plan's reaction products")
+        }));
+    }
+
+    #[test]
+    fn assess_commercial_precursors_inconsistent_request_is_an_error() {
+        let plan = barium_titanate_plan();
+        let catalog = baco3_tio2_catalog(default_baco3_tio2_offers());
+        let request = CommercialPlanningRequest {
+            target_batch_mass_grams: Some(100.0),
+            target_composition: None,
+            ..Default::default()
+        };
+        let result = assess_commercial_precursors(
+            &plan,
+            &catalog,
+            &request,
+            &CommercialPlanningConfig::default(),
+        );
+        assert!(matches!(
+            result,
+            Err(CommercialCatalogError::InconsistentRequest { .. })
+        ));
+    }
+
+    #[test]
+    fn assess_commercial_plans_one_malformed_plan_does_not_abort_the_batch() {
+        let good_plan = barium_titanate_plan();
+        let mut bad_plan = good_plan.clone();
+        bad_plan.balanced_reaction = None;
+        let catalog = baco3_tio2_catalog(default_baco3_tio2_offers());
+        let results = assess_commercial_plans(
+            &[bad_plan, good_plan],
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &CommercialPlanningConfig::default(),
+        )
+        .unwrap();
+        assert_eq!(results.len(), 2);
+        assert!(!results[0].every_precursor_has_a_match);
+        assert!(results[1].every_precursor_has_a_match);
+    }
+
+    #[test]
+    fn assess_commercial_plans_rejects_an_inconsistent_request_before_touching_any_plan() {
+        let plan = barium_titanate_plan();
+        let catalog = baco3_tio2_catalog(default_baco3_tio2_offers());
+        let request = CommercialPlanningRequest {
+            target_batch_mass_grams: Some(100.0),
+            target_composition: None,
+            ..Default::default()
+        };
+        let result = assess_commercial_plans(
+            &[plan],
+            &catalog,
+            &request,
+            &CommercialPlanningConfig::default(),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn assess_commercial_precursors_empty_catalog_reports_everything_unmatched() {
+        let plan = barium_titanate_plan();
+        let (catalog, _) = CommercialPrecursorCatalog::from_offers(vec![]);
+        let assessment = assess_commercial_precursors(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &CommercialPlanningConfig::default(),
+        )
+        .unwrap();
+        assert!(!assessment.every_precursor_has_a_match);
+        assert_eq!(assessment.unmatched_precursors.len(), 2);
+    }
+
+    // -- brute-force oracle for the bounded combination search --
+
+    #[test]
+    fn combination_search_matches_a_brute_force_enumeration() {
+        // 3 rows x 3 offers = 27 combinations, small enough to enumerate
+        // directly and compare against the heap search's ranking.
+        fn row(prefix: &str, prices: [u64; 3]) -> Vec<CommercialPrecursorOffer> {
+            (0..3)
+                .map(|i| {
+                    priced_offer(
+                        &format!("{prefix}-{i}"),
+                        "Fe2O3",
+                        "Example Materials Ltd.",
+                        Some(0.9 + i as f64 * 0.01),
+                        Some(100.0),
+                        Some((prices[i], "USD")),
+                        Some(5 + i as u32),
+                        Some(AvailabilityStatus::InStock),
+                    )
+                })
+                .collect()
+        }
+        let row_a: Vec<CommercialPrecursorOffer> = row("A", [300, 100, 200]);
+        let row_b: Vec<CommercialPrecursorOffer> = row("B", [50, 250, 150]);
+        let row_c: Vec<CommercialPrecursorOffer> = row("C", [400, 350, 10]);
+
+        fn candidates_for(offers: &[CommercialPrecursorOffer]) -> Vec<OfferCandidate<'_>> {
+            let mut candidates: Vec<OfferCandidate<'_>> = offers
+                .iter()
+                .map(|offer| OfferCandidate {
+                    offer,
+                    unresolved_fields: unresolved_fields_for(offer),
+                    quantity: compute_offer_quantity(offer, 197.335),
+                })
+                .collect();
+            candidates.sort_by(offer_rank_order);
+            candidates
+        }
+        let rows = vec![
+            candidates_for(&row_a),
+            candidates_for(&row_b),
+            candidates_for(&row_c),
+        ];
+
+        let config = CommercialPlanningConfig {
+            max_offers_per_precursor: 50,
+            max_combinations_evaluated: 27,
+            max_results_returned: 27,
+        };
+        let (heap_results, evaluated, total_space) = search_combinations(&rows, &config);
+        assert_eq!(evaluated, 27);
+        assert_eq!(total_space, 27);
+
+        // Brute force: enumerate every (i, j, k) triple, build the same
+        // HeapEntry rank key, and sort best-first with the same Ord.
+        let mut all_combos: Vec<HeapEntry> = Vec::new();
+        for i in 0..3 {
+            for j in 0..3 {
+                for k in 0..3 {
+                    all_combos.push(HeapEntry::new(vec![i, j, k], &rows));
+                }
+            }
+        }
+        all_combos.sort_by(|a, b| b.cmp(a)); // descending: best (greatest) first
+        let oracle_order: Vec<Vec<usize>> = all_combos.into_iter().map(|e| e.indices).collect();
+
+        assert_eq!(
+            heap_results, oracle_order,
+            "the bounded heap search must visit combinations in exactly the same best-first order as a full brute-force enumeration"
+        );
     }
 }

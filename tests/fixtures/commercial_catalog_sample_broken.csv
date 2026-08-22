@@ -1,0 +1,5 @@
+offer_id,manufacturer,product_name,formula,source,purity_fraction,package_mass_g,price_minor_units,currency
+EML-OK,Example Materials Ltd.,Demo Oxide Grade A,BaCO3,synthetic_fixture,0.99,500,4550,USD
+EML-BAD-FORMULA,Example Materials Ltd.,Broken Formula Row,not-a-formula!,synthetic_fixture,0.99,500,4550,USD
+EML-BAD-PURITY,Example Materials Ltd.,Purity Out Of Range,TiO2,synthetic_fixture,1.5,500,4550,USD
+EML-BAD-PRICE-ONLY,Example Materials Ltd.,Price Without Currency,TiO2,synthetic_fixture,0.99,500,4550,

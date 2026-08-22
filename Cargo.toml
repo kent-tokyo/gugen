@@ -95,6 +95,21 @@ name = "literature_observation_planner_invariance"
 path = "tests/literature_observation_planner_invariance.rs"
 required-features = ["literature_corpus"]
 
+[[test]]
+name = "commercial_catalog"
+path = "tests/commercial_catalog.rs"
+required-features = ["commercial_catalog"]
+
+[[test]]
+name = "commercial_catalog_json"
+path = "tests/commercial_catalog_json.rs"
+required-features = ["commercial_catalog", "serde"]
+
+[[test]]
+name = "commercial_catalog_planner_invariance"
+path = "tests/commercial_catalog_planner_invariance.rs"
+required-features = ["commercial_catalog"]
+
 [[example]]
 name = "large_scale_benchmark"
 path = "examples/large_scale_benchmark.rs"
@@ -119,6 +134,11 @@ required-features = ["literature_corpus"]
 name = "literature_evidence_integration_report"
 path = "examples/literature_evidence_integration_report.rs"
 required-features = ["literature_corpus"]
+
+[[example]]
+name = "commercial_catalog_assessment"
+path = "examples/commercial_catalog_assessment.rs"
+required-features = ["commercial_catalog"]
 
 [[bin]]
 name = "gugen"

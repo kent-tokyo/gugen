@@ -115,9 +115,13 @@ pub use chematic_crystal_adapter::to_mikiwame_structure;
 #[cfg(feature = "commercial_catalog")]
 pub use commercial_catalog::{
     AvailabilityStatus, CasNumber, CommercialCatalogError, CommercialCatalogLoadMode,
-    CommercialCatalogLoadReport, CommercialOfferId, CommercialPrecursorCatalog,
-    CommercialPrecursorOffer, CommercialSourceType, CurrencyCode, Money, OfferProvenance,
-    PackageMass, ParticleSizeRangeUm, PurityFraction, RejectedOffer,
+    CommercialCatalogLoadReport, CommercialCombination, CommercialExclusion,
+    CommercialExclusionCode, CommercialOfferId, CommercialOfferSelection, CommercialPlanAssessment,
+    CommercialPlanningConfig, CommercialPlanningRequest, CommercialPrecursorCatalog,
+    CommercialPrecursorOffer, CommercialSourceType, CommercialWarning, CurrencyCode,
+    MissingCommercialDataPolicy, Money, OfferProvenance, PackageMass, ParticleSizeRangeUm,
+    PurityFraction, RejectedOffer, SearchBudgetSummary, UnresolvedCommercialField,
+    assess_commercial_plans, assess_commercial_precursors,
 };
 pub use composition::{Composition, ELEMENT_SYMBOLS, Element};
 pub use config::{PlanningConfig, SearchBudget};
