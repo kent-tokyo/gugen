@@ -16,9 +16,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   invariance tests, `tests/commercial_catalog_planner_invariance.rs`).
   CSV/JSON catalog import with a structured accepted/rejected load report
   (`CommercialPrecursorCatalog::load_csv`/`load_json`, `Strict`/`Lenient`
-  modes); a new chemical formula parser (`Composition` had none); exact
-  `Composition` matching only, no ratio normalization or alias inference;
-  hard commercial constraints; stoichiometric quantity calculation with
+  modes); a new chemical formula parser (`Composition` had none); commercial
+  offer matching on a canonical, scale-invariant element-ratio key (exact
+  rational arithmetic, not `Composition::eq` — `Fe2O3` matches `Fe4O6` as
+  the same substance at a different formula-unit scale, while hydrate vs.
+  anhydrous, different oxidation states, and different compounds stay
+  distinct; no alias or substitute-precursor inference); hard commercial
+  constraints; stoichiometric quantity calculation with
   purity-adjusted purchase mass and package-count rounding; currency-safe,
   overflow-checked cost totals (`Money` as integer minor units, never
   `f64`); a bounded search over complete purchasing combinations. See
@@ -27,15 +31,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   with gugen. No changes to any existing public API
   (`cargo semver-checks` confirms no breaking changes), no `SCHEMA_VERSION`
   bump, and `SynthesisPlan`/`Planner`/`score_plan` are untouched except for
-  a `pub(crate)` (crate-internal only) visibility change on
-  `thermodynamics.rs`'s existing atomic-weight table, reused rather than
-  duplicated.
+  two `pub(crate)` (crate-internal only) visibility changes, both reused
+  rather than duplicated: `thermodynamics.rs`'s existing atomic-weight
+  table, and `frac.rs`'s existing exact-integer GCD (used to reduce a
+  composition's element ratio to lowest terms for canonical commercial
+  offer matching — see "Composition matching policy" in the design doc).
 
 ### Known limitations
 
-- Commercial offer matching is exact-`Composition`-only: chemically
-  identical formulas written at a different formula-unit scale (`Fe2O3`
-  vs. `Fe4O6`) do not match. No alias or substitute-precursor inference.
+- Commercial offer matching bridges scale only, not identity: it never
+  infers aliases or substitute precursors, and a genuinely different
+  ratio, a hydrate vs. its anhydrous form, or a different compound never
+  match, even when chemically related.
 - The bounded combination search's total-cost ranking is a best-effort
   heuristic, not a guaranteed global optimum, specifically when a catalog
   spans more than one currency *and* the full combination space is too

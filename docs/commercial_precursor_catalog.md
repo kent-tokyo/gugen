@@ -8,8 +8,9 @@ the optional `commercial_catalog` feature.
 
 **In scope**: CSV/JSON commercial-offer catalog import with a structured
 accepted/rejected load report; a from-scratch chemical formula parser
-(nothing in gugen parses formula strings otherwise); exact `Composition`
-matching between a `SynthesisPlan`'s precursors and catalog offers; hard
+(nothing in gugen parses formula strings otherwise); canonical,
+scale-invariant composition-ratio matching between a `SynthesisPlan`'s
+precursors and catalog offers; hard
 commercial constraints (purity, manufacturer, lead time, availability, tags,
 currency, price/package-size requiredness); stoichiometric quantity
 calculation and purity-adjusted purchase mass; package-count rounding;
@@ -24,7 +25,7 @@ calibration from experimental results, order placement, regulatory
 determination, SDS generation, organic-molecule similarity search, a GUI, or
 a separate crate. Alias/substitute-precursor inference (treating two
 different-but-related compounds as interchangeable) is also out of scope —
-see "Exact match policy" below.
+see "Composition matching policy" below.
 
 No real catalog data ships with gugen. Every fixture under
 `tests/fixtures/commercial_catalog_*` is fictional (`"Example Materials
@@ -59,27 +60,68 @@ The same chemical substance can have many manufacturers and products. Phase
 `CommercialPrecursorOffer` is one manufacturer's specific product for sale.
 Multiple offers may share one `Composition`.
 
-## Exact match policy
+## Composition matching policy
 
-Matching is literal `Composition::eq` — the same exact-rational equality
-`Composition` already uses everywhere else in gugen, with **no ratio
-normalization added**. Two formulas at different formula-unit scale
-(`Fe2O3` vs. `Fe4O6`, chemically identical, written differently) do **not**
-match. This is deliberate, not an oversight: `Composition` is designed
-never to reduce to a minimal integer ratio (a load-bearing choice for
-doped/solid-solution formulas elsewhere in the crate), and adding
-normalization here risks conflating exactly the things this phase must
-keep distinct — anhydrous vs. hydrate, different oxidation states,
-carbonate vs. oxide, mixture vs. single compound, doped material vs. parent
-phase, polymorphs, solid solutions, and products that merely have similar
-names. Alias or substitute-precursor inference is explicitly deferred to a
-later phase.
+Matching (`CommercialPrecursorCatalog::offers_matching`, used internally by
+`assess_commercial_precursors`) is **not** gugen's crate-wide literal
+`Composition::eq` — that equality is unchanged and stays literal everywhere
+else in gugen (reaction balancing, `literature_observations.rs`'s
+precursor-set identity, and so on). Commercial offer matching instead uses
+a canonical, scale-invariant element-ratio key, computed via exact
+rational (`Frac`) arithmetic — never floating-point ratio comparison. Two
+formulas at different formula-unit scale (`Fe2O3`, Fe:2 O:3, vs. `Fe4O6`,
+Fe:4 O:6) reduce to the same key and **do** match — they are the same
+substance written at a different scale, and a real catalog frequently
+writes the same compound at a different formula-unit scale than a plan's
+own reaction output, purely as a notation choice. This is scale-invariant
+canonicalization of *one supplied formula*, not alias or
+substitute-precursor inference (still explicitly deferred to a later
+phase) — no cross-compound reasoning happens, only reducing one already-
+parsed composition's own ratio to lowest terms.
 
-Hydrate vs. anhydrous falls out of this for free, with no special-case
-logic: the formula parser folds a hydrate's water into the same flat
-element-amount map as the rest of the formula (`CaSO4` → `{Ca:1, S:1, O:4}`,
-`CaSO4·2H2O` → `{Ca:1, S:1, O:6, H:4}`), so they're simply different
-`Composition`s under ordinary equality.
+Canonicalization only bridges formulas that share a ratio; it never
+conflates formulas that don't. These remain distinct, exactly as before:
+
+- **Anhydrous vs. hydrate** (`CaSO4` vs. `CaSO4·2H2O`) — the formula
+  parser folds a hydrate's water into the same flat element-amount map as
+  the rest of the formula (`CaSO4` → `{Ca:1, S:1, O:4}`, `CaSO4·2H2O` →
+  `{Ca:1, S:1, O:6, H:4}`), so they have different, non-proportional atom
+  counts and reduce to different canonical keys.
+- **A genuinely different ratio** (`FeO`, Fe:1 O:1, vs. `Fe2O3`, Fe:2 O:3)
+  — not merely a different scale of the same ratio.
+- **Different oxidation states, different compounds** (carbonate vs.
+  oxide), **mixtures vs. single compounds, doped material vs. parent
+  phase, polymorphs, solid solutions, and products that merely share a
+  similar name or catalog description** — none of these are the same
+  element ratio to begin with, so canonicalization has no effect on them.
+
+**One deliberate exception, stated explicitly rather than left for a
+catalog to surface it first:** canonicalization never applies to a
+single-element composition. `O2` (dioxygen) and `O3` (ozone) both reduce
+trivially to "one atom of O," so a naive reduction would make them match
+— but they are different substances, the elemental analogue of the
+polymorph case above (`S` vs. `S8`, `P` vs. `P4` are the same situation).
+Unlike a multi-element compound's stoichiometric coefficients, a single
+element's atom count *is* its allotrope identity, not an arbitrary scale a
+catalog might write differently. `Composition` has no structural or
+allotrope information to distinguish `O2` from `O3` any other way, so
+`canonical_ratio_key` returns no canonical key at all for a single-element
+composition, and matching for those falls back to literal
+`Composition::eq` only — see `canonical_ratio_key_does_not_bridge_single_element_allotropes`.
+
+The original formula string a catalog supplied (`CommercialPrecursorOffer.formula`)
+is always preserved for display/diagnostics regardless of which policy
+matched it — canonicalization changes which offers are returned, never
+what an offer says about its own provenance. Concretely, a
+`CommercialOfferSelection.precursor_composition` (copied from the plan's
+own reaction row, e.g. `Fe2O3`) and the selected offer's `formula` (as the
+catalog wrote it, e.g. `Fe4O6`) can legitimately read differently side by
+side when canonical-ratio matching is what connected them — both are
+correct, and the quantity math is unaffected by which scale the catalog
+happened to use: `theoretical_pure_mass_required_grams` is computed from
+`species.composition` (the plan's own row) *before* any catalog matching
+happens, so the formula-unit scale a catalog wrote never enters the mass
+calculation.
 
 CAS numbers are **not** a basis for chemical-identity matching in this
 phase — they're recorded (with checksum-verification status: verified /

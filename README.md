@@ -113,8 +113,10 @@ Optional, off-by-default `commercial_catalog` feature: matches an existing
 `SynthesisPlan`'s precursors against a caller-supplied catalog of
 commercial offers (price, purity, package size, supplier), as a
 post-planning stage that never touches the plan's score, confidence,
-reaction, or process steps. Exact `Composition` matching only (no ratio
-normalization, no alias inference); CSV/JSON catalog import with a
+reaction, or process steps. Matches on a canonical, scale-invariant
+composition ratio via exact rational arithmetic (`Fe2O3` matches `Fe4O6`;
+hydrate vs. anhydrous and different compounds stay distinct; no alias or
+substitute-precursor inference); CSV/JSON catalog import with a
 structured accepted/rejected load report; stoichiometric quantity
 calculation, purity-adjusted purchase mass, package-count rounding,
 currency-safe checked-arithmetic cost totals; a bounded search over
