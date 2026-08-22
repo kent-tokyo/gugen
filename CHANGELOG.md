@@ -37,6 +37,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   composition's element ratio to lowest terms for canonical commercial
   offer matching — see "Composition matching policy" in the design doc).
 
+- Commercial Precursor Catalog stabilization (Phase 22.1): the
+  `commercial_catalog` module's assessment-result types now derive
+  `Serialize` under the `serde` feature — `CommercialPlanAssessment`,
+  `CommercialCombination`, `CommercialOfferSelection`, and
+  `UnresolvedCommercialField` (`Serialize` only, since each carries a
+  `&'static str` field that can't deserialize into a non-`'static`
+  borrow, matching this crate's existing precedent for other output-only
+  report types); `CommercialExclusion`, `CommercialWarning`,
+  `CommercialExclusionCode`, and `SearchBudgetSummary` get full
+  `Serialize`/`Deserialize`. Purely additive (`cargo semver-checks`
+  confirms no update required) — this was a real gap (none of these types
+  could be serialized at all before), not a behavior change. Also:
+  `src/commercial_catalog.rs` (previously one ~4,200-line file) is now a
+  responsibility-split directory module
+  (`src/commercial_catalog/{model,formula,loader,matching,quantity,search,assessment}.rs`)
+  with zero public API path changes; a `proptest`-based property test
+  suite (formula-parser round-trip and no-panic properties, canonical-
+  ratio-key scale-invariance and false-positive-match properties);
+  boundary tests for package-count rounding and `Money` overflow;
+  randomized exact-tier-vs-brute-force and heuristic-tier-budget
+  invariant tests; and a 40-offer end-to-end golden-fixture test.
+
 ### Known limitations
 
 - Commercial offer matching bridges scale only, not identity: it never
