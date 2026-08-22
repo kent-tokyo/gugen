@@ -112,6 +112,7 @@ mod tests {
     use super::super::model::*;
     use super::*;
     use crate::commercial_catalog::test_support::*;
+    use proptest::prelude::*;
 
     #[test]
     fn composition_eq_itself_stays_literal_even_though_commercial_matching_does_not() {
@@ -216,8 +217,6 @@ mod tests {
         assert_eq!(canonical_ratio_key(&reordered).unwrap(), key_a);
     }
 
-    // -- validated scalars --
-
     #[test]
     fn offers_matching_uses_canonical_ratio_equality() {
         // "B" is written at a different formula-unit scale (Fe4O6) than the
@@ -251,5 +250,101 @@ mod tests {
         let target = parse_formula("Fe2O3").unwrap();
         let matched = catalog.offers_matching(&target).next().unwrap();
         assert_eq!(matched.formula, "Fe4O6");
+    }
+
+    const MATCHING_ELEMENT_POOL: &[&str] = &[
+        "Fe", "O", "Al", "Ba", "Ti", "Ca", "S", "Cu", "La", "Sr", "Mn", "Zn",
+    ];
+
+    /// 2-4 distinct elements, whole-number amounts 1-99 -- kept as whole
+    /// numbers (Frac denominator always 1) so the property tests below
+    /// aren't also exercising rationalization-tolerance edge cases, only
+    /// the ratio-reduction logic itself.
+    fn arbitrary_multi_element_composition() -> impl Strategy<Value = Composition> {
+        prop::collection::hash_map(
+            prop::sample::select(MATCHING_ELEMENT_POOL),
+            1u32..=99u32,
+            2..=4,
+        )
+        .prop_map(|pairs| {
+            Composition::new(pairs.into_iter().map(|(sym, n)| (element(sym), n as f64))).unwrap()
+        })
+    }
+
+    proptest! {
+        /// Canonicalizing a composition and canonicalizing that same
+        /// composition scaled by a random positive integer must produce
+        /// the same key -- the core claim of canonical-ratio matching,
+        /// checked across many random compositions rather than only the
+        /// hand-picked Fe2O3/Fe4O6-style cases above.
+        #[test]
+        fn canonical_ratio_key_is_scale_invariant(
+            composition in arbitrary_multi_element_composition(),
+            scale in 1i128..=20,
+        ) {
+            let scaled = Composition::new(
+                composition
+                    .elements()
+                    .map(|e| (e, composition.amount_of(e).unwrap() * scale as f64)),
+            )
+            .unwrap();
+            let original_key = canonical_ratio_key(&composition);
+            prop_assert!(original_key.is_some());
+            prop_assert_eq!(original_key, canonical_ratio_key(&scaled));
+        }
+
+        /// Randomized version of `canonical_ratio_key_is_deterministic`:
+        /// reordering a composition's element pairs before reconstruction
+        /// must never change the canonical key.
+        #[test]
+        fn canonical_ratio_key_is_deterministic_under_reordering(
+            composition in arbitrary_multi_element_composition(),
+        ) {
+            let key_a = canonical_ratio_key(&composition);
+            let mut pairs: Vec<(Element, f64)> = composition
+                .elements()
+                .map(|e| (e, composition.amount_of(e).unwrap()))
+                .collect();
+            pairs.reverse();
+            let reordered = Composition::new(pairs).unwrap();
+            prop_assert_eq!(key_a, canonical_ratio_key(&reordered));
+        }
+
+        /// The direction that actually matters for ruling out a
+        /// false-positive match: if two *independently* random
+        /// compositions' canonical keys are both `Some` and equal, one
+        /// must genuinely be a positive-rational-scalar multiple of the
+        /// other. Verified directly via exact rational cross-multiplication
+        /// (`a[el1]/b[el1] == a[el2]/b[el2]` checked as
+        /// `a[el1]*b[el2] == a[el2]*b[el1]`, never floating-point
+        /// division) -- the forward "scaling a composition preserves its
+        /// key" property above can't by itself catch a bug where two
+        /// unrelated compositions accidentally collide on the same
+        /// reduced key.
+        #[test]
+        fn canonical_ratio_key_equality_implies_proportional_composition(
+            a in arbitrary_multi_element_composition(),
+            b in arbitrary_multi_element_composition(),
+        ) {
+            if let (Some(key_a), Some(key_b)) = (canonical_ratio_key(&a), canonical_ratio_key(&b)) {
+                if key_a == key_b {
+                    let elements_a: Vec<Element> = a.elements().collect();
+                    let elements_b: Vec<Element> = b.elements().collect();
+                    prop_assert_eq!(&elements_a, &elements_b);
+
+                    let first = elements_a[0];
+                    let a_first = a.amount_frac_of(first).unwrap();
+                    let b_first = b.amount_frac_of(first).unwrap();
+                    for &el in &elements_a[1..] {
+                        let a_el = a.amount_frac_of(el).unwrap();
+                        let b_el = b.amount_frac_of(el).unwrap();
+                        prop_assert_eq!(
+                            a_first.checked_mul(b_el).unwrap(),
+                            a_el.checked_mul(b_first).unwrap()
+                        );
+                    }
+                }
+            }
+        }
     }
 }
