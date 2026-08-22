@@ -4,6 +4,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-08-22
+
+Adds the Commercial Precursor Catalog: an optional, off-by-default
+`commercial_catalog` feature that matches an existing `SynthesisPlan`'s
+precursors against a caller-supplied catalog of commercial offers, as a
+post-planning stage that never affects the plan's chemical score,
+confidence, reaction, or process steps (Phase 22, PR #42), followed
+immediately by a stabilization pass (Phase 22.1, PR #43) splitting the
+new module into a responsibility-driven layout, adding property-based
+and golden-fixture test coverage, and closing a real compatibility gap
+(the assessment-result types couldn't be serialized under the `serde`
+feature at all). No changes to any previously-existing public API
+(`cargo semver-checks` confirms no breaking changes against the 0.4.1
+baseline), no `SCHEMA_VERSION` bump. Full detail in the entries below and
+in `docs/commercial_precursor_catalog.md`.
+
 ### Added
 
 - Commercial Precursor Catalog (Phase 22), behind a new optional
