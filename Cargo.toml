@@ -113,6 +113,11 @@ name = "commercial_catalog_planner_invariance"
 path = "tests/commercial_catalog_planner_invariance.rs"
 required-features = ["commercial_catalog"]
 
+[[test]]
+name = "commercial_catalog_golden"
+path = "tests/commercial_catalog_golden.rs"
+required-features = ["commercial_catalog", "serde"]
+
 [[example]]
 name = "large_scale_benchmark"
 path = "examples/large_scale_benchmark.rs"

@@ -544,6 +544,7 @@ impl Default for CommercialPlanningConfig {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum CommercialExclusionCode {
     PurityBelowMinimum,
     ManufacturerNotAllowed,
@@ -569,6 +570,7 @@ pub enum CommercialExclusionCode {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CommercialExclusion {
     pub precursor: PrecursorId,
     /// `None` for a whole-row exclusion (zero surviving offers), not a
@@ -583,12 +585,20 @@ pub struct CommercialExclusion {
 /// `score_plan` could ever consume, reinforcing at the type level that
 /// commercial data can never leak into scientific scoring.
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CommercialWarning {
     pub message: String,
     pub severity: WarningSeverity,
 }
 
+/// `Serialize` only, deliberately no `Deserialize`: `unresolved_fields`
+/// is `Vec<&'static str>`, which cannot deserialize into a non-`'static`
+/// borrow from an arbitrary input buffer (the general reason every
+/// `&'static str`-bearing type below is Serialize-only, matching this
+/// crate's existing precedent for output-only report types --
+/// `reaction.rs`/`process.rs`/`thermodynamics.rs`/`score.rs`).
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct CommercialOfferSelection {
     pub precursor: PrecursorId,
     pub precursor_composition: Composition,
@@ -612,7 +622,10 @@ pub struct CommercialOfferSelection {
     pub warnings: Vec<CommercialWarning>,
 }
 
+/// `Serialize` only -- see `CommercialOfferSelection`'s doc comment
+/// (`selections` transitively carries its `&'static str` fields).
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct CommercialCombination {
     /// Offer ids joined in precursor-row order with `|` -- plain string
     /// concatenation, not a hash: hash algorithms like `DefaultHasher`
@@ -635,6 +648,7 @@ pub struct CommercialCombination {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SearchBudgetSummary {
     pub combinations_evaluated: usize,
     pub combinations_omitted: u64,
@@ -644,14 +658,21 @@ pub struct SearchBudgetSummary {
     pub is_exhaustive: bool,
 }
 
+/// `Serialize` only -- see `CommercialOfferSelection`'s doc comment
+/// (`field` itself is `&'static str`).
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct UnresolvedCommercialField {
     pub precursor: PrecursorId,
     pub offer_id: CommercialOfferId,
     pub field: &'static str,
 }
 
+/// `Serialize` only -- see `CommercialOfferSelection`'s doc comment
+/// (`combinations`/`unresolved_commercial_fields` transitively carry
+/// `&'static str` fields).
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct CommercialPlanAssessment {
     pub plan_id: PlanId,
     pub every_precursor_has_a_match: bool,
