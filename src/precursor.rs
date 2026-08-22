@@ -262,7 +262,7 @@ pub fn search_precursor_sets(
             // re-derive the id list by matching composition rather than
             // assuming index alignment with `ids`.
             let matched_ids: Vec<PrecursorId> = reaction
-                .reactants
+                .reactants()
                 .iter()
                 .map(|species| {
                     chosen
@@ -598,10 +598,14 @@ mod tests {
         for accepted in &outcome.accepted {
             assert_eq!(
                 accepted.precursors.len(),
-                accepted.reaction.reactants.len(),
+                accepted.reaction.reactants().len(),
                 "precursors and reactants must be the same length: {accepted:?}"
             );
-            for (id, species) in accepted.precursors.iter().zip(&accepted.reaction.reactants) {
+            for (id, species) in accepted
+                .precursors
+                .iter()
+                .zip(accepted.reaction.reactants())
+            {
                 let candidate = catalog.iter().find(|c| &c.id == id).unwrap();
                 assert_eq!(
                     candidate.composition, species.composition,

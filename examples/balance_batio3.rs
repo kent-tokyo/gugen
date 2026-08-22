@@ -30,14 +30,14 @@ fn main() -> Result<(), gugen::GugenError> {
     let reactions = balance(&[bao, tio2], &[batio3])?;
     for reaction in &reactions {
         let lhs: Vec<String> = reaction
-            .reactants
+            .reactants()
             .iter()
-            .map(|s| format!("{} {}", s.coefficient, formula(&s.composition)))
+            .map(|s| format!("{} {}", s.coefficient(), formula(&s.composition)))
             .collect();
         let rhs: Vec<String> = reaction
-            .products
+            .products()
             .iter()
-            .map(|s| format!("{} {}", s.coefficient, formula(&s.composition)))
+            .map(|s| format!("{} {}", s.coefficient(), formula(&s.composition)))
             .collect();
         println!("{} -> {}", lhs.join(" + "), rhs.join(" + "));
     }

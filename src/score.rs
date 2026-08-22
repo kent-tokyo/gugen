@@ -445,7 +445,7 @@ pub fn score_plan(
         Some(reaction) => {
             let target_elements: BTreeSet<Element> = target.elements().collect();
             let covered: BTreeSet<Element> = reaction
-                .reactants
+                .reactants()
                 .iter()
                 .flat_map(|s| s.composition.elements())
                 .collect();

@@ -168,18 +168,18 @@ fn vector_to_reaction(
         .iter()
         .zip(reactant_coeffs)
         .filter(|&(_, &coeff)| coeff != 0)
-        .map(|(composition, &coeff)| ReactionSpecies {
-            composition: composition.clone(),
-            coefficient: coeff,
+        .map(|(composition, &coeff)| {
+            ReactionSpecies::new(composition.clone(), coeff)
+                .expect("coeff != 0 already filtered above")
         })
         .collect();
     let product_species: Vec<ReactionSpecies> = products
         .iter()
         .zip(product_coeffs)
         .filter(|&(_, &coeff)| coeff != 0)
-        .map(|(composition, &coeff)| ReactionSpecies {
-            composition: composition.clone(),
-            coefficient: coeff,
+        .map(|(composition, &coeff)| {
+            ReactionSpecies::new(composition.clone(), coeff)
+                .expect("coeff != 0 already filtered above")
         })
         .collect();
 
@@ -276,10 +276,10 @@ mod tests {
         let results = balance(&reactants, &products).unwrap();
         assert_eq!(results.len(), 1);
         let r = &results[0];
-        assert_eq!(r.reactants.len(), 2);
-        assert_eq!(r.products.len(), 1);
-        assert!(r.reactants.iter().all(|s| s.coefficient == 1));
-        assert!(r.products.iter().all(|s| s.coefficient == 1));
+        assert_eq!(r.reactants().len(), 2);
+        assert_eq!(r.products().len(), 1);
+        assert!(r.reactants().iter().all(|s| s.coefficient() == 1));
+        assert!(r.products().iter().all(|s| s.coefficient() == 1));
     }
 
     /// AGENTS.md §21.1: "carbonateからoxide材料＋CO2".
@@ -295,9 +295,9 @@ mod tests {
         let results = balance(&reactants, &products).unwrap();
         assert_eq!(results.len(), 1);
         let r = &results[0];
-        assert_eq!(r.reactants[0].coefficient, 1);
-        assert_eq!(r.products.len(), 2);
-        assert!(r.products.iter().all(|s| s.coefficient == 1));
+        assert_eq!(r.reactants()[0].coefficient(), 1);
+        assert_eq!(r.products().len(), 2);
+        assert!(r.products().iter().all(|s| s.coefficient() == 1));
     }
 
     /// Checks an assumption precursor search (Phase 3) is built on: does
@@ -336,7 +336,7 @@ mod tests {
         let everything = balance(&reactants, &[target, co2, h2o, o2]).unwrap();
         assert_eq!(everything.len(), 1);
         assert_eq!(
-            everything[0].products.len(),
+            everything[0].products().len(),
             2,
             "H2O and O2 must be dropped at zero coefficient"
         );
@@ -354,19 +354,19 @@ mod tests {
         let results = balance(&reactants, &products).unwrap();
         assert_eq!(results.len(), 1);
         let r = &results[0];
-        assert_eq!(r.reactants[0].coefficient, 2);
+        assert_eq!(r.reactants()[0].coefficient(), 2);
         let ag = r
-            .products
+            .products()
             .iter()
             .find(|s| s.composition.amount_of(element("Ag")).is_some())
             .unwrap();
         let o2 = r
-            .products
+            .products()
             .iter()
             .find(|s| s.composition.amount_of(element("O")).is_some())
             .unwrap();
-        assert_eq!(ag.coefficient, 4);
-        assert_eq!(o2.coefficient, 1);
+        assert_eq!(ag.coefficient(), 4);
+        assert_eq!(o2.coefficient(), 1);
     }
 
     /// AGENTS.md §21.1: O2 as a reactant.
@@ -380,18 +380,18 @@ mod tests {
         assert_eq!(results.len(), 1);
         let r = &results[0];
         let fe = r
-            .reactants
+            .reactants()
             .iter()
             .find(|s| s.composition.amount_of(element("Fe")).is_some())
             .unwrap();
         let o2 = r
-            .reactants
+            .reactants()
             .iter()
             .find(|s| s.composition.amount_of(element("O")).is_some())
             .unwrap();
-        assert_eq!(fe.coefficient, 4);
-        assert_eq!(o2.coefficient, 3);
-        assert_eq!(r.products[0].coefficient, 2);
+        assert_eq!(fe.coefficient(), 4);
+        assert_eq!(o2.coefficient(), 3);
+        assert_eq!(r.products()[0].coefficient(), 2);
     }
 
     /// AGENTS.md §21.1: "複数前駆体" (multiple precursors).
@@ -416,8 +416,8 @@ mod tests {
 
         let results = balance(&reactants, &products).unwrap();
         assert_eq!(results.len(), 1);
-        assert!(results[0].reactants.iter().all(|s| s.coefficient == 1));
-        assert!(results[0].products.iter().all(|s| s.coefficient == 1));
+        assert!(results[0].reactants().iter().all(|s| s.coefficient() == 1));
+        assert!(results[0].products().iter().all(|s| s.coefficient() == 1));
     }
 
     /// AGENTS.md §21.1: "解なし" (no solution) -- disjoint element sets.
@@ -452,8 +452,8 @@ mod tests {
         // Every returned reaction must use exactly one of the three
         // products (this basis-vector construction zeroes the other two).
         for r in &results {
-            assert_eq!(r.products.len(), 1);
-            assert!(r.reactants.iter().all(|s| s.coefficient > 0));
+            assert_eq!(r.products().len(), 1);
+            assert!(r.reactants().iter().all(|s| s.coefficient() > 0));
         }
     }
 
@@ -469,18 +469,18 @@ mod tests {
         assert_eq!(results.len(), 1);
         let r = &results[0];
         let h2 = r
-            .reactants
+            .reactants()
             .iter()
             .find(|s| s.composition.amount_of(element("H")).is_some())
             .unwrap();
         let o2 = r
-            .reactants
+            .reactants()
             .iter()
             .find(|s| s.composition.amount_of(element("O")).is_some())
             .unwrap();
-        assert_eq!(h2.coefficient, 2);
-        assert_eq!(o2.coefficient, 1);
-        assert_eq!(r.products[0].coefficient, 2);
+        assert_eq!(h2.coefficient(), 2);
+        assert_eq!(o2.coefficient(), 1);
+        assert_eq!(r.products()[0].coefficient(), 2);
     }
 
     /// AGENTS.md §21.1: 元素保存 (element conservation) -- verify the
@@ -498,14 +498,14 @@ mod tests {
         let r = &results[0];
         for &el in &[element("Ba"), element("Ti"), element("O")] {
             let lhs: f64 = r
-                .reactants
+                .reactants()
                 .iter()
-                .map(|s| s.composition.amount_of(el).unwrap_or(0.0) * s.coefficient as f64)
+                .map(|s| s.composition.amount_of(el).unwrap_or(0.0) * s.coefficient() as f64)
                 .sum();
             let rhs: f64 = r
-                .products
+                .products()
                 .iter()
-                .map(|s| s.composition.amount_of(el).unwrap_or(0.0) * s.coefficient as f64)
+                .map(|s| s.composition.amount_of(el).unwrap_or(0.0) * s.coefficient() as f64)
                 .sum();
             assert!(
                 (lhs - rhs).abs() < 1e-9,
@@ -535,8 +535,16 @@ mod tests {
         assert_eq!(results_a.len(), 1);
         assert_eq!(results_b.len(), 1);
 
-        let total_a: u64 = results_a[0].reactants.iter().map(|s| s.coefficient).sum();
-        let total_b: u64 = results_b[0].reactants.iter().map(|s| s.coefficient).sum();
+        let total_a: u64 = results_a[0]
+            .reactants()
+            .iter()
+            .map(|s| s.coefficient())
+            .sum();
+        let total_b: u64 = results_b[0]
+            .reactants()
+            .iter()
+            .map(|s| s.coefficient())
+            .sum();
         assert_eq!(total_a, total_b);
     }
 
@@ -555,18 +563,18 @@ mod tests {
         assert_eq!(results.len(), 1);
         let r = &results[0];
         let na = r
-            .reactants
+            .reactants()
             .iter()
             .find(|s| s.composition.amount_of(element("Na")).is_some())
             .unwrap();
         let k = r
-            .reactants
+            .reactants()
             .iter()
             .find(|s| s.composition.amount_of(element("K")).is_some())
             .unwrap();
-        assert_eq!(na.coefficient, 1);
-        assert_eq!(k.coefficient, 1);
-        assert_eq!(r.products[0].coefficient, 1);
+        assert_eq!(na.coefficient(), 1);
+        assert_eq!(k.coefficient(), 1);
+        assert_eq!(r.products()[0].coefficient(), 1);
     }
 
     #[test]

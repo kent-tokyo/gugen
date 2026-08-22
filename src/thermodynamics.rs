@@ -59,7 +59,9 @@
 
 use crate::composition::{Composition, Element};
 use crate::error::{GugenError, Result, require_finite};
-use crate::reaction::BalancedReaction;
+use crate::reaction::{
+    BalancedReaction, COMPOSITION_CONSERVATION_TOLERANCE, check_element_conservation,
+};
 use std::collections::BTreeMap;
 
 /// IUPAC 2021 standard atomic weights (Commission on Isotopic Abundances
@@ -458,41 +460,6 @@ fn most_stable_entry_for<'a>(
         })
 }
 
-/// Sums coefficient-weighted per-element amounts, reactants positive and
-/// products negative, and rejects (Phase 19P.1 Fix 3) if any element's
-/// residual exceeds `COMPOSITION_CONSERVATION_TOLERANCE`. `BalancedReaction::new`
-/// itself only rejects an empty side or a zero coefficient, not an element
-/// imbalance -- this is the runtime check that actually enforces the
-/// conservation `balanced_reaction_delta_ev_per_atom`'s per-atom
-/// normalization relies on, for a hand-constructed reaction that never
-/// went through `balance.rs`'s solver. `pub(crate)` so
-/// `materials_project_adapter.rs::reaction_energy` can reuse the same,
-/// already-tested tolerance logic instead of duplicating it -- that
-/// function has exactly the same "hand-constructed reaction, no
-/// conservation guarantee from `BalancedReaction::new`" exposure.
-pub(crate) fn check_element_conservation(reaction: &BalancedReaction) -> Result<()> {
-    let mut residual: BTreeMap<Element, f64> = BTreeMap::new();
-    for species in &reaction.reactants {
-        for (element, amount) in species.composition.iter() {
-            *residual.entry(element).or_insert(0.0) += species.coefficient as f64 * amount;
-        }
-    }
-    for species in &reaction.products {
-        for (element, amount) in species.composition.iter() {
-            *residual.entry(element).or_insert(0.0) -= species.coefficient as f64 * amount;
-        }
-    }
-    for (element, imbalance) in residual {
-        if imbalance.abs() > COMPOSITION_CONSERVATION_TOLERANCE {
-            return Err(GugenError::UnbalancedReaction {
-                element: element.symbol().to_string(),
-                imbalance,
-            });
-        }
-    }
-    Ok(())
-}
-
 /// Distinct [`ThermodynamicDatasetIdentity`] values among `entries` whose
 /// composition matches at least one of `compositions` -- deliberately
 /// scoped to the compositions a specific caller-supplied reaction or
@@ -535,10 +502,12 @@ fn distinct_datasets_among<'a>(
 ///
 /// `Err` (Phase 19P.1) for genuinely invalid caller input instead:
 /// [`GugenError::UnbalancedReaction`] if `reaction`'s reactant- and
-/// product-side element totals don't match (via a `check_element_conservation`
-/// runtime check -- `BalancedReaction::new` does not itself guarantee
-/// this), or [`GugenError::InconsistentThermodynamicDataset`] if the
-/// entries relevant to `reaction`'s species (via a `distinct_datasets_among`
+/// product-side element totals don't match -- unreachable in practice
+/// since `BalancedReaction::new` (v0.5.0, Phase 23A) already guarantees
+/// this via the same `check_element_conservation` check, run again here
+/// only as a defensive, redundant guard -- or
+/// [`GugenError::InconsistentThermodynamicDataset`] if the entries
+/// relevant to `reaction`'s species (via a `distinct_datasets_among`
 /// scan) span more than one [`ThermodynamicDatasetIdentity`]. The dataset
 /// check runs *before* entry selection, which is what keeps the
 /// lowest-enthalpy tie-break (`most_stable_entry_for`) from ever being
@@ -550,12 +519,12 @@ pub fn balanced_reaction_delta_ev_per_atom(
     entries: &[SolidThermodynamicEntry],
     temperature: Kelvin,
 ) -> Result<Option<f64>> {
-    check_element_conservation(reaction)?;
+    check_element_conservation(reaction.reactants(), reaction.products())?;
 
     let compositions: Vec<&Composition> = reaction
-        .reactants
+        .reactants()
         .iter()
-        .chain(&reaction.products)
+        .chain(reaction.products())
         .map(|s| &s.composition)
         .collect();
     let datasets = distinct_datasets_among(entries, &compositions);
@@ -570,40 +539,31 @@ pub fn balanced_reaction_delta_ev_per_atom(
     }
 
     let mut product_total = 0.0;
-    for species in &reaction.products {
+    for species in reaction.products() {
         let Some(entry) = most_stable_entry_for(entries, &species.composition) else {
             return Ok(None);
         };
         let atoms: f64 = species.composition.iter().map(|(_, amt)| amt).sum();
-        product_total += species.coefficient as f64
+        product_total += species.coefficient() as f64
             * atoms
             * relative_solid_gibbs_ev_per_atom(entry, temperature);
     }
 
     let mut reactant_total = 0.0;
     let mut reactant_atoms = 0.0;
-    for species in &reaction.reactants {
+    for species in reaction.reactants() {
         let Some(entry) = most_stable_entry_for(entries, &species.composition) else {
             return Ok(None);
         };
         let atoms: f64 = species.composition.iter().map(|(_, amt)| amt).sum();
-        reactant_total += species.coefficient as f64
+        reactant_total += species.coefficient() as f64
             * atoms
             * relative_solid_gibbs_ev_per_atom(entry, temperature);
-        reactant_atoms += species.coefficient as f64 * atoms;
+        reactant_atoms += species.coefficient() as f64 * atoms;
     }
 
     Ok(Some((product_total - reactant_total) / reactant_atoms))
 }
-
-/// How far apart `atoms`-weighted amounts must sum to still count as "the
-/// same total composition" -- generous enough to absorb ordinary floating-
-/// point summation error across a handful of terms, tight enough that a
-/// genuinely different composition can never pass by coincidence (real
-/// synthesis-target element amounts are never within `1e-6` of each other
-/// by chance in this crate's own fixtures, `AGENTS.md`'s worked examples
-/// among them).
-const COMPOSITION_CONSERVATION_TOLERANCE: f64 = 1e-6;
 
 /// The energy margin between `target` and one specific, caller-named
 /// alternative combination of phases covering the exact same total
@@ -761,6 +721,10 @@ mod tests {
 
     fn composition(pairs: &[(&str, f64)]) -> Composition {
         Composition::new(pairs.iter().map(|&(sym, amt)| (element(sym), amt))).unwrap()
+    }
+
+    fn species(composition: Composition, coefficient: u64) -> ReactionSpecies {
+        ReactionSpecies::new(composition, coefficient).unwrap()
     }
 
     fn dataset() -> ThermodynamicDatasetIdentity {
@@ -949,26 +913,8 @@ mod tests {
                 .unwrap(),
         ];
         let reaction = BalancedReaction::new(
-            vec![
-                ReactionSpecies {
-                    composition: ab,
-                    coefficient: 1,
-                },
-                ReactionSpecies {
-                    composition: cd,
-                    coefficient: 1,
-                },
-            ],
-            vec![
-                ReactionSpecies {
-                    composition: ac,
-                    coefficient: 1,
-                },
-                ReactionSpecies {
-                    composition: bd,
-                    coefficient: 1,
-                },
-            ],
+            vec![species(ab, 1), species(cd, 1)],
+            vec![species(ac, 1), species(bd, 1)],
         )
         .unwrap();
 
@@ -992,17 +938,8 @@ mod tests {
             SolidThermodynamicEntry::new(feo.clone(), None, -2.0, 12.0, dataset()).unwrap(),
             // fe2o2 (the product) is deliberately missing.
         ];
-        let reaction = BalancedReaction::new(
-            vec![ReactionSpecies {
-                composition: feo,
-                coefficient: 2,
-            }],
-            vec![ReactionSpecies {
-                composition: fe2o2,
-                coefficient: 1,
-            }],
-        )
-        .unwrap();
+        let reaction =
+            BalancedReaction::new(vec![species(feo, 2)], vec![species(fe2o2, 1)]).unwrap();
 
         let result =
             balanced_reaction_delta_ev_per_atom(&reaction, &entries, Kelvin::new(900.0).unwrap());
@@ -1014,14 +951,8 @@ mod tests {
         let feo = composition(&[("Fe", 1.0), ("O", 1.0)]);
         let fe2o2 = composition(&[("Fe", 2.0), ("O", 2.0)]);
         let reaction = BalancedReaction::new(
-            vec![ReactionSpecies {
-                composition: feo.clone(),
-                coefficient: 2,
-            }],
-            vec![ReactionSpecies {
-                composition: fe2o2.clone(),
-                coefficient: 1,
-            }],
+            vec![species(feo.clone(), 2)],
+            vec![species(fe2o2.clone(), 1)],
         )
         .unwrap();
 
@@ -1059,14 +990,8 @@ mod tests {
         let feo = composition(&[("Fe", 1.0), ("O", 1.0)]);
         let fe2o2 = composition(&[("Fe", 2.0), ("O", 2.0)]);
         let reaction = BalancedReaction::new(
-            vec![ReactionSpecies {
-                composition: feo.clone(),
-                coefficient: 2,
-            }],
-            vec![ReactionSpecies {
-                composition: fe2o2.clone(),
-                coefficient: 1,
-            }],
+            vec![species(feo.clone(), 2)],
+            vec![species(fe2o2.clone(), 1)],
         )
         .unwrap();
 
@@ -1225,35 +1150,20 @@ mod tests {
         );
     }
 
-    /// Phase 19P.1 Fix 3: `BalancedReaction::new` only rejects an empty
-    /// side or a zero coefficient (see `reaction.rs`), so a hand-built
-    /// reaction with mismatched reactant/product element totals (1 Fe + 1
-    /// O vs. 2 Fe + 3 O here) is accepted there and must be caught by
-    /// `balanced_reaction_delta_ev_per_atom`'s own runtime conservation
-    /// check instead.
+    /// Phase 23A (v0.5.0): `BalancedReaction::new` itself now enforces
+    /// element conservation -- a hand-built reaction with mismatched
+    /// reactant/product element totals (1 Fe + 1 O vs. 2 Fe + 3 O here) is
+    /// rejected at construction, not merely by a downstream consumer.
+    /// Before Phase 23A this same input was accepted by `new` and only
+    /// caught by `balanced_reaction_delta_ev_per_atom`'s own runtime
+    /// check -- that check still runs too (now redundantly), covered by
+    /// `materials_project_adapter::reaction_energy_rejects_element_imbalance`'s
+    /// sibling test asserting the same thing via the other consumer.
     #[test]
-    fn balanced_reaction_delta_rejects_element_imbalance() {
+    fn balanced_reaction_new_rejects_element_imbalance() {
         let feo = composition(&[("Fe", 1.0), ("O", 1.0)]);
         let fe2o3 = composition(&[("Fe", 2.0), ("O", 3.0)]);
-        let reaction = BalancedReaction::new(
-            vec![ReactionSpecies {
-                composition: feo.clone(),
-                coefficient: 1,
-            }],
-            vec![ReactionSpecies {
-                composition: fe2o3.clone(),
-                coefficient: 1,
-            }],
-        )
-        .unwrap();
-
-        let entries = vec![
-            SolidThermodynamicEntry::new(feo, None, -2.0, 12.0, dataset()).unwrap(),
-            SolidThermodynamicEntry::new(fe2o3, None, -8.0, 30.0, dataset()).unwrap(),
-        ];
-
-        let result =
-            balanced_reaction_delta_ev_per_atom(&reaction, &entries, Kelvin::new(900.0).unwrap());
+        let result = BalancedReaction::new(vec![species(feo, 1)], vec![species(fe2o3, 1)]);
         assert!(
             matches!(result, Err(GugenError::UnbalancedReaction { .. })),
             "expected UnbalancedReaction, got {result:?}"
@@ -1268,14 +1178,8 @@ mod tests {
         let feo = composition(&[("Fe", 1.0), ("O", 1.0)]);
         let fe2o2 = composition(&[("Fe", 2.0), ("O", 2.0)]);
         let reaction = BalancedReaction::new(
-            vec![ReactionSpecies {
-                composition: feo.clone(),
-                coefficient: 2,
-            }],
-            vec![ReactionSpecies {
-                composition: fe2o2.clone(),
-                coefficient: 1,
-            }],
+            vec![species(feo.clone(), 2)],
+            vec![species(fe2o2.clone(), 1)],
         )
         .unwrap();
 
@@ -1326,14 +1230,8 @@ mod tests {
         let feo = composition(&[("Fe", 1.0), ("O", 1.0)]);
         let fe2o2 = composition(&[("Fe", 2.0), ("O", 2.0)]);
         let reaction = BalancedReaction::new(
-            vec![ReactionSpecies {
-                composition: feo.clone(),
-                coefficient: 2,
-            }],
-            vec![ReactionSpecies {
-                composition: fe2o2.clone(),
-                coefficient: 1,
-            }],
+            vec![species(feo.clone(), 2)],
+            vec![species(fe2o2.clone(), 1)],
         )
         .unwrap();
 

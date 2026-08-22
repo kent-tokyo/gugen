@@ -368,7 +368,13 @@ fn format_composition(c: &Composition) -> String {
 fn format_species(species: &[ReactionSpecies]) -> String {
     species
         .iter()
-        .map(|s| format!("{}x({})", s.coefficient, format_composition(&s.composition)))
+        .map(|s| {
+            format!(
+                "{}x({})",
+                s.coefficient(),
+                format_composition(&s.composition)
+            )
+        })
         .collect::<Vec<_>>()
         .join(" + ")
 }
@@ -376,8 +382,8 @@ fn format_species(species: &[ReactionSpecies]) -> String {
 fn format_reaction(r: &BalancedReaction) -> String {
     format!(
         "{} -> {}",
-        format_species(&r.reactants),
-        format_species(&r.products)
+        format_species(r.reactants()),
+        format_species(r.products())
     )
 }
 

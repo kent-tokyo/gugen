@@ -23,8 +23,10 @@
 use crate::composition::Composition;
 use crate::error::ProviderError;
 use crate::provider::ThermodynamicProvider;
-use crate::reaction::{BalancedReaction, CompetingPhase, ReactionEnergy, ThermodynamicConditions};
-use crate::thermodynamics::check_element_conservation;
+use crate::reaction::{
+    BalancedReaction, CompetingPhase, ReactionEnergy, ThermodynamicConditions,
+    check_element_conservation,
+};
 use std::collections::BTreeSet;
 
 /// A `ThermodynamicProvider` over a fixed, caller-supplied snapshot of
@@ -80,39 +82,39 @@ impl ThermodynamicProvider for MaterialsProjectSnapshotProvider {
     /// if incomplete, answer."
     ///
     /// `Err(ProviderError::MalformedRecord(_))` if `reaction` doesn't
-    /// conserve elements -- `BalancedReaction::new` doesn't itself
-    /// guarantee this for a hand-constructed reaction that never went
-    /// through `balance.rs`'s solver, so this reuses
-    /// `thermodynamics::check_element_conservation` (the same check
-    /// `balanced_reaction_delta_ev_per_atom` runs) rather than silently
-    /// computing a meaningless-but-plausible-looking energy for an
-    /// unbalanced reaction.
+    /// conserve elements -- unreachable in practice since
+    /// `BalancedReaction::new` (v0.5.0, Phase 23A) already guarantees this
+    /// via the same `reaction::check_element_conservation` check (the same
+    /// check `balanced_reaction_delta_ev_per_atom` runs), run again here
+    /// only as a defensive, redundant guard rather than silently computing
+    /// a meaningless-but-plausible-looking energy for an unbalanced
+    /// reaction.
     fn reaction_energy(
         &self,
         reaction: &BalancedReaction,
         _conditions: &ThermodynamicConditions,
     ) -> std::result::Result<Option<ReactionEnergy>, ProviderError> {
-        check_element_conservation(reaction)
+        check_element_conservation(reaction.reactants(), reaction.products())
             .map_err(|e| ProviderError::MalformedRecord(e.to_string()))?;
 
         let mut product_total = 0.0;
-        for species in &reaction.products {
+        for species in reaction.products() {
             let Some(energy) = self.energy_for(&species.composition) else {
                 return Ok(None);
             };
             product_total +=
-                species.coefficient as f64 * atoms_in_formula(&species.composition) * energy;
+                species.coefficient() as f64 * atoms_in_formula(&species.composition) * energy;
         }
 
         let mut reactant_total = 0.0;
         let mut reactant_atoms = 0.0;
-        for species in &reaction.reactants {
+        for species in reaction.reactants() {
             let Some(energy) = self.energy_for(&species.composition) else {
                 return Ok(None);
             };
             let atoms = atoms_in_formula(&species.composition);
-            reactant_total += species.coefficient as f64 * atoms * energy;
-            reactant_atoms += species.coefficient as f64 * atoms;
+            reactant_total += species.coefficient() as f64 * atoms * energy;
+            reactant_atoms += species.coefficient() as f64 * atoms;
         }
 
         let delta_per_atom = (product_total - reactant_total) / reactant_atoms;
@@ -156,6 +158,7 @@ impl ThermodynamicProvider for MaterialsProjectSnapshotProvider {
 mod tests {
     use super::*;
     use crate::composition::Element;
+    use crate::error::GugenError;
     use crate::reaction::ReactionSpecies;
 
     fn element(symbol: &str) -> Element {
@@ -167,10 +170,7 @@ mod tests {
     }
 
     fn species(pairs: &[(&str, f64)], coefficient: u64) -> ReactionSpecies {
-        ReactionSpecies {
-            composition: composition(pairs),
-            coefficient,
-        }
+        ReactionSpecies::new(composition(pairs), coefficient).unwrap()
     }
 
     /// Hand-checked arithmetic (AGENTS.md §21.4-style pinned-value test,
@@ -271,30 +271,23 @@ mod tests {
         assert_eq!(a.value_ev_per_atom(), 2.0);
     }
 
-    /// Mirrors `thermodynamics::balanced_reaction_delta_rejects_element_imbalance`:
-    /// `BalancedReaction::new` accepts a reaction with mismatched
-    /// reactant/product element totals (1 Fe + 1 O vs. 2 Fe + 3 O here) --
-    /// `reaction_energy` must catch this itself rather than silently
-    /// producing a meaningless-but-plausible energy value.
+    /// Mirrors `thermodynamics::balanced_reaction_new_rejects_element_imbalance`:
+    /// `BalancedReaction::new` (v0.5.0, Phase 23A) itself now rejects a
+    /// reaction with mismatched reactant/product element totals (1 Fe + 1
+    /// O vs. 2 Fe + 3 O here), so `reaction_energy`'s own
+    /// `check_element_conservation` call can no longer observe such an
+    /// input at all -- this asserts the rejection at the point it now
+    /// actually happens, construction, rather than exercising
+    /// `reaction_energy`'s now-unreachable defensive check.
     #[test]
     fn reaction_energy_rejects_element_imbalance() {
-        let feo = composition(&[("Fe", 1.0), ("O", 1.0)]);
-        let fe2o3 = composition(&[("Fe", 2.0), ("O", 3.0)]);
-        let reaction = BalancedReaction::new(
+        let result = BalancedReaction::new(
             vec![species(&[("Fe", 1.0), ("O", 1.0)], 1)],
             vec![species(&[("Fe", 2.0), ("O", 3.0)], 1)],
-        )
-        .unwrap();
-
-        let provider = MaterialsProjectSnapshotProvider::from_entries(vec![
-            CompetingPhase::new(feo, -2.0).unwrap(),
-            CompetingPhase::new(fe2o3, -8.0).unwrap(),
-        ]);
-
-        let result = provider.reaction_energy(&reaction, &ThermodynamicConditions::default());
+        );
         assert!(
-            matches!(result, Err(ProviderError::MalformedRecord(_))),
-            "expected MalformedRecord for an unbalanced reaction, got {result:?}"
+            matches!(result, Err(GugenError::UnbalancedReaction { .. })),
+            "expected UnbalancedReaction, got {result:?}"
         );
     }
 

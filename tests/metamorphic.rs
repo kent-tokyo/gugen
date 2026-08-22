@@ -356,7 +356,7 @@ fn formula_unit_scale_is_not_currently_normalized_a_documented_gap() {
     );
     let reaction_b = plan_b.balanced_reaction.as_ref().unwrap();
     assert!(
-        reaction_b.reactants.iter().any(|s| s.coefficient == 2),
+        reaction_b.reactants().iter().any(|s| s.coefficient() == 2),
         "the doubled target forces doubled reactant coefficients rather than being reduced \
         back to the minimal BaTiO3 system: {reaction_b:?}"
     );

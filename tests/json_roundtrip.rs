@@ -34,10 +34,10 @@ fn sample_report() -> SynthesisPlanningReport {
     let precursors: Vec<PrecursorSelection> = accepted
         .precursors
         .iter()
-        .zip(&reaction.reactants)
+        .zip(reaction.reactants())
         .map(|(id, species)| PrecursorSelection {
             precursor: id.clone(),
-            formula_units: species.coefficient,
+            formula_units: species.coefficient(),
         })
         .collect();
 
