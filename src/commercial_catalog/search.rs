@@ -504,7 +504,127 @@ mod tests {
     use super::super::quantity::{compute_offer_quantity, unresolved_fields_for};
     use super::*;
     use crate::commercial_catalog::test_support::*;
+    use proptest::prelude::*;
     use std::collections::BTreeSet;
+
+    /// Builds `row_lens.len()` rows, each with `row_lens[i]` offers, priced
+    /// and dated so ranking has something real to discriminate on (no two
+    /// offers within a row tie on every criterion). Shared by the two
+    /// randomized tests below.
+    fn candidate_rows_of_shape(row_lens: &[usize]) -> Vec<Vec<CommercialPrecursorOffer>> {
+        row_lens
+            .iter()
+            .enumerate()
+            .map(|(row_i, &offer_count)| {
+                (0..offer_count)
+                    .map(|i| {
+                        let price = (row_i as u64 + 1) * 977 + (i as u64) * 131 + 1;
+                        priced_offer(
+                            &format!("R{row_i}-{i}"),
+                            "Fe2O3",
+                            "Example Materials Ltd.",
+                            Some(0.9 + (i as f64) * 0.01),
+                            Some(100.0),
+                            Some((price, "USD")),
+                            Some(5 + i as u32),
+                            Some(AvailabilityStatus::InStock),
+                        )
+                    })
+                    .collect()
+            })
+            .collect()
+    }
+
+    fn candidates_from(offers: &[CommercialPrecursorOffer]) -> Vec<OfferCandidate<'_>> {
+        let mut candidates: Vec<OfferCandidate<'_>> = offers
+            .iter()
+            .map(|offer| OfferCandidate {
+                offer,
+                unresolved_fields: unresolved_fields_for(offer),
+                quantity: compute_offer_quantity(offer, 197.335),
+            })
+            .collect();
+        candidates.sort_by(offer_rank_order);
+        candidates
+    }
+
+    proptest! {
+        /// Generalizes `combination_search_matches_a_brute_force_enumeration`
+        /// (below, a fixed 3x3 case) across many small randomly-shaped
+        /// catalogs -- broader coverage of the same already-proven-correct
+        /// exact-tier algorithm, catching indexing/off-by-one bugs a single
+        /// fixed case could miss. `max_combinations_evaluated` is set
+        /// comfortably above any generated total space (at most 4^4=256)
+        /// so this always exercises `exhaustive_search`, never the
+        /// heuristic tier.
+        #[test]
+        fn exhaustive_search_matches_a_brute_force_enumeration_across_random_shapes(
+            row_lens in prop::collection::vec(1usize..=4, 1..=4),
+        ) {
+            let offer_rows = candidate_rows_of_shape(&row_lens);
+            let rows: Vec<Vec<OfferCandidate>> =
+                offer_rows.iter().map(|offers| candidates_from(offers)).collect();
+            let total_space: u64 = rows.iter().fold(1u64, |acc, r| acc * r.len() as u64);
+
+            let config = CommercialPlanningConfig {
+                max_offers_per_precursor: 50,
+                max_combinations_evaluated: 1000,
+                max_results_returned: total_space as usize,
+            };
+            let (heap_results, evaluated, reported_total_space) =
+                search_combinations(&rows, &config, None);
+            prop_assert_eq!(evaluated as u64, total_space);
+            prop_assert_eq!(reported_total_space, total_space);
+
+            let mut all_combos: Vec<HeapEntry> = Vec::new();
+            for combo_index in 0..total_space {
+                let mut remainder = combo_index;
+                let mut indices = vec![0usize; rows.len()];
+                for (row_i, row) in rows.iter().enumerate() {
+                    let len = row.len() as u64;
+                    indices[row_i] = (remainder % len) as usize;
+                    remainder /= len;
+                }
+                all_combos.push(HeapEntry::new(indices, &rows));
+            }
+            all_combos.sort_by(|a, b| b.cmp(a));
+            let oracle_order: Vec<Vec<usize>> = all_combos.into_iter().map(|e| e.indices).collect();
+
+            prop_assert_eq!(heap_results, oracle_order);
+        }
+
+        /// Structural invariant, not a specific-value assertion: for
+        /// randomized *oversized* catalogs (forced into the heuristic
+        /// tier), the search must never evaluate more combinations than
+        /// its own configured budget, and it must never return more
+        /// results than `max_results_returned` -- both bounds the whole
+        /// point of the heuristic tier existing.
+        #[test]
+        fn heuristic_search_never_exceeds_its_evaluation_budget(
+            row_lens in prop::collection::vec(5usize..=8, 2..=4),
+            max_combinations_evaluated in 5usize..=50,
+        ) {
+            let offer_rows = candidate_rows_of_shape(&row_lens);
+            let rows: Vec<Vec<OfferCandidate>> =
+                offer_rows.iter().map(|offers| candidates_from(offers)).collect();
+            let total_space: u64 = rows.iter().fold(1u64, |acc, r| acc * r.len() as u64);
+            prop_assume!(total_space > max_combinations_evaluated as u64);
+
+            let config = CommercialPlanningConfig {
+                max_offers_per_precursor: 50,
+                max_combinations_evaluated,
+                max_results_returned: 5,
+            };
+            let (results, evaluated, reported_total_space) =
+                search_combinations(&rows, &config, None);
+            prop_assert_eq!(reported_total_space, total_space);
+            prop_assert!(
+                evaluated <= max_combinations_evaluated,
+                "evaluated {evaluated} must never exceed the configured budget {max_combinations_evaluated}"
+            );
+            prop_assert!(results.len() <= config.max_results_returned);
+        }
+    }
 
     #[test]
     fn heuristic_search_tier_is_actually_what_this_test_exercises() {
