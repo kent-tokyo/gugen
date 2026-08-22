@@ -200,4 +200,4 @@ ConfidenceAssessment {
 - ["BaCO3"] [MissingTargetElement]: precursor set does not cover target element(s): Ti
 - ["TiO2"] [MissingTargetElement]: precursor set does not cover target element(s): Ba
 
-_Generated 2026-08-14T00:00:00Z by gugen 0.4.1._
+_Generated 2026-08-14T00:00:00Z by gugen 0.4.2._
