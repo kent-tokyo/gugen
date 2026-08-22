@@ -149,8 +149,17 @@ almost certainly not what a CSV author intended, so catalog data must use
 `·`, not `.`, for hydrates.
 
 Anything outside this grammar — a variable hydrate (`CuSO4·xH2O`), `*` as a
-separator, unbalanced parentheses, an unrecognized element symbol — is a
-hard parse error, surfaced as a rejected catalog row, never guessed at.
+separator, unbalanced parentheses, an unrecognized element symbol, internal
+whitespace, a signed/negative subscript, a Unicode lookalike of an element
+symbol or the hydrate separator — is a hard parse error, surfaced as a
+rejected catalog row, never guessed at. Leading/trailing whitespace around
+the whole formula is trimmed; whitespace inside it is not.
+
+Parenthesized groups may nest, up to a hard limit of 64 levels
+(`MAX_FORMULA_NESTING_DEPTH`) — far beyond any real formula, which exists
+purely to turn adversarial or malformed input (a CSV row with thousands of
+nested parens) into an ordinary rejected row instead of a stack overflow,
+which aborts the whole process and cannot be caught as an error at all.
 
 ## CSV schema
 

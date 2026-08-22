@@ -456,9 +456,28 @@ use thiserror::Error;
 // Anything else (variable hydrates like "xH2O", '*' as a separator,
 // unbalanced parens, unknown element symbols) is a hard parse error.
 
+// Real chemical formulas never nest parenthesized groups more than a
+// handful of levels deep (even complex coordination/organometallic
+// formulas rarely exceed 3-4). This bound exists purely so unbounded
+// recursion on adversarial/malformed catalog input (a CSV row with
+// thousands of nested parens) becomes an ordinary parse error instead of
+// a stack overflow -- which aborts the whole process and cannot be caught
+// by `Result` at all, confirmed empirically: ~10,000 levels of nesting
+// crashed the process before this guard existed.
+const MAX_FORMULA_NESTING_DEPTH: usize = 64;
+
 struct FormulaParser<'a> {
     chars: std::iter::Peekable<std::str::CharIndices<'a>>,
     source: &'a str,
+    // Only decremented on `parse_group`'s success path -- an early `Err`
+    // return leaves it un-decremented, which is safe *only* because every
+    // `FormulaParser` is single-use: `parse_fragment` and the hydrate-
+    // multiplier parser in `parse_formula` each construct one fresh
+    // instance per call, function-scoped, never reused across a retry or
+    // stored anywhere else. If a caller is ever added that reuses one
+    // `FormulaParser` across multiple `parse_group` calls, this field
+    // needs restoring on the error path too.
+    depth: usize,
 }
 
 impl<'a> FormulaParser<'a> {
@@ -466,6 +485,7 @@ impl<'a> FormulaParser<'a> {
         Self {
             chars: source.char_indices().peekable(),
             source,
+            depth: 0,
         }
     }
 
@@ -565,7 +585,15 @@ impl<'a> FormulaParser<'a> {
                 Some((_, '(')) => {
                     saw_unit = true;
                     self.chars.next();
+                    self.depth += 1;
+                    if self.depth > MAX_FORMULA_NESTING_DEPTH {
+                        return Err(format!(
+                            "formula nesting exceeds the maximum supported depth \
+                             ({MAX_FORMULA_NESTING_DEPTH})"
+                        ));
+                    }
                     let inner = self.parse_group()?;
+                    self.depth -= 1;
                     self.expect(')')?;
                     let multiplier = self.parse_number()?.unwrap_or(1.0);
                     for (el, amt) in inner {
@@ -2469,6 +2497,94 @@ mod tests {
     #[test]
     fn rejects_an_unknown_element_symbol() {
         assert!(parse_formula("Xx2O3").is_err());
+    }
+
+    #[test]
+    fn parses_nested_parenthesized_groups() {
+        // A reasonable, real-world nesting depth (a coordination-compound
+        // formula might genuinely need two levels) must parse correctly,
+        // with the multiplier of an outer group applying to everything
+        // the inner group already expanded.
+        assert_eq!(
+            parse_formula("Ca((OH)2)3").unwrap(),
+            composition(&[("Ca", 1.0), ("O", 6.0), ("H", 6.0)])
+        );
+    }
+
+    #[test]
+    fn rejects_formula_nesting_beyond_the_supported_depth_without_crashing() {
+        // Regression test: unbounded recursion on deeply nested parens
+        // used to stack-overflow the whole process (confirmed empirically
+        // at ~10,000 levels during implementation) -- a crash that cannot
+        // be caught by `Result` at all, which matters because this input
+        // can come from an untrusted CSV file. It must now be an ordinary
+        // parse error.
+        let formula = format!("{}Fe{}", "(".repeat(10_000), ")".repeat(10_000));
+        assert!(parse_formula(&formula).is_err());
+    }
+
+    #[test]
+    fn rejects_a_zero_subscript() {
+        // A zero-amount element is nonsensical in a formula and is
+        // rejected by Composition::new's positive-amount check, not
+        // silently dropped or treated as "element absent".
+        assert!(parse_formula("Fe0O3").is_err());
+    }
+
+    #[test]
+    fn rejects_a_negative_or_signed_subscript() {
+        // The grammar has no sign production -- a `-` or `+` where a
+        // subscript or element symbol is expected is simply an
+        // unrecognized character, not a parsed negative amount.
+        assert!(parse_formula("Fe-2O3").is_err());
+        assert!(parse_formula("Fe+2O3").is_err());
+    }
+
+    #[test]
+    fn rejects_trailing_garbage_after_an_otherwise_valid_formula() {
+        assert!(parse_formula("Fe2O3$").is_err());
+        assert!(parse_formula("Fe2O3 extra text").is_err());
+    }
+
+    #[test]
+    fn sums_an_element_appearing_both_inside_and_outside_a_group() {
+        // Fe appears once as a bare unit and again inside a parenthesized
+        // group -- correct formula parsing sums the total atom count
+        // across the whole formula; this is fragment-merging the parser
+        // must do to produce the flat map Composition::new expects, not a
+        // caller-contract "accidental duplicate key" error (see the
+        // module doc comment on the formula-parser/Composition::new
+        // responsibility boundary).
+        assert_eq!(
+            parse_formula("Fe(Fe)2O3").unwrap(),
+            composition(&[("Fe", 3.0), ("O", 3.0)])
+        );
+    }
+
+    #[test]
+    fn leading_and_trailing_whitespace_is_trimmed_but_internal_whitespace_is_rejected() {
+        assert_eq!(
+            parse_formula("  Fe2O3  ").unwrap(),
+            parse_formula("Fe2O3").unwrap()
+        );
+        assert!(parse_formula("Fe2 O3").is_err());
+    }
+
+    #[test]
+    fn rejects_a_cyrillic_lookalike_element_symbol() {
+        // Cyrillic "е" (U+0435) looks identical to Latin "e" at a glance,
+        // but Element::new matches against ELEMENT_SYMBOLS by exact ASCII
+        // string equality, so a formula using it is rejected as an
+        // unrecognized character, not silently reinterpreted as Latin.
+        assert!(parse_formula("F\u{0435}2O3").is_err());
+    }
+
+    #[test]
+    fn rejects_a_unicode_lookalike_hydrate_separator() {
+        // U+2022 BULLET and U+00B7 MIDDLE DOT look similar but are
+        // different code points -- only the exact U+00B7 is recognized as
+        // a hydrate separator; a bullet is just an unrecognized character.
+        assert!(parse_formula("CuSO4\u{2022}5H2O").is_err());
     }
 
     #[test]
