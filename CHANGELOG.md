@@ -4,6 +4,56 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Commercial Precursor Catalog (Phase 22), behind a new optional
+  `commercial_catalog` feature: `assess_commercial_precursors`/
+  `assess_commercial_plans` match an existing `SynthesisPlan`'s precursors
+  against a caller-supplied catalog of commercial offers (price, purity,
+  package size, supplier, availability, lead time), as a standalone
+  post-planning stage that never affects `SynthesisPlan.score`,
+  `.confidence`, `.balanced_reaction`, or `.steps` (proved by two new
+  invariance tests, `tests/commercial_catalog_planner_invariance.rs`).
+  CSV/JSON catalog import with a structured accepted/rejected load report
+  (`CommercialPrecursorCatalog::load_csv`/`load_json`, `Strict`/`Lenient`
+  modes); a new chemical formula parser (`Composition` had none); commercial
+  offer matching on a canonical, scale-invariant element-ratio key (exact
+  rational arithmetic, not `Composition::eq` — `Fe2O3` matches `Fe4O6` as
+  the same substance at a different formula-unit scale, while hydrate vs.
+  anhydrous, different oxidation states, and different compounds stay
+  distinct; no alias or substitute-precursor inference); hard commercial
+  constraints; stoichiometric quantity calculation with
+  purity-adjusted purchase mass and package-count rounding; currency-safe,
+  overflow-checked cost totals (`Money` as integer minor units, never
+  `f64`); a bounded search over complete purchasing combinations. See
+  [`docs/commercial_precursor_catalog.md`](docs/commercial_precursor_catalog.md)
+  for the full design and known limitations. No real catalog data ships
+  with gugen. No changes to any existing public API
+  (`cargo semver-checks` confirms no breaking changes), no `SCHEMA_VERSION`
+  bump, and `SynthesisPlan`/`Planner`/`score_plan` are untouched except for
+  two `pub(crate)` (crate-internal only) visibility changes, both reused
+  rather than duplicated: `thermodynamics.rs`'s existing atomic-weight
+  table, and `frac.rs`'s existing exact-integer GCD (used to reduce a
+  composition's element ratio to lowest terms for canonical commercial
+  offer matching — see "Composition matching policy" in the design doc).
+
+### Known limitations
+
+- Commercial offer matching bridges scale only, not identity: it never
+  infers aliases or substitute precursors, and a genuinely different
+  ratio, a hydrate vs. its anhydrous form, or a different compound never
+  match, even when chemically related.
+- The bounded combination search's total-cost ranking is a best-effort
+  heuristic, not a guaranteed global optimum, specifically when a catalog
+  spans more than one currency *and* the full combination space is too
+  large to enumerate exactly within the configured evaluation budget (the
+  common case — a small-to-moderate space per precursor — is always
+  ranked exactly).
+- `CurrencyCode` is format-validated (3 uppercase ASCII letters), not
+  checked against the real ISO 4217 list.
+- CSV tags use a single `;`-separated cell; no nested/structured tag
+  metadata.
+
 ## [0.4.1] - 2026-08-15
 
 A patch release: 4 behavior-affecting `src/` bug fixes and 1

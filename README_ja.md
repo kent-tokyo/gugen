@@ -103,6 +103,27 @@ route familyごとに計算されます — 詳細は下記）。内訳の詳細
 gugenは現時点でhazard/safetyデータsourceを持たないため、すべてのplanで
 `manual_review_required: true`となります。
 
+### Commercial Precursor Catalog
+
+デフォルトoffのoptional feature `commercial_catalog`：既存の`SynthesisPlan`
+の前駆体を、呼び出し側が用意したcommercial offerカタログ（価格・純度・
+包装サイズ・供給元）と突き合わせる、planning後の別stageです。planの
+score・confidence・reaction・process stepsには一切触れません。厳密rational
+arithmeticによるcanonicalかつscale-invariantな組成比でmatchします（`Fe2O3`
+と`Fe4O6`は同一物質の異なるformula-unit scaleとしてmatchする一方、
+hydrateとanhydrous、異なる化合物は引き続き別物として扱われ、代替品推論は
+行いません）。CSV/JSON形式の
+カタログimportはaccepted/rejectedの構造化load reportを返します。化学量論
+に基づく必要量計算、純度補正後の購入質量、包装個数の丸め、通貨安全な
+checked-arithmeticによるcost合計、購入組み合わせの全体に対するbounded
+searchを備えます。CSV/JSONの完全なschema・matching policy・数量計算の
+規則は[`docs/commercial_precursor_catalog.md`](docs/commercial_precursor_catalog.md)
+を、実行可能な使用例は`examples/commercial_catalog_assessment.rs`
+（`cargo run --example commercial_catalog_assessment --features
+commercial_catalog`）を参照してください。実在のカタログデータはgugenに
+同梱されません。gugenはcommercialデータを保証しません（価格・在庫状況は
+提供された推定値であり、保証ではありません）。
+
 ### CLI
 
 ```

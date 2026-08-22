@@ -187,7 +187,11 @@ impl serde::Serialize for Frac {
     }
 }
 
-fn gcd(a: u128, b: u128) -> u128 {
+// `pub(crate)` (not just used internally by `Frac::new`) so
+// `commercial_catalog.rs` can reduce a whole composition's element-ratio
+// vector to lowest terms using the same exact-integer GCD, rather than
+// duplicating it.
+pub(crate) fn gcd(a: u128, b: u128) -> u128 {
     if b == 0 { a } else { gcd(b, a % b) }
 }
 

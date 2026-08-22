@@ -107,6 +107,28 @@ below); see
 of what's currently constant versus load-bearing. Every plan currently sets `manual_review_required:
 true`, since gugen has no hazard/safety data source wired in yet.
 
+### Commercial Precursor Catalog
+
+Optional, off-by-default `commercial_catalog` feature: matches an existing
+`SynthesisPlan`'s precursors against a caller-supplied catalog of
+commercial offers (price, purity, package size, supplier), as a
+post-planning stage that never touches the plan's score, confidence,
+reaction, or process steps. Matches on a canonical, scale-invariant
+composition ratio via exact rational arithmetic (`Fe2O3` matches `Fe4O6`;
+hydrate vs. anhydrous and different compounds stay distinct; no alias or
+substitute-precursor inference); CSV/JSON catalog import with a
+structured accepted/rejected load report; stoichiometric quantity
+calculation, purity-adjusted purchase mass, package-count rounding,
+currency-safe checked-arithmetic cost totals; a bounded search over
+complete purchasing combinations. See
+[`docs/commercial_precursor_catalog.md`](docs/commercial_precursor_catalog.md)
+for the full CSV/JSON schema, exact-match policy, and quantity-calculation
+rules, and `examples/commercial_catalog_assessment.rs` for a runnable
+worked example (`cargo run --example commercial_catalog_assessment
+--features commercial_catalog`). No real catalog data ships with gugen;
+gugen does not certify commercial data (prices/availability are supplied
+estimates, not guarantees).
+
 ### CLI
 
 ```
@@ -321,6 +343,7 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo test --workspace --no-default-features
 cargo test --no-default-features --features mikiwame
+cargo test --no-default-features --features commercial_catalog
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
 cargo build --features serde,clap --bin gugen
 cargo check --target wasm32-unknown-unknown
