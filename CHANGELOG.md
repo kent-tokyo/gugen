@@ -4,6 +4,49 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Commercial Precursor Catalog (Phase 22), behind a new optional
+  `commercial_catalog` feature: `assess_commercial_precursors`/
+  `assess_commercial_plans` match an existing `SynthesisPlan`'s precursors
+  against a caller-supplied catalog of commercial offers (price, purity,
+  package size, supplier, availability, lead time), as a standalone
+  post-planning stage that never affects `SynthesisPlan.score`,
+  `.confidence`, `.balanced_reaction`, or `.steps` (proved by two new
+  invariance tests, `tests/commercial_catalog_planner_invariance.rs`).
+  CSV/JSON catalog import with a structured accepted/rejected load report
+  (`CommercialPrecursorCatalog::load_csv`/`load_json`, `Strict`/`Lenient`
+  modes); a new chemical formula parser (`Composition` had none); exact
+  `Composition` matching only, no ratio normalization or alias inference;
+  hard commercial constraints; stoichiometric quantity calculation with
+  purity-adjusted purchase mass and package-count rounding; currency-safe,
+  overflow-checked cost totals (`Money` as integer minor units, never
+  `f64`); a bounded search over complete purchasing combinations. See
+  [`docs/commercial_precursor_catalog.md`](docs/commercial_precursor_catalog.md)
+  for the full design and known limitations. No real catalog data ships
+  with gugen. No changes to any existing public API
+  (`cargo semver-checks` confirms no breaking changes), no `SCHEMA_VERSION`
+  bump, and `SynthesisPlan`/`Planner`/`score_plan` are untouched except for
+  a `pub(crate)` (crate-internal only) visibility change on
+  `thermodynamics.rs`'s existing atomic-weight table, reused rather than
+  duplicated.
+
+### Known limitations
+
+- Commercial offer matching is exact-`Composition`-only: chemically
+  identical formulas written at a different formula-unit scale (`Fe2O3`
+  vs. `Fe4O6`) do not match. No alias or substitute-precursor inference.
+- The bounded combination search's total-cost ranking is a best-effort
+  heuristic, not a guaranteed global optimum, specifically when a catalog
+  spans more than one currency *and* the full combination space is too
+  large to enumerate exactly within the configured evaluation budget (the
+  common case — a small-to-moderate space per precursor — is always
+  ranked exactly).
+- `CurrencyCode` is format-validated (3 uppercase ASCII letters), not
+  checked against the real ISO 4217 list.
+- CSV tags use a single `;`-separated cell; no nested/structured tag
+  metadata.
+
 ## [0.4.1] - 2026-08-15
 
 A patch release: 4 behavior-affecting `src/` bug fixes and 1
