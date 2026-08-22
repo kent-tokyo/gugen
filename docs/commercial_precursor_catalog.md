@@ -229,12 +229,22 @@ converted or summed across each other.
 `CommercialPlanningRequest.require_known_price`/`require_known_package_size`
 control whether a missing value excludes the offer outright (default:
 `false` — the offer stays selectable, and the missing field is recorded in
-`CommercialPlanAssessment.unresolved_commercial_fields`).
+`CommercialPlanAssessment.unresolved_commercial_fields`, deduplicated across
+the offers actually selected in the returned `combinations` — not every
+surviving catalog candidate, so this list is bounded by
+`max_results_returned`, not by catalog size).
 `MissingCommercialDataPolicy` (`Reject` default, or `KeepWithWarning`)
 separately governs what happens when a *hard constraint* the request set
 (minimum purity, maximum lead time, allowed availability/physical
 form/currency) can't be checked because the offer doesn't report that
 field at all.
+
+Unreported availability follows the same principle: gugen's precursor
+matching already treats missing availability metadata as a gap, not
+evidence of unavailability, and `CommercialCombination.all_availability_acceptable`
+follows suit — it is `true` unless a selected offer is explicitly
+`Discontinued`; an offer that simply never reported an availability status
+counts as acceptable-but-unknown.
 
 ## Procurement ordering
 
@@ -275,9 +285,16 @@ implementation, not a hypothetical). `SearchBudgetSummary.is_exhaustive` is
 truncated by `max_offers_per_precursor` — either one means the returned
 combinations are not a complete accounting.
 
-`max_total_cost` (if set) filters combinations after ranking; a combination
-whose cost can't be compared to it (different or unknown currency) is kept
-with a warning rather than silently passed or failed.
+`max_total_cost` (if set) is applied as a hard filter *inside* the search,
+before results are truncated to `max_results_returned` — never after.
+Filtering after truncation would be wrong: it could return zero
+combinations even when a lower-ranked, budget-satisfying one exists further
+down the full ranking. A combination whose cost can't be compared to the
+ceiling (different or unknown currency) is kept with a warning rather than
+silently passed or failed. If every matched combination exceeds the
+ceiling, the assessment reports an empty `combinations` list together with
+a warning explaining why — never a silent empty result indistinguishable
+from "nothing matched".
 
 ## Provenance and disclaimers
 

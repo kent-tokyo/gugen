@@ -1345,6 +1345,10 @@ pub struct CommercialCombination {
     pub all_costs_known: bool,
     /// `None` if any selection's lead time is unknown.
     pub max_lead_time_days: Option<u32>,
+    /// `true` unless a selected offer is explicitly `Discontinued`.
+    /// Unreported availability (no offer field set) counts as
+    /// acceptable-but-unknown, not unacceptable -- missing metadata is not
+    /// evidence the compound can't be procured.
     pub all_availability_acceptable: bool,
 }
 
@@ -1373,6 +1377,9 @@ pub struct CommercialPlanAssessment {
     pub combinations: Vec<CommercialCombination>,
     pub unmatched_precursors: Vec<(PrecursorId, Composition)>,
     pub rejected_offers: Vec<CommercialExclusion>,
+    /// Deduplicated across the offers actually selected in `combinations`
+    /// (not every surviving catalog candidate) -- bounded by
+    /// `max_results_returned`, not by catalog size.
     pub unresolved_commercial_fields: Vec<UnresolvedCommercialField>,
     pub warnings: Vec<CommercialWarning>,
     pub search_budget: SearchBudgetSummary,
@@ -1629,6 +1636,7 @@ fn offer_rank_order(a: &OfferCandidate, b: &OfferCandidate) -> std::cmp::Orderin
 struct HeapEntry {
     indices: Vec<usize>,
     unresolved_sum: usize,
+    total_cost: Option<Money>,
     cost_key: (u8, Option<CurrencyCode>, u64),
     max_lead_time: u32,
     min_purity: f64,
@@ -1671,6 +1679,7 @@ impl HeapEntry {
         Self {
             indices,
             unresolved_sum,
+            total_cost,
             cost_key,
             max_lead_time,
             min_purity,
@@ -1719,6 +1728,23 @@ fn combination_total_cost(selected: &[&OfferCandidate]) -> Option<Money> {
     Some(total)
 }
 
+/// Whether a combination's total cost satisfies `max_total_cost` (when set).
+/// A total that isn't comparable (unknown, or a different currency than the
+/// ceiling) can't be verified against the ceiling -- it passes rather than
+/// being silently excluded or included; the caller attaches a warning for
+/// that case. This must run *before* `max_results_returned` truncation --
+/// applying it after truncation can return zero combinations even though a
+/// lower-ranked, budget-satisfying combination exists.
+fn passes_max_total_cost(total_cost: Option<Money>, max_total_cost: Option<Money>) -> bool {
+    match (total_cost, max_total_cost) {
+        (_, None) => true,
+        (Some(cost), Some(max_cost)) if cost.currency() == max_cost.currency() => {
+            cost.minor_units() <= max_cost.minor_units()
+        }
+        _ => true,
+    }
+}
+
 /// Enumerates complete combinations (one offer per row), best-first, up to
 /// `config.max_results_returned`, evaluating at most
 /// `config.max_combinations_evaluated`. Returns
@@ -1752,6 +1778,7 @@ fn combination_total_cost(selected: &[&OfferCandidate]) -> Option<Money> {
 fn search_combinations(
     rows: &[Vec<OfferCandidate>],
     config: &CommercialPlanningConfig,
+    max_total_cost: Option<Money>,
 ) -> (Vec<Vec<usize>>, usize, u64) {
     if rows.is_empty() || rows.iter().any(|row| row.is_empty()) {
         return (Vec::new(), 0, 0);
@@ -1762,9 +1789,9 @@ fn search_combinations(
         .fold(1u64, |acc, row| acc.saturating_mul(row.len() as u64));
 
     if total_space <= config.max_combinations_evaluated as u64 {
-        exhaustive_search(rows, config, total_space)
+        exhaustive_search(rows, config, total_space, max_total_cost)
     } else {
-        heuristic_search(rows, config, total_space)
+        heuristic_search(rows, config, total_space, max_total_cost)
     }
 }
 
@@ -1778,6 +1805,7 @@ fn exhaustive_search(
     rows: &[Vec<OfferCandidate>],
     config: &CommercialPlanningConfig,
     total_space: u64,
+    max_total_cost: Option<Money>,
 ) -> (Vec<Vec<usize>>, usize, u64) {
     let mut all: Vec<HeapEntry> = Vec::with_capacity(total_space as usize);
     for combo_index in 0..total_space {
@@ -1791,8 +1819,16 @@ fn exhaustive_search(
         all.push(HeapEntry::new(indices, rows));
     }
     all.sort_by(|a, b| b.cmp(a)); // descending: best (greatest) first
-    all.truncate(config.max_results_returned);
-    let results = all.into_iter().map(|e| e.indices).collect();
+    // Filter by max_total_cost *before* truncating -- otherwise a
+    // budget-satisfying combination ranked below the top max_results_returned
+    // entries would be silently dropped, leaving zero results even though a
+    // qualifying combination exists.
+    let results = all
+        .into_iter()
+        .filter(|e| passes_max_total_cost(e.total_cost, max_total_cost))
+        .take(config.max_results_returned)
+        .map(|e| e.indices)
+        .collect();
     (results, total_space as usize, total_space)
 }
 
@@ -1809,6 +1845,7 @@ fn heuristic_search(
     rows: &[Vec<OfferCandidate>],
     config: &CommercialPlanningConfig,
     total_space: u64,
+    max_total_cost: Option<Money>,
 ) -> (Vec<Vec<usize>>, usize, u64) {
     use std::collections::{BTreeSet, BinaryHeap};
 
@@ -1826,9 +1863,14 @@ fn heuristic_search(
             break;
         }
         evaluated += 1;
-        results.push(entry.indices.clone());
-        if results.len() >= config.max_results_returned {
-            break;
+        // Keep expanding neighbors even when this entry fails the cost
+        // ceiling -- it's still a valid frontier node, and a
+        // budget-satisfying combination may only be reachable through it.
+        if passes_max_total_cost(entry.total_cost, max_total_cost) {
+            results.push(entry.indices.clone());
+            if results.len() >= config.max_results_returned {
+                break;
+            }
         }
         for row_i in 0..rows.len() {
             let mut neighbor = entry.indices.clone();
@@ -1906,10 +1948,14 @@ fn build_combination(
     }
     // "Acceptable" here is a fixed, documented judgment independent of the
     // request's own availability filter (which may not have restricted
-    // availability at all): known and not Discontinued.
+    // availability at all): not explicitly Discontinued. Unreported
+    // availability (`None`) counts as acceptable-but-unknown, matching
+    // precursor.rs's existing convention that missing availability metadata
+    // is a gap, not evidence of unavailability -- it must not read as
+    // "unacceptable" just because a supplier didn't report a status.
     let all_availability_acceptable = selected
         .iter()
-        .all(|c| matches!(c.offer.availability, Some(status) if status != AvailabilityStatus::Discontinued));
+        .all(|c| c.offer.availability != Some(AvailabilityStatus::Discontinued));
     let combination_id = selected
         .iter()
         .map(|c| c.offer.offer_id.0.as_str())
@@ -2033,7 +2079,6 @@ pub fn assess_commercial_precursors(
 
     let mut unmatched_precursors = Vec::new();
     let mut rejected_offers = Vec::new();
-    let mut unresolved_commercial_fields = Vec::new();
     let mut any_row_truncated = false;
     let mut rows: Vec<Vec<OfferCandidate>> = Vec::new();
     let mut row_meta: Vec<(PrecursorId, Composition, u64, f64)> = Vec::new();
@@ -2108,16 +2153,6 @@ pub fn assess_commercial_precursors(
             });
         }
 
-        for candidate in &survivors {
-            for &field in &candidate.unresolved_fields {
-                unresolved_commercial_fields.push(UnresolvedCommercialField {
-                    precursor: selection.precursor.clone(),
-                    offer_id: candidate.offer.offer_id.clone(),
-                    field,
-                });
-            }
-        }
-
         if survivors.is_empty() {
             unmatched_precursors.push((selection.precursor.clone(), species.composition.clone()));
         }
@@ -2126,7 +2161,7 @@ pub fn assess_commercial_precursors(
 
     let every_precursor_has_a_match = unmatched_precursors.is_empty();
     let (index_vectors, evaluated, total_space) = if every_precursor_has_a_match {
-        search_combinations(&rows, config)
+        search_combinations(&rows, config, request.max_total_cost)
     } else {
         (Vec::new(), 0, 0)
     };
@@ -2144,21 +2179,50 @@ pub fn assess_commercial_precursors(
         });
     }
 
-    let mut combinations: Vec<CommercialCombination> = index_vectors
+    // max_total_cost was already applied as a hard filter *inside* the
+    // search, before max_results_returned truncation -- see
+    // `passes_max_total_cost`'s doc comment for why filtering here, after
+    // truncation, would be wrong (it could return zero combinations even
+    // when a lower-ranked, budget-satisfying one exists).
+    let combinations: Vec<CommercialCombination> = index_vectors
         .iter()
         .map(|indices| build_combination(indices, &rows, &row_meta))
         .collect();
 
-    if let Some(max_total_cost) = request.max_total_cost {
-        combinations.retain(|combination| match combination.total_cost {
-            Some(cost) if cost.currency() == max_total_cost.currency() => {
-                cost.minor_units() <= max_total_cost.minor_units()
+    let mut unresolved_commercial_fields: Vec<UnresolvedCommercialField> = Vec::new();
+    let mut unresolved_seen: BTreeSet<(PrecursorId, CommercialOfferId, &'static str)> =
+        BTreeSet::new();
+    for combination in &combinations {
+        for selection in &combination.selections {
+            for &field in &selection.unresolved_fields {
+                let key = (
+                    selection.precursor.clone(),
+                    selection.offer_id.clone(),
+                    field,
+                );
+                if unresolved_seen.insert(key) {
+                    unresolved_commercial_fields.push(UnresolvedCommercialField {
+                        precursor: selection.precursor.clone(),
+                        offer_id: selection.offer_id.clone(),
+                        field,
+                    });
+                }
             }
-            // Not comparable (different/unknown currency): can't verify the
-            // ceiling, so keep the combination rather than silently
-            // passing or failing it, and say so.
-            _ => true,
+        }
+    }
+
+    if request.max_total_cost.is_some() && every_precursor_has_a_match && combinations.is_empty() {
+        // Every precursor matched and the search space was non-empty, so an
+        // empty combinations list here can only mean max_total_cost
+        // excluded every candidate combination -- say so explicitly rather
+        // than letting this read as "matching succeeded, nothing to buy".
+        warnings.push(CommercialWarning {
+            message: "no combination satisfied max_total_cost; all matched combinations \
+                exceeded the requested cost ceiling"
+                .to_string(),
+            severity: WarningSeverity::Caution,
         });
+    } else if let Some(max_total_cost) = request.max_total_cost {
         if combinations.iter().any(|c| {
             c.total_cost
                 .is_none_or(|cost| cost.currency() != max_total_cost.currency())
@@ -3012,6 +3076,215 @@ mod tests {
     }
 
     #[test]
+    fn assess_commercial_precursors_max_total_cost_filters_before_truncation_not_after() {
+        // Regression test for a bug where max_total_cost was applied as a
+        // post-hoc filter on the already-truncated top max_results_returned
+        // list: if every top-ranked combination exceeded the ceiling but a
+        // lower-ranked one satisfied it, the caller got zero combinations
+        // even though a satisfying one existed. The premium offer below
+        // outranks the cheap offer on unresolved-field count (its lead time
+        // is known, the cheap offer's is not) despite costing far more --
+        // so with max_results_returned: 1, a post-truncation filter would
+        // keep only the premium combination and then reject it, while the
+        // fix filters before truncating and returns the cheap one instead.
+        let plan = barium_titanate_plan();
+        let catalog = baco3_tio2_catalog(vec![
+            priced_offer(
+                "BACO3-PREMIUM",
+                "BaCO3",
+                "Example Materials Ltd.",
+                Some(1.0),
+                Some(250.0),
+                Some((1_000_000, "USD")),
+                Some(5),
+                Some(AvailabilityStatus::InStock),
+            ),
+            priced_offer(
+                "BACO3-CHEAP-UNKNOWN-LEADTIME",
+                "BaCO3",
+                "Demo Chemical Supply Co.",
+                Some(1.0),
+                Some(250.0),
+                Some((5_000, "USD")),
+                None,
+                Some(AvailabilityStatus::InStock),
+            ),
+            priced_offer(
+                "TIO2-ONLY",
+                "TiO2",
+                "Example Materials Ltd.",
+                Some(1.0),
+                Some(100.0),
+                Some((50_000, "USD")),
+                Some(5),
+                Some(AvailabilityStatus::InStock),
+            ),
+        ]);
+        let request = CommercialPlanningRequest {
+            max_total_cost: Some(money(200_000, "USD")),
+            ..Default::default()
+        };
+        let config = CommercialPlanningConfig {
+            max_results_returned: 1,
+            ..Default::default()
+        };
+        let assessment = assess_commercial_precursors(&plan, &catalog, &request, &config).unwrap();
+        assert_eq!(
+            assessment.combinations.len(),
+            1,
+            "a budget-satisfying combination exists and must be returned, not dropped"
+        );
+        let best = &assessment.combinations[0];
+        assert!(
+            best.selections
+                .iter()
+                .any(|s| s.offer_id.0 == "BACO3-CHEAP-UNKNOWN-LEADTIME")
+        );
+        assert_eq!(best.total_cost, Some(money(55_000, "USD")));
+    }
+
+    #[test]
+    fn assess_commercial_precursors_max_total_cost_excluding_everything_is_reported_not_silent() {
+        // Every precursor matches and the search space is non-empty, but
+        // max_total_cost is set below any achievable total -- must produce
+        // a warning explaining why, not read as "matching succeeded,
+        // nothing to buy". Both offers below have a known price in a single
+        // shared currency, so their combination's cost is always verifiable
+        // against the ceiling -- an unknown-price offer would trivially
+        // pass (not comparable), which would defeat this test.
+        let plan = barium_titanate_plan();
+        let catalog = baco3_tio2_catalog(vec![
+            priced_offer(
+                "BACO3-PRICED",
+                "BaCO3",
+                "Example Materials Ltd.",
+                Some(0.99),
+                Some(250.0),
+                Some((1000, "USD")),
+                Some(5),
+                Some(AvailabilityStatus::InStock),
+            ),
+            priced_offer(
+                "TIO2-PRICED",
+                "TiO2",
+                "Example Materials Ltd.",
+                Some(0.99),
+                Some(100.0),
+                Some((800, "USD")),
+                Some(5),
+                Some(AvailabilityStatus::InStock),
+            ),
+        ]);
+        let request = CommercialPlanningRequest {
+            max_total_cost: Some(money(1, "USD")),
+            ..Default::default()
+        };
+        let assessment = assess_commercial_precursors(
+            &plan,
+            &catalog,
+            &request,
+            &CommercialPlanningConfig::default(),
+        )
+        .unwrap();
+        assert!(assessment.combinations.is_empty());
+        assert!(assessment.every_precursor_has_a_match);
+        assert!(
+            assessment
+                .warnings
+                .iter()
+                .any(|w| w.message.contains("max_total_cost")),
+            "an empty result caused by the cost ceiling must be explained, not silent: {:?}",
+            assessment.warnings
+        );
+    }
+
+    #[test]
+    fn assess_commercial_precursors_unreported_availability_counts_as_acceptable() {
+        // precursor.rs's existing convention: missing availability metadata
+        // is a gap, not evidence the compound is unavailable. A combination
+        // built from offers that simply never reported availability must
+        // not read as "unacceptable".
+        let plan = barium_titanate_plan();
+        let catalog = baco3_tio2_catalog(vec![
+            priced_offer(
+                "BACO3-NOAVAIL",
+                "BaCO3",
+                "Example Materials Ltd.",
+                Some(0.99),
+                Some(250.0),
+                Some((1000, "USD")),
+                Some(5),
+                None,
+            ),
+            priced_offer(
+                "TIO2-NOAVAIL",
+                "TiO2",
+                "Example Materials Ltd.",
+                Some(0.99),
+                Some(100.0),
+                Some((800, "USD")),
+                Some(5),
+                None,
+            ),
+        ]);
+        let assessment = assess_commercial_precursors(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &CommercialPlanningConfig::default(),
+        )
+        .unwrap();
+        let best = &assessment.combinations[0];
+        assert!(
+            best.all_availability_acceptable,
+            "unreported availability must count as acceptable-but-unknown, not unacceptable"
+        );
+    }
+
+    #[test]
+    fn assess_commercial_precursors_discontinued_offer_makes_availability_unacceptable() {
+        // The default request doesn't restrict allowed_availability_statuses
+        // (so Discontinued offers aren't hard-excluded), which makes this
+        // branch reachable: an explicitly Discontinued selection must still
+        // be flagged via all_availability_acceptable.
+        let plan = barium_titanate_plan();
+        let catalog = baco3_tio2_catalog(vec![
+            priced_offer(
+                "BACO3-DISCONTINUED",
+                "BaCO3",
+                "Example Materials Ltd.",
+                Some(0.99),
+                Some(250.0),
+                Some((1000, "USD")),
+                Some(5),
+                Some(AvailabilityStatus::Discontinued),
+            ),
+            priced_offer(
+                "TIO2-INSTOCK",
+                "TiO2",
+                "Example Materials Ltd.",
+                Some(0.99),
+                Some(100.0),
+                Some((800, "USD")),
+                Some(5),
+                Some(AvailabilityStatus::InStock),
+            ),
+        ]);
+        let assessment = assess_commercial_precursors(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &CommercialPlanningConfig::default(),
+        )
+        .unwrap();
+        let best = &assessment.combinations[0];
+        assert!(
+            !best.all_availability_acceptable,
+            "a Discontinued selection must make the combination availability-unacceptable"
+        );
+    }
+
+    #[test]
     fn assess_commercial_precursors_cost_overflow_excludes_the_offer_not_panics() {
         let plan = barium_titanate_plan();
         let mut offers = default_baco3_tio2_offers();
@@ -3365,7 +3638,7 @@ mod tests {
             max_combinations_evaluated: 27,
             max_results_returned: 27,
         };
-        let (heap_results, evaluated, total_space) = search_combinations(&rows, &config);
+        let (heap_results, evaluated, total_space) = search_combinations(&rows, &config, None);
         assert_eq!(evaluated, 27);
         assert_eq!(total_space, 27);
 
