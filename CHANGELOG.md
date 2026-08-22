@@ -56,6 +56,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   ConventionalSolidState and Mechanochemical) now makes one
   `precedents` call per accepted set instead of one per resulting plan.
 
+### Changed (breaking, Phase 23D)
+
+- `RouteFamily`, `InertGas`, `MixingMethod`, `GrindingMethod`, and
+  `FormingMethod` are now `#[non_exhaustive]` — each already had a doc
+  comment stating "add a variant only when a real fixture needs one";
+  this marks that intent in the type system. Exhaustive `match`
+  expressions on these enums outside this crate need a wildcard `_`
+  arm. Matches the existing `SuitabilityVerdict`/`RouteRecommendation`
+  precedent (Phase 15A).
+- New `docs/api_stability_policy.md`: states what `SCHEMA_VERSION` does
+  and doesn't guarantee, what `#[non_exhaustive]` covers in this crate
+  going forward, and a known `cargo semver-checks` blind spot.
+
 ## [0.4.2] - 2026-08-22
 
 Adds the Commercial Precursor Catalog: an optional, off-by-default
