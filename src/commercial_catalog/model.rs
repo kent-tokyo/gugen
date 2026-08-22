@@ -716,6 +716,36 @@ mod tests {
     }
 
     #[test]
+    fn money_checked_arithmetic_at_the_u64_max_boundary() {
+        // Extends the overflow test above with boundary-adjacent cases,
+        // not just far-past-overflow ones: values that land exactly on
+        // u64::MAX must still succeed, and the smallest possible overflow
+        // (one past the max) must still be None, not panic or wrap.
+        let usd = CurrencyCode::new("USD").unwrap();
+        assert_eq!(
+            Money::new(u64::MAX, usd).checked_mul_quantity(1),
+            Some(Money::new(u64::MAX, usd)),
+            "multiplying by 1 at the exact max must succeed"
+        );
+        assert_eq!(
+            Money::new(u64::MAX - 1, usd).checked_add(&Money::new(1, usd)),
+            Some(Money::new(u64::MAX, usd)),
+            "summing to exactly the max must succeed"
+        );
+        assert_eq!(
+            Money::new(u64::MAX, usd).checked_add(&Money::new(1, usd)),
+            None,
+            "one past the max must overflow to None, not wrap"
+        );
+        let half_plus_one = u64::MAX / 2 + 1;
+        assert_eq!(
+            Money::new(half_plus_one, usd).checked_mul_quantity(2),
+            None,
+            "just over half the max, doubled, must overflow"
+        );
+    }
+
+    #[test]
     fn cas_number_checksum_validates_water_and_rejects_a_bad_checksum() {
         assert!(CasNumber::new("7732-18-5").checksum_verified); // water
         assert!(!CasNumber::new("7732-18-4").checksum_verified);

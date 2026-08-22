@@ -101,3 +101,51 @@ pub(crate) fn cost_rank_key(subtotal: Option<Money>) -> (u8, Option<CurrencyCode
         None => (1, None, 0),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::commercial_catalog::test_support::*;
+
+    #[test]
+    fn package_count_does_not_round_up_when_exactly_at_a_package_boundary() {
+        // purity 1.0 keeps the first division exact; 500.0/100.0 is exact
+        // in IEEE754 (both operands exactly representable, evenly
+        // divisible) -- this pins the expected behavior explicitly rather
+        // than relying on it working by luck, and would catch a naive-but-
+        // wrong implementation that pads every package count by one as a
+        // safety margin.
+        let offer = priced_offer(
+            "A",
+            "BaCO3",
+            "Example Materials Ltd.",
+            Some(1.0),
+            Some(100.0),
+            Some((1000, "USD")),
+            Some(5),
+            None,
+        );
+        let quantity = compute_offer_quantity(&offer, 500.0);
+        assert_eq!(
+            quantity.package_count,
+            Some(5),
+            "exact divisibility must not round up an extra package"
+        );
+    }
+
+    #[test]
+    fn package_count_rounds_up_when_just_over_a_package_boundary() {
+        let offer = priced_offer(
+            "A",
+            "BaCO3",
+            "Example Materials Ltd.",
+            Some(1.0),
+            Some(100.0),
+            Some((1000, "USD")),
+            Some(5),
+            None,
+        );
+        let quantity = compute_offer_quantity(&offer, 500.01);
+        assert_eq!(quantity.package_count, Some(6));
+    }
+}
