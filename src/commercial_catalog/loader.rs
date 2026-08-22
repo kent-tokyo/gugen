@@ -12,6 +12,30 @@ use super::model::{
 use crate::error::ProviderError;
 use std::collections::BTreeSet;
 
+// Third of `CommercialPrecursorCatalog`'s three `impl` blocks -- see the
+// cross-referencing comment on `model.rs`'s own `impl` block for why the
+// type is split this way. Kept here specifically so `model.rs` never
+// needs to import anything from `loader.rs`: the dependency runs one way
+// (`loader.rs` depends on `model.rs`'s type definitions), not both.
+impl CommercialPrecursorCatalog {
+    pub fn load_csv(
+        csv_text: &str,
+        mode: CommercialCatalogLoadMode,
+    ) -> std::result::Result<(CommercialPrecursorCatalog, CommercialCatalogLoadReport), ProviderError>
+    {
+        load_csv_impl(csv_text, mode)
+    }
+
+    #[cfg(feature = "serde")]
+    pub fn load_json(
+        json_text: &str,
+        mode: CommercialCatalogLoadMode,
+    ) -> std::result::Result<(CommercialPrecursorCatalog, CommercialCatalogLoadReport), ProviderError>
+    {
+        load_json_impl(json_text, mode)
+    }
+}
+
 fn validate_price(
     price_minor_units: Option<u64>,
     currency: Option<CurrencyCode>,

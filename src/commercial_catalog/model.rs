@@ -2,11 +2,7 @@
 //! data, request/config, exclusions/warnings, and result types. See the
 //! module root (`super`) doc comment for the whole feature's architecture.
 
-use super::loader::load_csv_impl;
-#[cfg(feature = "serde")]
-use super::loader::load_json_impl;
 use crate::composition::Composition;
-use crate::error::ProviderError;
 use crate::precursor::PrecursorId;
 use crate::report::{PlanId, WarningSeverity};
 use std::collections::BTreeSet;
@@ -424,11 +420,19 @@ pub struct CommercialPrecursorCatalog {
     offers: Vec<CommercialPrecursorOffer>,
 }
 
-// Split across two `impl` blocks: construction/loading/accessors here,
-// `offers_matching` in `matching.rs` (its canonical-ratio logic belongs
-// there). Legal Rust -- no orphan-rule restriction on inherent impls
-// within one crate -- but grep for `impl CommercialPrecursorCatalog` will
-// only find one half; an LSP "go to method" aggregates both.
+// Split across three `impl` blocks, each in the file its logic actually
+// belongs to (this keeps the dependency direction one-way: `loader.rs`
+// and `matching.rs` both depend on `model.rs`'s type definitions, never
+// the reverse). Legal Rust -- no orphan-rule restriction on inherent
+// impls within one crate -- but grep for `impl CommercialPrecursorCatalog`
+// will only find one third; an LSP "go to method" aggregates all three.
+// - Construction/accessors: here.
+// - `load_csv`/`load_json`: `loader.rs` (their implementation, `load_csv_impl`/
+//   `load_json_impl`, already lives there -- keeping the thin `impl`
+//   wrapper in the same file avoids model.rs needing to import loader.rs
+//   at all).
+// - `offers_matching`: `matching.rs` (its canonical-ratio logic belongs
+//   there).
 impl CommercialPrecursorCatalog {
     /// The single true constructor -- both `load_csv` and `load_json` funnel
     /// through this after per-row parsing. Sorted by `offer_id`, so results
@@ -458,21 +462,6 @@ impl CommercialPrecursorCatalog {
             rejected: Vec::new(),
         };
         (Self { offers: deduped }, report)
-    }
-
-    pub fn load_csv(
-        csv_text: &str,
-        mode: CommercialCatalogLoadMode,
-    ) -> std::result::Result<(Self, CommercialCatalogLoadReport), ProviderError> {
-        load_csv_impl(csv_text, mode)
-    }
-
-    #[cfg(feature = "serde")]
-    pub fn load_json(
-        json_text: &str,
-        mode: CommercialCatalogLoadMode,
-    ) -> std::result::Result<(Self, CommercialCatalogLoadReport), ProviderError> {
-        load_json_impl(json_text, mode)
     }
 
     pub fn offers(&self) -> &[CommercialPrecursorOffer] {
