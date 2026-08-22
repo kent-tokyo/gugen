@@ -25,6 +25,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `Deserialize` could construct an invalid value directly from untrusted
   JSON, bypassing every check `::new` performed).
 
+### Added (Phase 23B)
+
+- `Planner::builder(catalog, config)` returns a new `PlannerBuilder` with
+  `.thermodynamic_provider(...)`, `.process_evidence_provider(...)`,
+  `.route_suitability_provider(...)`, `.literature_evidence_provider(...)`,
+  and `.build()` (infallible) — covers any combination of `Planner`'s 4
+  optional providers, including combinations none of the 5 named
+  constructors below covered.
+
+### Deprecated (Phase 23B)
+
+- `Planner::new`, `Planner::offline_minimal`,
+  `Planner::with_process_evidence_provider`,
+  `Planner::with_route_suitability_provider`, and
+  `Planner::with_literature_evidence_provider` are deprecated in favor of
+  `Planner::builder(...)` above. Each still works, unchanged, as a thin
+  wrapper around the builder — no removal planned for a specific release
+  yet.
+
 ## [0.4.2] - 2026-08-22
 
 Adds the Commercial Precursor Catalog: an optional, off-by-default

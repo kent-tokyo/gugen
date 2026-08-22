@@ -52,13 +52,14 @@ fn candidate(id: &str, pairs: &[(&str, f64)]) -> PrecursorCandidate {
 }
 
 fn barium_titanate_plan() -> gugen::SynthesisPlan {
-    let planner = Planner::offline_minimal(
+    let planner = Planner::builder(
         InMemoryPrecursorCatalog::new(vec![
             candidate("BaCO3", &[("Ba", 1.0), ("C", 1.0), ("O", 3.0)]),
             candidate("TiO2", &[("Ti", 1.0), ("O", 2.0)]),
         ]),
         PlanningConfig::default(),
-    );
+    )
+    .build();
     let target_spec = TargetSpecification {
         composition: composition(&[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)]),
         structure: None,

@@ -44,78 +44,154 @@ pub struct Planner {
     config: PlanningConfig,
 }
 
+/// Builds a [`Planner`] with any combination of its 4 optional providers
+/// (v0.5.0, Phase 23B) -- `catalog`/`config` are required up front (there is
+/// nothing to plan from without a catalog), each provider is attached by
+/// name in any order or combination, and `build()` is infallible (no
+/// constructor, named or builder, performs any validation beyond field
+/// assignment). The crate's first builder pattern; created because the 5
+/// named constructors below only covered 3 of the real 2+-optional-provider
+/// combinations.
+pub struct PlannerBuilder {
+    catalog: Box<dyn PrecursorCatalog>,
+    config: PlanningConfig,
+    thermodynamic_provider: Option<Box<dyn ThermodynamicProvider>>,
+    process_evidence_provider: Option<Box<dyn ProcessEvidenceProvider>>,
+    route_suitability_provider: Option<Box<dyn RouteSuitabilityProvider>>,
+    literature_evidence_provider: Option<Box<dyn LiteratureEvidenceProvider>>,
+}
+
+impl PlannerBuilder {
+    pub fn thermodynamic_provider(
+        mut self,
+        provider: impl ThermodynamicProvider + 'static,
+    ) -> Self {
+        self.thermodynamic_provider = Some(Box::new(provider));
+        self
+    }
+
+    pub fn process_evidence_provider(
+        mut self,
+        provider: impl ProcessEvidenceProvider + 'static,
+    ) -> Self {
+        self.process_evidence_provider = Some(Box::new(provider));
+        self
+    }
+
+    pub fn route_suitability_provider(
+        mut self,
+        provider: impl RouteSuitabilityProvider + 'static,
+    ) -> Self {
+        self.route_suitability_provider = Some(Box::new(provider));
+        self
+    }
+
+    pub fn literature_evidence_provider(
+        mut self,
+        provider: impl LiteratureEvidenceProvider + 'static,
+    ) -> Self {
+        self.literature_evidence_provider = Some(Box::new(provider));
+        self
+    }
+
+    pub fn build(self) -> Planner {
+        Planner {
+            catalog: self.catalog,
+            thermodynamic_provider: self.thermodynamic_provider,
+            process_evidence_provider: self.process_evidence_provider,
+            route_suitability_provider: self.route_suitability_provider,
+            literature_evidence_provider: self.literature_evidence_provider,
+            config: self.config,
+        }
+    }
+}
+
 impl Planner {
+    /// Starts a [`PlannerBuilder`] -- the general construction path,
+    /// covering any combination of the 4 optional providers (v0.5.0,
+    /// Phase 23B). Superseded the 5 named constructors below, none of
+    /// which covered the real 2+-optional-provider combination space; kept
+    /// as `#[deprecated]` wrappers around this builder for one release.
+    pub fn builder(
+        catalog: impl PrecursorCatalog + 'static,
+        config: PlanningConfig,
+    ) -> PlannerBuilder {
+        PlannerBuilder {
+            catalog: Box::new(catalog),
+            config,
+            thermodynamic_provider: None,
+            process_evidence_provider: None,
+            route_suitability_provider: None,
+            literature_evidence_provider: None,
+        }
+    }
+
     /// Full configuration: a catalog plus both optional providers.
+    #[deprecated(
+        since = "0.5.0",
+        note = "use Planner::builder(catalog, config).process_evidence_provider(p).thermodynamic_provider(t).build() instead"
+    )]
     pub fn new(
         catalog: impl PrecursorCatalog + 'static,
         process_evidence_provider: impl ProcessEvidenceProvider + 'static,
         thermodynamic_provider: impl ThermodynamicProvider + 'static,
         config: PlanningConfig,
     ) -> Self {
-        Self {
-            catalog: Box::new(catalog),
-            thermodynamic_provider: Some(Box::new(thermodynamic_provider)),
-            process_evidence_provider: Some(Box::new(process_evidence_provider)),
-            route_suitability_provider: None,
-            literature_evidence_provider: None,
-            config,
-        }
+        Self::builder(catalog, config)
+            .process_evidence_provider(process_evidence_provider)
+            .thermodynamic_provider(thermodynamic_provider)
+            .build()
     }
 
     /// Catalog only -- no thermodynamic or process-evidence provider.
     /// AGENTS.md §18: "providerがなくても最低限のstoichiometric planningを
     /// 実行できる構成" -- but conditions are still never fabricated to make
     /// up for the missing providers; they stay unresolved instead.
+    #[deprecated(
+        since = "0.5.0",
+        note = "use Planner::builder(catalog, config).build() instead"
+    )]
     pub fn offline_minimal(
         catalog: impl PrecursorCatalog + 'static,
         config: PlanningConfig,
     ) -> Self {
-        Self {
-            catalog: Box::new(catalog),
-            thermodynamic_provider: None,
-            process_evidence_provider: None,
-            route_suitability_provider: None,
-            literature_evidence_provider: None,
-            config,
-        }
+        Self::builder(catalog, config).build()
     }
 
     /// Catalog plus a process-evidence provider (e.g.
     /// `InMemoryLiteratureConditionProvider`, Phase 10) -- no thermodynamic
     /// provider. The one new two-provider combination Phase 10 needs; see
     /// `new`/`offline_minimal` for the other two.
+    #[deprecated(
+        since = "0.5.0",
+        note = "use Planner::builder(catalog, config).process_evidence_provider(p).build() instead"
+    )]
     pub fn with_process_evidence_provider(
         catalog: impl PrecursorCatalog + 'static,
         process_evidence_provider: impl ProcessEvidenceProvider + 'static,
         config: PlanningConfig,
     ) -> Self {
-        Self {
-            catalog: Box::new(catalog),
-            thermodynamic_provider: None,
-            process_evidence_provider: Some(Box::new(process_evidence_provider)),
-            route_suitability_provider: None,
-            literature_evidence_provider: None,
-            config,
-        }
+        Self::builder(catalog, config)
+            .process_evidence_provider(process_evidence_provider)
+            .build()
     }
 
     /// Catalog plus a route-suitability provider (e.g.
     /// `InMemoryRouteSuitabilityProvider`, Phase 15A) -- no thermodynamic or
     /// process-evidence provider. Mirrors `with_process_evidence_provider`'s
     /// shape; see `new`/`offline_minimal` for the other combinations.
+    #[deprecated(
+        since = "0.5.0",
+        note = "use Planner::builder(catalog, config).route_suitability_provider(p).build() instead"
+    )]
     pub fn with_route_suitability_provider(
         catalog: impl PrecursorCatalog + 'static,
         route_suitability_provider: impl RouteSuitabilityProvider + 'static,
         config: PlanningConfig,
     ) -> Self {
-        Self {
-            catalog: Box::new(catalog),
-            thermodynamic_provider: None,
-            process_evidence_provider: None,
-            route_suitability_provider: Some(Box::new(route_suitability_provider)),
-            literature_evidence_provider: None,
-            config,
-        }
+        Self::builder(catalog, config)
+            .route_suitability_provider(route_suitability_provider)
+            .build()
     }
 
     /// Catalog plus a literature-evidence provider (e.g.
@@ -126,19 +202,18 @@ impl Planner {
     /// otherwise identical to what `offline_minimal` alone would have
     /// produced -- score, confidence, ranking, and `steps` are unaffected
     /// by construction (`literature_evidence.rs`'s module doc comment).
+    #[deprecated(
+        since = "0.5.0",
+        note = "use Planner::builder(catalog, config).literature_evidence_provider(p).build() instead"
+    )]
     pub fn with_literature_evidence_provider(
         catalog: impl PrecursorCatalog + 'static,
         literature_evidence_provider: impl LiteratureEvidenceProvider + 'static,
         config: PlanningConfig,
     ) -> Self {
-        Self {
-            catalog: Box::new(catalog),
-            thermodynamic_provider: None,
-            process_evidence_provider: None,
-            route_suitability_provider: None,
-            literature_evidence_provider: Some(Box::new(literature_evidence_provider)),
-            config,
-        }
+        Self::builder(catalog, config)
+            .literature_evidence_provider(literature_evidence_provider)
+            .build()
     }
 
     /// Plans for `target`, returning a complete report -- never a partial
@@ -841,7 +916,7 @@ mod tests {
 
     #[test]
     fn offline_minimal_produces_ranked_plans_from_a_catalog_alone() {
-        let planner = Planner::offline_minimal(barium_titanate_catalog(), generous_config());
+        let planner = Planner::builder(barium_titanate_catalog(), generous_config()).build();
         let report = planner
             .plan(&barium_titanate_target(), "2026-08-14T00:00:00Z")
             .unwrap();
@@ -888,7 +963,7 @@ mod tests {
     fn self_contradictory_target_abstains_with_no_plans() {
         let mut target = barium_titanate_target();
         target.constraints.forbidden_elements.insert(element("Ba"));
-        let planner = Planner::offline_minimal(barium_titanate_catalog(), generous_config());
+        let planner = Planner::builder(barium_titanate_catalog(), generous_config()).build();
 
         let report = planner.plan(&target, "2026-08-14T00:00:00Z").unwrap();
 
@@ -902,7 +977,7 @@ mod tests {
     #[test]
     fn empty_catalog_result_produces_a_warning_not_a_panic() {
         let empty = InMemoryPrecursorCatalog::new(vec![]);
-        let planner = Planner::offline_minimal(empty, generous_config());
+        let planner = Planner::builder(empty, generous_config()).build();
 
         let report = planner
             .plan(&barium_titanate_target(), "2026-08-14T00:00:00Z")
@@ -1009,12 +1084,10 @@ mod tests {
     #[test]
     fn thermodynamic_provider_calls_are_not_duplicated_per_route_family() {
         let provider = std::rc::Rc::new(CountingThermodynamicProvider::default());
-        let planner = Planner::new(
-            barium_titanate_catalog(),
-            NoopProcessEvidenceProvider,
-            provider.clone(),
-            generous_config(),
-        );
+        let planner = Planner::builder(barium_titanate_catalog(), generous_config())
+            .process_evidence_provider(NoopProcessEvidenceProvider)
+            .thermodynamic_provider(provider.clone())
+            .build();
 
         let report = planner
             .plan(&barium_titanate_target(), "2026-08-14T00:00:00Z")
@@ -1065,12 +1138,10 @@ mod tests {
         // configured.
         let unrelated_catalog =
             InMemoryPrecursorCatalog::new(vec![candidate("NaCl", &[("Na", 1.0), ("Cl", 1.0)])]);
-        let planner = Planner::new(
-            unrelated_catalog,
-            NoopProcessEvidenceProvider,
-            provider.clone(),
-            generous_config(),
-        );
+        let planner = Planner::builder(unrelated_catalog, generous_config())
+            .process_evidence_provider(NoopProcessEvidenceProvider)
+            .thermodynamic_provider(provider.clone())
+            .build();
 
         let report = planner
             .plan(&barium_titanate_target(), "2026-08-14T00:00:00Z")
@@ -1084,12 +1155,10 @@ mod tests {
     /// AGENTS.md §21.5: one provider failing must not fail the whole plan.
     #[test]
     fn a_failing_optional_provider_degrades_to_a_warning_not_a_failure() {
-        let planner = Planner::new(
-            barium_titanate_catalog(),
-            FailingProcessEvidenceProvider,
-            FailingThermodynamicProvider,
-            generous_config(),
-        );
+        let planner = Planner::builder(barium_titanate_catalog(), generous_config())
+            .process_evidence_provider(FailingProcessEvidenceProvider)
+            .thermodynamic_provider(FailingThermodynamicProvider)
+            .build();
 
         let report = planner
             .plan(&barium_titanate_target(), "2026-08-14T00:00:00Z")
@@ -1118,7 +1187,7 @@ mod tests {
             },
             ..generous_config()
         };
-        let planner = Planner::offline_minimal(barium_titanate_catalog(), tight_config);
+        let planner = Planner::builder(barium_titanate_catalog(), tight_config).build();
 
         let report = planner
             .plan(&barium_titanate_target(), "2026-08-14T00:00:00Z")
@@ -1139,7 +1208,8 @@ mod tests {
     #[test]
     fn plan_id_is_stable_when_an_unrelated_candidate_is_added_to_the_catalog() {
         let target = barium_titanate_target();
-        let baseline = Planner::offline_minimal(barium_titanate_catalog(), generous_config())
+        let baseline = Planner::builder(barium_titanate_catalog(), generous_config())
+            .build()
             .plan(&target, "2026-08-14T00:00:00Z")
             .unwrap();
 
@@ -1153,7 +1223,8 @@ mod tests {
         ];
         with_extra.reverse();
         let augmented =
-            Planner::offline_minimal(InMemoryPrecursorCatalog::new(with_extra), generous_config())
+            Planner::builder(InMemoryPrecursorCatalog::new(with_extra), generous_config())
+                .build()
                 .plan(&target, "2026-08-14T00:00:00Z")
                 .unwrap();
 
@@ -1210,7 +1281,8 @@ mod tests {
             desired_phase: None,
             constraints: PlanningConstraints::default(),
         };
-        let report = Planner::offline_minimal(with_metadata, generous_config())
+        let report = Planner::builder(with_metadata, generous_config())
+            .build()
             .plan(&target, "2026-08-14T00:00:00Z")
             .unwrap();
         assert!(!report.plans.is_empty());
@@ -1365,7 +1437,8 @@ mod tests {
 
     #[test]
     fn no_provider_leaves_literature_evidence_none_on_every_plan() {
-        let report = Planner::offline_minimal(barium_titanate_catalog(), generous_config())
+        let report = Planner::builder(barium_titanate_catalog(), generous_config())
+            .build()
             .plan(&barium_titanate_target(), "2026-08-14T00:00:00Z")
             .unwrap();
         assert!(!report.plans.is_empty());
@@ -1375,16 +1448,15 @@ mod tests {
     #[test]
     fn literature_evidence_provider_attaches_evidence_without_changing_score_or_steps() {
         let target = barium_titanate_target();
-        let baseline = Planner::offline_minimal(barium_titanate_catalog(), generous_config())
+        let baseline = Planner::builder(barium_titanate_catalog(), generous_config())
+            .build()
             .plan(&target, "2026-08-14T00:00:00Z")
             .unwrap();
-        let with_evidence = Planner::with_literature_evidence_provider(
-            barium_titanate_catalog(),
-            StubLiteratureEvidenceProvider,
-            generous_config(),
-        )
-        .plan(&target, "2026-08-14T00:00:00Z")
-        .unwrap();
+        let with_evidence = Planner::builder(barium_titanate_catalog(), generous_config())
+            .literature_evidence_provider(StubLiteratureEvidenceProvider)
+            .build()
+            .plan(&target, "2026-08-14T00:00:00Z")
+            .unwrap();
 
         assert_eq!(baseline.plans.len(), with_evidence.plans.len());
         let mut any_conventional_solid_state = false;
@@ -1448,13 +1520,11 @@ mod tests {
 
     #[test]
     fn clean_agreement_still_surfaces_a_disclosure_warning() {
-        let report = Planner::with_literature_evidence_provider(
-            barium_titanate_catalog(),
-            AgreeingLiteratureEvidenceProvider,
-            generous_config(),
-        )
-        .plan(&barium_titanate_target(), "2026-08-14T00:00:00Z")
-        .unwrap();
+        let report = Planner::builder(barium_titanate_catalog(), generous_config())
+            .literature_evidence_provider(AgreeingLiteratureEvidenceProvider)
+            .build()
+            .plan(&barium_titanate_target(), "2026-08-14T00:00:00Z")
+            .unwrap();
 
         let mut any_conventional_solid_state = false;
         for plan in &report.plans {
@@ -1481,13 +1551,11 @@ mod tests {
 
     #[test]
     fn literature_evidence_provider_failure_degrades_to_a_warning() {
-        let report = Planner::with_literature_evidence_provider(
-            barium_titanate_catalog(),
-            FailingLiteratureEvidenceProvider,
-            generous_config(),
-        )
-        .plan(&barium_titanate_target(), "2026-08-14T00:00:00Z")
-        .unwrap();
+        let report = Planner::builder(barium_titanate_catalog(), generous_config())
+            .literature_evidence_provider(FailingLiteratureEvidenceProvider)
+            .build()
+            .plan(&barium_titanate_target(), "2026-08-14T00:00:00Z")
+            .unwrap();
 
         assert!(!report.plans.is_empty());
         let mut any_conventional_solid_state = false;
@@ -1519,13 +1587,11 @@ mod tests {
         let recorder = RecordingLiteratureEvidenceProvider {
             queried_route_families: log.clone(),
         };
-        let report = Planner::with_literature_evidence_provider(
-            barium_titanate_catalog(),
-            recorder,
-            generous_config(),
-        )
-        .plan(&barium_titanate_target(), "2026-08-14T00:00:00Z")
-        .unwrap();
+        let report = Planner::builder(barium_titanate_catalog(), generous_config())
+            .literature_evidence_provider(recorder)
+            .build()
+            .plan(&barium_titanate_target(), "2026-08-14T00:00:00Z")
+            .unwrap();
 
         // Sanity: this target really does produce Mechanochemical plans
         // too (Phase 12's unconditional route-family applicability), so

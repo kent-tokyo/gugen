@@ -117,7 +117,7 @@ fn fixtures() -> Vec<LiteratureFixture> {
 
 fn plan_fixture(fixture: &LiteratureFixture) -> gugen::SynthesisPlanningReport {
     let catalog = InMemoryPrecursorCatalog::new(fixture.catalog.clone());
-    let planner = Planner::offline_minimal(catalog, PlanningConfig::default());
+    let planner = Planner::builder(catalog, PlanningConfig::default()).build();
     let target = TargetSpecification {
         composition: fixture.target.clone(),
         structure: None,
@@ -415,7 +415,8 @@ fn main() {
         desired_phase: None,
         constraints: PlanningConstraints::default(),
     };
-    let tight_report = Planner::offline_minimal(tight_catalog, tight_config)
+    let tight_report = Planner::builder(tight_catalog, tight_config)
+        .build()
         .plan(&tight_target, "2026-08-14T00:00:00Z")
         .unwrap();
     let normal_report = plan_fixture(&fixtures[4]); // BaTiO3, generous default budget
@@ -443,10 +444,11 @@ fn main() {
         desired_phase: None,
         constraints: contradictory_constraints,
     };
-    let abstain_report = Planner::offline_minimal(
+    let abstain_report = Planner::builder(
         InMemoryPrecursorCatalog::new(fixtures[4].catalog.clone()),
         PlanningConfig::default(),
     )
+    .build()
     .plan(&contradictory_target, "2026-08-14T00:00:00Z")
     .unwrap();
     out.push_str(&format!(
@@ -465,10 +467,11 @@ fn main() {
         desired_phase: None,
         constraints: PlanningConstraints::default(),
     };
-    let overflow_result = Planner::offline_minimal(
+    let overflow_result = Planner::builder(
         InMemoryPrecursorCatalog::new(fixtures[4].catalog.clone()),
         PlanningConfig::default(),
     )
+    .build()
     .plan(&overflow_target, "2026-08-14T00:00:00Z");
     out.push_str(&format!(
         "- **Arithmetic overflow handling:** an extreme (10^25) formula-unit scale surfaces \

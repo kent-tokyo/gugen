@@ -85,7 +85,7 @@ pub(crate) fn barium_titanate_plan() -> crate::report::SynthesisPlan {
     use crate::precursor::{AvailabilityMetadata, InMemoryPrecursorCatalog, PrecursorCandidate};
     use crate::target::{PlanningConstraints, TargetSpecification};
 
-    let planner = Planner::offline_minimal(
+    let planner = Planner::builder(
         InMemoryPrecursorCatalog::new(vec![
             PrecursorCandidate {
                 id: PrecursorId("BaCO3".to_string()),
@@ -103,7 +103,8 @@ pub(crate) fn barium_titanate_plan() -> crate::report::SynthesisPlan {
             },
         ]),
         PlanningConfig::default(),
-    );
+    )
+    .build();
     let target_spec = TargetSpecification {
         composition: composition(&[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)]),
         structure: None,

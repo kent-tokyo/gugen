@@ -161,7 +161,7 @@ fn run_plan(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let target = load_target(target_path)?;
     let catalog = load_catalog(catalog_path)?;
-    let planner = Planner::offline_minimal(catalog, PlanningConfig::default());
+    let planner = Planner::builder(catalog, PlanningConfig::default()).build();
     let report = planner.plan(&target, &now_rfc3339())?;
 
     let rendered = match format {
@@ -334,7 +334,7 @@ fn run_batch(
     let text = std::fs::read_to_string(input)?;
     let targets: Vec<TargetSpecification> = serde_json::from_str(&text)?;
     let catalog = load_catalog(catalog_path)?;
-    let planner = Planner::offline_minimal(catalog, PlanningConfig::default());
+    let planner = Planner::builder(catalog, PlanningConfig::default()).build();
 
     let entries = batch_plan(&planner, &targets, &now_rfc3339());
     write_output(output, &serde_json::to_string_pretty(&entries)?)
@@ -656,7 +656,8 @@ mod tests {
             desired_phase: None,
             constraints: PlanningConstraints::default(),
         };
-        Planner::offline_minimal(catalog, PlanningConfig::default())
+        Planner::builder(catalog, PlanningConfig::default())
+            .build()
             .plan(&target, "2026-08-14T00:00:00Z")
             .unwrap()
     }
@@ -803,7 +804,7 @@ mod tests {
 
     #[test]
     fn batch_isolates_one_targets_failure_from_the_rest() {
-        let planner = Planner::offline_minimal(FlakyCatalog, PlanningConfig::default());
+        let planner = Planner::builder(FlakyCatalog, PlanningConfig::default()).build();
         let targets = vec![
             TargetSpecification {
                 composition: composition(&[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)]),

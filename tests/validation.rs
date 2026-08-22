@@ -232,7 +232,7 @@ fn fixtures() -> Vec<LiteratureFixture> {
 
 fn plan_fixture(fixture: &LiteratureFixture) -> gugen::SynthesisPlanningReport {
     let catalog = InMemoryPrecursorCatalog::new(fixture.catalog.clone());
-    let planner = Planner::offline_minimal(catalog, PlanningConfig::default());
+    let planner = Planner::builder(catalog, PlanningConfig::default()).build();
     let target = TargetSpecification {
         composition: fixture.target.clone(),
         structure: None,

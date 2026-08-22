@@ -50,7 +50,7 @@ fn an_extreme_formula_unit_scale_overflows_cleanly_not_a_panic() {
         candidate("BaCO3", &[("Ba", 1.0), ("C", 1.0), ("O", 3.0)]),
         candidate("TiO2", &[("Ti", 1.0), ("O", 2.0)]),
     ]);
-    let planner = Planner::offline_minimal(catalog, PlanningConfig::default());
+    let planner = Planner::builder(catalog, PlanningConfig::default()).build();
 
     let result = planner.plan(&target_spec, "2026-08-14T00:00:00Z");
     assert_eq!(result, Err(GugenError::ArithmeticOverflow));
@@ -68,7 +68,7 @@ fn a_catalog_covering_no_target_element_is_explained_not_silently_empty() {
     );
     let catalog =
         InMemoryPrecursorCatalog::new(vec![candidate("NaCl", &[("Na", 1.0), ("Cl", 1.0)])]);
-    let planner = Planner::offline_minimal(catalog, PlanningConfig::default());
+    let planner = Planner::builder(catalog, PlanningConfig::default()).build();
 
     let report = planner.plan(&target_spec, "2026-08-14T00:00:00Z").unwrap();
     assert!(report.plans.is_empty());
@@ -106,7 +106,7 @@ fn a_tight_search_budget_reports_exhaustion_not_absence_through_the_full_planner
         },
         ..PlanningConfig::default()
     };
-    let planner = Planner::offline_minimal(catalog, tight_config);
+    let planner = Planner::builder(catalog, tight_config).build();
 
     let report = planner.plan(&target_spec, "2026-08-14T00:00:00Z").unwrap();
     assert!(
@@ -133,7 +133,7 @@ fn a_precursor_identical_to_the_target_plans_as_a_trivial_identity() {
         "BaTiO3",
         &[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)],
     )]);
-    let planner = Planner::offline_minimal(catalog, PlanningConfig::default());
+    let planner = Planner::builder(catalog, PlanningConfig::default()).build();
 
     let report = planner.plan(&target_spec, "2026-08-14T00:00:00Z").unwrap();
     // Since Phase 12, one accepted precursor set yields one plan per
@@ -173,7 +173,7 @@ fn a_target_contradictory_on_multiple_elements_abstains_naming_all_of_them() {
         candidate("BaCO3", &[("Ba", 1.0), ("C", 1.0), ("O", 3.0)]),
         candidate("TiO2", &[("Ti", 1.0), ("O", 2.0)]),
     ]);
-    let planner = Planner::offline_minimal(catalog, PlanningConfig::default());
+    let planner = Planner::builder(catalog, PlanningConfig::default()).build();
 
     let report = planner.plan(&target_spec, "2026-08-14T00:00:00Z").unwrap();
     assert!(report.plans.is_empty());
@@ -209,7 +209,7 @@ fn a_target_with_unclassified_structure_never_overclaims_in_domain() {
         candidate("BaCO3", &[("Ba", 1.0), ("C", 1.0), ("O", 3.0)]),
         candidate("TiO2", &[("Ti", 1.0), ("O", 2.0)]),
     ]);
-    let planner = Planner::offline_minimal(catalog, PlanningConfig::default());
+    let planner = Planner::builder(catalog, PlanningConfig::default()).build();
 
     let report = planner.plan(&target_spec, "2026-08-14T00:00:00Z").unwrap();
     assert_eq!(
