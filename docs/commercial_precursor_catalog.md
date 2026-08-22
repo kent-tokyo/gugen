@@ -291,10 +291,14 @@ Filtering after truncation would be wrong: it could return zero
 combinations even when a lower-ranked, budget-satisfying one exists further
 down the full ranking. A combination whose cost can't be compared to the
 ceiling (different or unknown currency) is kept with a warning rather than
-silently passed or failed. If every matched combination exceeds the
-ceiling, the assessment reports an empty `combinations` list together with
-a warning explaining why — never a silent empty result indistinguishable
-from "nothing matched".
+silently passed or failed. If every combination examined during the search
+exceeds the ceiling, the assessment reports an empty `combinations` list
+together with a warning explaining why — worded over the *evaluated* search
+space, not the full combination space, since the heuristic search tier can
+exhaust its evaluation budget without having examined every combination
+(that incompleteness is already flagged separately via
+`SearchBudgetSummary.is_exhaustive`). Either way, an empty result is never
+silently indistinguishable from "nothing matched".
 
 ## Provenance and disclaimers
 

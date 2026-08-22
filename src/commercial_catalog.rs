@@ -2211,14 +2211,21 @@ pub fn assess_commercial_precursors(
         }
     }
 
-    if request.max_total_cost.is_some() && every_precursor_has_a_match && combinations.is_empty() {
-        // Every precursor matched and the search space was non-empty, so an
-        // empty combinations list here can only mean max_total_cost
-        // excluded every candidate combination -- say so explicitly rather
-        // than letting this read as "matching succeeded, nothing to buy".
+    if request.max_total_cost.is_some()
+        && every_precursor_has_a_match
+        && evaluated > 0
+        && combinations.is_empty()
+    {
+        // `evaluated > 0` rules out a zero-precursor plan (nothing was ever
+        // searched, so there's nothing to blame on the ceiling). Phrased
+        // over "the evaluated search space", not the whole combination
+        // space -- the heuristic tier can exhaust its budget without
+        // examining every combination, so claiming "all combinations
+        // exceeded the ceiling" would overclaim on that path (the
+        // is_exhaustive warning already flags that the search was
+        // incomplete; this warning must not contradict it).
         warnings.push(CommercialWarning {
-            message: "no combination satisfied max_total_cost; all matched combinations \
-                exceeded the requested cost ceiling"
+            message: "no combination in the evaluated search space satisfied max_total_cost"
                 .to_string(),
             severity: WarningSeverity::Caution,
         });
@@ -2828,6 +2835,43 @@ mod tests {
     }
 
     #[test]
+    fn assess_commercial_precursors_zero_precursor_plan_does_not_warn_about_cost_ceiling() {
+        // A plan with nothing to buy (rows empty) is a degenerate but
+        // valid case per finding 2's "don't assume plan shape" guard.
+        // every_precursor_has_a_match is vacuously true here (zero
+        // unmatched precursors), so without the `evaluated > 0` guard the
+        // max_total_cost-excluded-everything warning would incorrectly
+        // fire for a plan where nothing was ever searched.
+        let mut plan = barium_titanate_plan();
+        plan.precursors.clear();
+        if let Some(reaction) = plan.balanced_reaction.as_mut() {
+            reaction.reactants.clear();
+        }
+        let catalog = baco3_tio2_catalog(default_baco3_tio2_offers());
+        let request = CommercialPlanningRequest {
+            max_total_cost: Some(money(1, "USD")),
+            ..Default::default()
+        };
+        let assessment = assess_commercial_precursors(
+            &plan,
+            &catalog,
+            &request,
+            &CommercialPlanningConfig::default(),
+        )
+        .unwrap();
+        assert!(assessment.combinations.is_empty());
+        assert!(
+            !assessment
+                .warnings
+                .iter()
+                .any(|w| w.message.contains("max_total_cost")),
+            "a plan with nothing to buy must not claim the cost ceiling excluded \
+             anything: {:?}",
+            assessment.warnings
+        );
+    }
+
+    #[test]
     fn assess_commercial_precursors_unmatched_precursor_is_reported_not_silently_dropped() {
         let plan = barium_titanate_plan();
         // Only BaCO3 offers -- TiO2 has nothing in the catalog.
@@ -3188,6 +3232,12 @@ mod tests {
         .unwrap();
         assert!(assessment.combinations.is_empty());
         assert!(assessment.every_precursor_has_a_match);
+        assert!(
+            assessment.search_budget.is_exhaustive,
+            "this test's 2x1 space must fit the default budget -- pins which \
+             search tier (exhaustive, not heuristic) the warning wording below \
+             is verified against"
+        );
         assert!(
             assessment
                 .warnings
