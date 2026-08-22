@@ -1,0 +1,8 @@
+offer_id,manufacturer,product_name,formula,source,catalog_number,cas_number,grade,purity_fraction,package_mass_g,price_minor_units,currency,availability,lead_time_days,physical_form,particle_size_min_um,particle_size_max_um,product_url,retrieved_at,tags,notes
+EML-BACO3-99,Example Materials Ltd.,Demo Oxide Grade A Barium Carbonate,BaCO3,synthetic_fixture,TC-BACO3-99,513-77-9,ACS,0.99,500,4550,USD,in_stock,5,powder,1,10,https://example.invalid/products/baco3-99,2026-08-01,oxide;ceramic-precursor,Fictional fixture data only.
+DCS-BACO3-995,Demo Chemical Supply Co.,TestChem-001 Barium Carbonate Premium,BaCO3,synthetic_fixture,TestChem-001,513-77-9,Premium,0.995,1000,12000,USD,in_stock,10,powder,,,,,oxide;ceramic-precursor,Fictional fixture data only.
+EML-TIO2-995,Example Materials Ltd.,Demo Oxide Grade A Titanium Dioxide Anatase,TiO2,synthetic_fixture,TC-TIO2-995,13463-67-7,ACS,0.995,500,6200,USD,in_stock,3,powder,,,,,oxide;ceramic-precursor,Fictional fixture data only.
+DCS-TIO2-98,Demo Chemical Supply Co.,Titanium Dioxide Rutile Technical Grade,TiO2,synthetic_fixture,,,Technical,0.98,2500,9800,USD,limited_stock,21,powder,,,,,,Fictional fixture data only.
+EML-CUSO4-5H2O,Example Materials Ltd.,Copper Sulfate Pentahydrate USP,CuSO4.5H2O,synthetic_fixture,,7758-99-8,USP,0.98,250,3200,USD,in_stock,7,powder,,,,,hydrate,Fictional fixture data only.
+EML-TIO2-QUOTE,Example Materials Ltd.,Titanium Dioxide Research Grade Quote Only,TiO2,synthetic_fixture,,,Research,,,,,made_to_order,45,powder,,,,,,Fictional fixture data only -- price and package size intentionally unknown.
+OSK-BACO3-EUR,Osaka Demo Reagents,Barium Carbonate Technical,BaCO3,synthetic_fixture,,,Technical,0.97,1000,9500,EUR,in_stock,14,powder,,,,,,Fictional fixture data only.

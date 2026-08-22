@@ -79,6 +79,8 @@
 mod balance;
 #[cfg(feature = "chematic_crystal")]
 mod chematic_crystal_adapter;
+#[cfg(feature = "commercial_catalog")]
+mod commercial_catalog;
 mod composition;
 mod config;
 mod error;
@@ -110,6 +112,13 @@ mod thermodynamics;
 pub use balance::{balance, curated_byproducts};
 #[cfg(feature = "chematic_crystal")]
 pub use chematic_crystal_adapter::to_mikiwame_structure;
+#[cfg(feature = "commercial_catalog")]
+pub use commercial_catalog::{
+    AvailabilityStatus, CasNumber, CommercialCatalogError, CommercialCatalogLoadMode,
+    CommercialCatalogLoadReport, CommercialOfferId, CommercialPrecursorCatalog,
+    CommercialPrecursorOffer, CommercialSourceType, CurrencyCode, Money, OfferProvenance,
+    PackageMass, ParticleSizeRangeUm, PurityFraction, RejectedOffer,
+};
 pub use composition::{Composition, ELEMENT_SYMBOLS, Element};
 pub use config::{PlanningConfig, SearchBudget};
 pub use error::{GugenError, ProviderError, Result};

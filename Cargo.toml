@@ -25,6 +25,7 @@ all-features = true
 [dependencies]
 chematic-crystal = { version = "0.15.0", default-features = false, optional = true }
 clap = { version = "4.6.6", features = ["derive"], optional = true }
+csv = { version = "1", optional = true }
 mikiwame = { version = "0.1.0", default-features = false, optional = true }
 serde = { version = "1.0.229", features = ["derive"], optional = true }
 serde_json = { version = "1.0.151", optional = true }
@@ -49,6 +50,12 @@ mikiwame = ["dep:mikiwame"]
 # structure to mikiwame::analyze, so this feature pulls mikiwame in too --
 # there is nothing useful gugen does with chematic-crystal on its own.
 chematic_crystal = ["dep:chematic-crystal", "mikiwame"]
+# Post-planning commercial-offer matching (Phase 22): CSV loading needs the
+# `csv` dependency but not serde; JSON loading additionally needs `serde`
+# (gated internally, see src/commercial_catalog.rs) -- this feature alone
+# never pulls serde in, matching "commercial_catalog only" as its own entry
+# in the feature-combination test matrix.
+commercial_catalog = ["dep:csv"]
 # Zero new dependencies: gugen never fetches Materials Project data itself
 # (src/materials_project_adapter.rs takes only pre-fetched, caller-supplied
 # entries) -- this feature exists purely to keep that adapter's types out of
