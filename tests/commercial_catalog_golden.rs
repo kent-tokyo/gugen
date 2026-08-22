@@ -8,6 +8,25 @@
 //! not need regeneration on ordinary version bumps -- unlike
 //! `tests/fixtures/batio3_report.json`, which does embed a version string
 //! elsewhere in the crate.
+//!
+//! **Fixture data policy**: every manufacturer, product, catalog number,
+//! and product URL in `commercial_catalog_golden.csv` is fictional (the
+//! product URLs use `example.invalid`, an RFC 2606-reserved domain that
+//! deliberately cannot resolve). The two CAS numbers (`513-77-9` for
+//! BaCO3, `13463-67-7` for TiO2) are real, public chemical-registry
+//! facts, not proprietary vendor data -- included so the CAS
+//! checksum-verification logic has something real to check against, same
+//! convention as `commercial_catalog_sample.csv`. No price or
+//! availability value here should be read as a real market fact.
+//!
+//! **Regenerating the golden file is not a rubber stamp.** If this test
+//! fails, that means the assessment pipeline's actual output changed.
+//! Before regenerating `commercial_catalog_golden_assessment.json`: read
+//! the diff between the old and new output in full, and confirm every
+//! difference traces to an intentional, already-understood behavior
+//! change elsewhere in this PR/commit -- never regenerate to make a test
+//! pass without first knowing *why* the output changed. A diff you can't
+//! explain is a regression, not a snapshot to accept.
 
 use gugen::{
     CommercialCatalogLoadMode, CommercialPlanningConfig, CommercialPlanningRequest,
