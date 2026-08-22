@@ -4,6 +4,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `gugen commercial-plan` (Phase 24A), behind the existing
+  `commercial_catalog` feature: a new CLI subcommand exposing the
+  `Planner` -> `SynthesisPlan` -> `assess_commercial_plans` flow (Phase
+  22/22.1, previously only reachable from Rust code) without writing any
+  code. Takes a target, a precursor catalog (`--catalog`, unchanged
+  meaning from `plan`/`batch`), and a separate commercial-offers catalog
+  (`--commercial-catalog`, CSV or JSON by file extension) -- kept as two
+  distinct flags rather than one derived catalog, since the two inputs
+  are structurally different data with no specified dedup rule between
+  them. Assesses every plan in the target's report by default;
+  `--plan-id` (an id from a prior `gugen plan` run) narrows to one.
+  Optional `--target-mass-g`, `--min-purity`, `--max-lead-time-days`,
+  `--max-total-cost`/`--currency`, `--allowed-manufacturer`/
+  `--excluded-manufacturer` map onto `CommercialPlanningRequest`.
+  `--format json|markdown|csv` (CSV is new: one row per ranked
+  procurement combination). Purely additive -- no public library API
+  change (`cargo semver-checks` confirms no breaking changes).
+
 ## [0.5.0] - 2026-08-22
 
 Validated Core API: closes a long-standing gap where `BalancedReaction`/
