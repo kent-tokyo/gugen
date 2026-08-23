@@ -4,7 +4,8 @@ use crate::error::{ProviderError, Result};
 use crate::provider::PrecursorCatalog;
 use crate::rejection::{RejectedCandidate, RejectionCode};
 use crate::target::PlanningConstraints;
-use std::collections::BTreeSet;
+use std::cmp::Ordering;
+use std::collections::{BTreeSet, BinaryHeap};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -119,38 +120,326 @@ pub struct PrecursorSearchOutcome {
     pub rejected: Vec<RejectedCandidate>,
 }
 
+/// One partial precursor selection under construction, explored by
+/// `search_precursor_sets`'s guided best-first frontier (Phase 29).
+/// `chosen` holds ascending indices into the search's own `candidates`
+/// slice -- ascending order is this state's own canonical identity
+/// (exactly one path builds a given `chosen`), so unlike a general graph
+/// search, no separate visited-state set is needed to avoid revisiting
+/// the same subset twice.
+#[derive(Debug, Clone)]
+struct SearchState {
+    chosen: Vec<usize>,
+    missing: BTreeSet<Element>,
+    priority: SearchPriority,
+}
+
+/// Ordering signal only -- deliberately not `Score01`/`PlanScoreBreakdown`-
+/// shaped, and never compared against `total_ranking_score`: that type
+/// needs a `BalancedReaction`, which doesn't exist yet at this point in
+/// the search, and (per `score.rs`'s own doc comment) most of its seven
+/// dimensions are structurally pinned constants for the current
+/// generator anyway, carrying no ordering information here. Every field
+/// is derived purely from element coverage of the partial combination
+/// itself -- never literature frequency or availability (Phase 30's
+/// `FrequencyPriorGenerator`'s concern, deliberately out of scope here).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct SearchPriority {
+    /// Target elements this state's chosen candidates don't cover yet.
+    /// Primary signal: 0 means the combination is complete and ready for
+    /// a stoichiometric-balance attempt.
+    elements_missing: usize,
+    /// Candidates chosen so far. Secondary tie-break: among states
+    /// tied on `elements_missing`, prefer the smaller one -- more
+    /// runway left before `max_precursors_per_plan`, and a simpler
+    /// combination if it does turn out to balance.
+    depth: usize,
+}
+
+impl PartialEq for SearchState {
+    fn eq(&self, other: &Self) -> bool {
+        self.chosen == other.chosen
+    }
+}
+impl Eq for SearchState {}
+
+impl Ord for SearchState {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // BinaryHeap is a max-heap, so "greater" must mean "explore
+        // first": fewer missing elements, then fewer chosen candidates,
+        // then a lexicographically smaller `chosen` as a final,
+        // always-decisive, deterministic tie-break -- needs no extra
+        // data, unlike e.g. commercial_catalog::search's PolicyEntry,
+        // whose rows don't carry an equivalent natural index-vector
+        // identity and so need a name-based tiebreak instead.
+        other
+            .priority
+            .elements_missing
+            .cmp(&self.priority.elements_missing)
+            .then_with(|| other.priority.depth.cmp(&self.priority.depth))
+            .then_with(|| other.chosen.cmp(&self.chosen))
+    }
+}
+impl PartialOrd for SearchState {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+/// Builds the child state formed by adding candidate index `next` to
+/// `parent_chosen`, or `None` if this specific addition is a monotonic
+/// dead end (introduces a forbidden element, or an element neither the
+/// target nor any curated byproduct can account for). Either violation
+/// can never be undone by a later addition, so the whole subtree rooted
+/// at this child is safe to prune here, without visiting any of its
+/// descendants individually -- this is the real mechanism behind Phase
+/// 29's efficiency gain over the previous exhaustive generator: a
+/// pruned subtree never consumes a `SearchBudget::max_precursor_sets`
+/// "combination considered" slot, so the same nominal budget lands on a
+/// higher fraction of combinations that actually have a chance. Pushes
+/// exactly one `RejectedCandidate` documenting the prune when it occurs.
+#[allow(clippy::too_many_arguments)]
+fn try_extend_state(
+    parent_chosen: &[usize],
+    next: usize,
+    candidates: &[PrecursorCandidate],
+    target_elements: &BTreeSet<Element>,
+    byproduct_elements: &BTreeSet<Element>,
+    forbidden_elements: &BTreeSet<Element>,
+    rejected: &mut Vec<RejectedCandidate>,
+) -> Option<SearchState> {
+    let mut chosen = Vec::with_capacity(parent_chosen.len() + 1);
+    chosen.extend_from_slice(parent_chosen);
+    chosen.push(next);
+
+    let combo_elements: BTreeSet<Element> = chosen
+        .iter()
+        .flat_map(|&i| candidates[i].composition.elements())
+        .collect();
+
+    if let Some(bad) = combo_elements
+        .iter()
+        .find(|e| forbidden_elements.contains(e))
+    {
+        rejected.push(RejectedCandidate {
+            precursors: chosen.iter().map(|&i| candidates[i].id.clone()).collect(),
+            reason_codes: vec![RejectionCode::ForbiddenElementPresent],
+            explanation: format!(
+                "precursor set contains forbidden element {bad} -- every larger \
+                combination built on this one is pruned for the same reason"
+            ),
+        });
+        return None;
+    }
+
+    let unremovable: Vec<Element> = combo_elements
+        .difference(target_elements)
+        .filter(|e| !byproduct_elements.contains(e))
+        .copied()
+        .collect();
+    if !unremovable.is_empty() {
+        rejected.push(RejectedCandidate {
+            precursors: chosen.iter().map(|&i| candidates[i].id.clone()).collect(),
+            reason_codes: vec![RejectionCode::UnsupportedByproductRequired],
+            explanation: format!(
+                "precursor set introduces element(s) with no curated byproduct to remove \
+                them: {} -- every larger combination built on this one is pruned for the \
+                same reason",
+                join_symbols(&unremovable)
+            ),
+        });
+        return None;
+    }
+
+    let missing: BTreeSet<Element> = target_elements
+        .difference(&combo_elements)
+        .copied()
+        .collect();
+    let priority = SearchPriority {
+        elements_missing: missing.len(),
+        depth: chosen.len(),
+    };
+    Some(SearchState {
+        chosen,
+        missing,
+        priority,
+    })
+}
+
+/// Attempts a stoichiometric balance for a state whose chosen candidates
+/// already cover every target element, recording an accept or a
+/// `NoStoichiometricBalance`/`DuplicatePlan` rejection. Unchanged
+/// balance-then-dedup logic from the previous exhaustive search, just
+/// invoked once per complete frontier state instead of once per
+/// eagerly-generated combination. Returns the number of `balance::balance`
+/// calls made, so the caller can report it alongside budget-exhaustion
+/// diagnostics (this function makes gugen's own only repeated expensive
+/// operation inside `search_precursor_sets` -- candidates themselves
+/// arrive pre-materialized, so this search makes no provider calls of
+/// its own to budget separately).
+fn evaluate_complete_state(
+    chosen: &[usize],
+    candidates: &[PrecursorCandidate],
+    target: &Composition,
+    byproduct_subsets: &[Vec<Composition>],
+    accepted: &mut Vec<AcceptedPrecursorSet>,
+    rejected: &mut Vec<RejectedCandidate>,
+) -> Result<usize> {
+    let chosen_candidates: Vec<&PrecursorCandidate> =
+        chosen.iter().map(|&i| &candidates[i]).collect();
+    let ids: Vec<PrecursorId> = chosen_candidates.iter().map(|c| c.id.clone()).collect();
+    let reactant_compositions: Vec<Composition> = chosen_candidates
+        .iter()
+        .map(|c| c.composition.clone())
+        .collect();
+
+    let mut found = Vec::new();
+    let mut balance_calls = 0usize;
+    for subset in byproduct_subsets {
+        let mut products = vec![target.clone()];
+        products.extend(subset.iter().cloned());
+        balance_calls += 1;
+        let results = balance::balance(&reactant_compositions, &products)?;
+        if !results.is_empty() {
+            found = results;
+            break;
+        }
+    }
+
+    if found.is_empty() {
+        rejected.push(RejectedCandidate {
+            precursors: ids,
+            reason_codes: vec![RejectionCode::NoStoichiometricBalance],
+            explanation: "no integer balance exists for this precursor set against the target, \
+                with or without curated byproducts"
+                .to_string(),
+        });
+        return Ok(balance_calls);
+    }
+
+    for reaction in found {
+        // `balance()` operates on bare `Composition`s and drops any
+        // reactant whose solved coefficient is zero, so `reaction`'s
+        // reactant list is not guaranteed to be `chosen` unfiltered --
+        // re-derive the id list by matching composition rather than
+        // assuming index alignment with `ids`.
+        let matched_ids: Vec<PrecursorId> = reaction
+            .reactants()
+            .iter()
+            .map(|species| {
+                chosen_candidates
+                    .iter()
+                    .find(|c| c.composition == species.composition)
+                    .map(|c| c.id.clone())
+                    .expect(
+                        "balance() only returns reactant species drawn from \
+                        the compositions it was given",
+                    )
+            })
+            .collect();
+        let candidate_set = AcceptedPrecursorSet {
+            precursors: matched_ids,
+            reaction,
+        };
+
+        // A larger combination can balance with one of its precursors'
+        // coefficient solved to zero (`balance()` then drops it), which
+        // collapses to the exact same reaction a smaller combination
+        // already produced -- e.g. {BaCO3, BaO, TiO2} with BaCO3 zeroed
+        // out equals {BaO, TiO2} outright. Two catalog entries sharing a
+        // composition under different ids can also collapse to the same
+        // reaction via two different combinations. Either way this is
+        // one real route, not two: recording it twice would let it
+        // silently double up in `Planner`'s ranked output and consume
+        // two slots of `max_plans_returned` for what is really one plan.
+        //
+        // Dedup keys on `reaction` alone (not the full struct), and
+        // keeps whichever colliding `precursors` id list sorts
+        // lexicographically smallest, not whichever arrived first --
+        // this makes the result independent of evaluation order, which
+        // matters now that the frontier visits combinations in priority
+        // order rather than always dictionary order (Phase 29). A
+        // linear scan is O(n) per check (O(n^2) overall) -- accepted
+        // counts stay small at this crate's catalog/budget scale, so
+        // this is simpler than adding Hash/Ord to `BalancedReaction`
+        // just to use a set.
+        if let Some(existing_index) = accepted
+            .iter()
+            .position(|a| a.reaction == candidate_set.reaction)
+        {
+            if candidate_set.precursors < accepted[existing_index].precursors {
+                let superseded = std::mem::replace(&mut accepted[existing_index], candidate_set);
+                rejected.push(RejectedCandidate {
+                    precursors: superseded.precursors,
+                    reason_codes: vec![RejectionCode::DuplicatePlan],
+                    explanation: "this precursor set and balanced reaction were already \
+                        found via a different combination of candidates; a \
+                        lexicographically-smaller equivalent precursor set was found \
+                        and is kept instead, so the result does not depend on which \
+                        combination was evaluated first"
+                        .to_string(),
+                });
+            } else {
+                rejected.push(RejectedCandidate {
+                    precursors: candidate_set.precursors,
+                    reason_codes: vec![RejectionCode::DuplicatePlan],
+                    explanation: "this precursor set and balanced reaction were already \
+                        found via a different combination of candidates (a larger \
+                        combination's extra precursor solved to a zero coefficient, \
+                        collapsing to the same effective reactants, or a different \
+                        catalog entry shares this composition)"
+                        .to_string(),
+                });
+            }
+            continue;
+        }
+        accepted.push(candidate_set);
+    }
+    Ok(balance_calls)
+}
+
 /// Searches for precursor sets that can plausibly produce `target`,
 /// drawn from `candidates` (typically the output of a `PrecursorCatalog`
 /// query), respecting `constraints` and `budget`.
 ///
-/// Deterministic bounded search (AGENTS.md §9): combinations of
-/// `candidates`, sizes `1..=budget.max_precursors_per_plan`, generated in
-/// a fixed (size-then-lexicographic-index) order, up to
-/// `budget.max_precursor_sets` combinations evaluated. For each
-/// combination that passes the coverage/forbidden-element/removability
-/// filters, stoichiometric balance is attempted with the target alone
+/// Deterministic guided best-first search (Phase 29, AGENTS.md §9):
+/// starting from each single candidate, a frontier of partial
+/// combinations (`SearchState`) is explored in order of fewest missing
+/// target elements first, popping and expanding one state at a time
+/// (`budget.max_precursor_sets` counts states actually popped, i.e.
+/// combinations genuinely considered -- see `try_extend_state`'s own
+/// doc comment for why a pruned subtree never consumes this budget at
+/// all). A state whose chosen candidates already cover every target
+/// element attempts a stoichiometric balance immediately (target alone
 /// first, then with each curated byproduct subset added -- smallest
-/// subset first, never the whole curated set at once (see the regression
-/// test on `balance()` documenting why: extra byproduct columns can push
-/// a valid answer into a *combination* of null-space basis vectors that
-/// `balance()`'s single-basis-vector check won't find).
+/// subset first, never the whole curated set at once; see the
+/// regression test on `balance()` documenting why: extra byproduct
+/// columns can push a valid answer into a *combination* of null-space
+/// basis vectors that `balance()`'s single-basis-vector check won't
+/// find) and is still expanded further afterward (a larger superset may
+/// balance too, or may collapse to the same route -- see
+/// `evaluate_complete_state`'s duplicate handling), up to
+/// `budget.max_precursors_per_plan` candidates. With an unlimited
+/// budget this visits the exact same combinations, and produces the
+/// exact same `accepted` set, as the crate's own brute-force generator
+/// (pinned by `search_matches_brute_force_enumeration_under_an_unlimited_budget`)
+/// -- only the *order* of exploration, and hence which combinations
+/// survive a *limited* budget, differs from the dictionary-order
+/// generator this replaced.
 ///
 /// `budget.max_plans_returned` is deliberately **not** applied here: with
 /// no ranking in this module, truncating `accepted` here would keep
-/// whichever combinations happened to be generated first, not the best
+/// whichever combinations happened to be explored first, not the best
 /// ones. Callers that want a bounded final count (`Planner`, Phase 6) rank
 /// `accepted` by score first and truncate after, explaining what didn't
 /// make the cut.
 ///
-/// `PRECURSOR_COUNT_EXCEEDED` is unreachable by construction:
-/// combinations never exceed `max_precursors_per_plan` in the first place.
-/// `DUPLICATE_PLAN`, despite combos themselves being generated as unique
-/// index subsets, *is* reachable: a larger combination can balance with one
-/// precursor's solved coefficient at zero (dropped by `balance()`),
-/// collapsing to the same effective precursors + reaction a smaller
-/// combination already produced. That case is detected and rejected as
-/// `DuplicatePlan` rather than silently double-counted (see the loop below
-/// and its regression test). `ATMOSPHERE_CONFLICT`, `HAZARD_POLICY_BLOCKED`,
+/// `DUPLICATE_PLAN` is reachable, as above. `PRECURSOR_COUNT_EXCEEDED` is
+/// now reachable too (unlike before Phase 29): a state that reaches
+/// `max_precursors_per_plan` candidates while still missing target
+/// element(s) is a genuine dead end -- it cannot grow further and never
+/// covered the target, so it is rejected explicitly rather than merely
+/// stopping silently. `ATMOSPHERE_CONFLICT`, `HAZARD_POLICY_BLOCKED`,
 /// `THERMODYNAMIC_DATA_UNAVAILABLE`, and `USER_CONSTRAINT_VIOLATION`
 /// belong to later phases (atmosphere/process modeling, safety, ranking,
 /// and richer `PlanningConstraints` respectively) and are not emitted
@@ -167,172 +456,79 @@ pub fn search_precursor_sets(
         byproducts.iter().flat_map(Composition::elements).collect();
     let byproduct_subsets = power_set(&byproducts);
 
-    let (combos, budget_exhausted) = generate_combinations(
-        candidates.len(),
-        budget.max_precursors_per_plan,
-        budget.max_precursor_sets,
-    );
-
     let mut accepted: Vec<AcceptedPrecursorSet> = Vec::new();
     let mut rejected = Vec::new();
+    let mut frontier: BinaryHeap<SearchState> = BinaryHeap::new();
 
-    for combo in &combos {
-        let chosen: Vec<&PrecursorCandidate> = combo.iter().map(|&i| &candidates[i]).collect();
-        let ids: Vec<PrecursorId> = chosen.iter().map(|c| c.id.clone()).collect();
+    for next in 0..candidates.len() {
+        if let Some(state) = try_extend_state(
+            &[],
+            next,
+            candidates,
+            &target_elements,
+            &byproduct_elements,
+            &constraints.forbidden_elements,
+            &mut rejected,
+        ) {
+            frontier.push(state);
+        }
+    }
 
-        if let Some(bad) = chosen
-            .iter()
-            .flat_map(|c| c.composition.elements())
-            .find(|e| constraints.forbidden_elements.contains(e))
-        {
-            rejected.push(RejectedCandidate {
-                precursors: ids,
-                reason_codes: vec![RejectionCode::ForbiddenElementPresent],
-                explanation: format!("precursor set contains forbidden element {bad}"),
-            });
-            continue;
+    let mut considered = 0usize;
+    let mut balance_calls = 0usize;
+    let mut budget_exhausted = false;
+
+    while let Some(state) = frontier.pop() {
+        if considered >= budget.max_precursor_sets {
+            budget_exhausted = true;
+            break;
+        }
+        considered += 1;
+
+        if state.missing.is_empty() {
+            balance_calls += evaluate_complete_state(
+                &state.chosen,
+                candidates,
+                target,
+                &byproduct_subsets,
+                &mut accepted,
+                &mut rejected,
+            )?;
         }
 
-        let combo_elements: BTreeSet<Element> = chosen
-            .iter()
-            .flat_map(|c| c.composition.elements())
-            .collect();
-        let missing: Vec<Element> = target_elements
-            .difference(&combo_elements)
-            .copied()
-            .collect();
-        if !missing.is_empty() {
-            rejected.push(RejectedCandidate {
-                precursors: ids,
-                reason_codes: vec![RejectionCode::MissingTargetElement],
-                explanation: format!(
-                    "precursor set does not cover target element(s): {}",
-                    join_symbols(&missing)
-                ),
-            });
-            continue;
-        }
-
-        let unremovable: Vec<Element> = combo_elements
-            .difference(&target_elements)
-            .filter(|e| !byproduct_elements.contains(e))
-            .copied()
-            .collect();
-        if !unremovable.is_empty() {
-            rejected.push(RejectedCandidate {
-                precursors: ids,
-                reason_codes: vec![RejectionCode::UnsupportedByproductRequired],
-                explanation: format!(
-                    "precursor set introduces element(s) with no curated byproduct to remove them: {}",
-                    join_symbols(&unremovable)
-                ),
-            });
-            continue;
-        }
-
-        let reactant_compositions: Vec<Composition> =
-            chosen.iter().map(|c| c.composition.clone()).collect();
-        let mut found = Vec::new();
-        for subset in &byproduct_subsets {
-            let mut products = vec![target.clone()];
-            products.extend(subset.iter().cloned());
-            let results = balance::balance(&reactant_compositions, &products)?;
-            if !results.is_empty() {
-                found = results;
-                break;
-            }
-        }
-
-        if found.is_empty() {
-            rejected.push(RejectedCandidate {
-                precursors: ids,
-                reason_codes: vec![RejectionCode::NoStoichiometricBalance],
-                explanation:
-                    "no integer balance exists for this precursor set against the target, \
-                    with or without curated byproducts"
-                        .to_string(),
-            });
-            continue;
-        }
-
-        for reaction in found {
-            // `balance()` operates on bare `Composition`s and drops any
-            // reactant whose solved coefficient is zero, so `reaction`'s
-            // reactant list is not guaranteed to be `chosen` unfiltered --
-            // re-derive the id list by matching composition rather than
-            // assuming index alignment with `ids`.
-            let matched_ids: Vec<PrecursorId> = reaction
-                .reactants()
-                .iter()
-                .map(|species| {
-                    chosen
+        if state.chosen.len() >= budget.max_precursors_per_plan {
+            if !state.missing.is_empty() {
+                rejected.push(RejectedCandidate {
+                    precursors: state
+                        .chosen
                         .iter()
-                        .find(|c| c.composition == species.composition)
-                        .map(|c| c.id.clone())
-                        .expect(
-                            "balance() only returns reactant species drawn from \
-                            the compositions it was given",
-                        )
-                })
-                .collect();
-            let candidate_set = AcceptedPrecursorSet {
-                precursors: matched_ids,
-                reaction,
-            };
-
-            // A larger combination can balance with one of its precursors'
-            // coefficient solved to zero (`balance()` then drops it), which
-            // collapses to the exact same reaction a smaller combination
-            // already produced -- e.g. {BaCO3, BaO, TiO2} with BaCO3 zeroed
-            // out equals {BaO, TiO2} outright. Two catalog entries sharing a
-            // composition under different ids can also collapse to the same
-            // reaction via two different combinations. Either way this is
-            // one real route, not two: recording it twice would let it
-            // silently double up in `Planner`'s ranked output and consume
-            // two slots of `max_plans_returned` for what is really one plan.
-            //
-            // Dedup keys on `reaction` alone (not the full struct), and
-            // keeps whichever colliding `precursors` id list sorts
-            // lexicographically smallest, not whichever arrived first --
-            // this makes the result independent of evaluation order, which
-            // matters once a caller may visit combinations in a priority
-            // order rather than always dictionary order (Phase 29). A
-            // linear scan is O(n) per check (O(n^2) overall) -- accepted
-            // counts stay small at this crate's catalog/budget scale, so
-            // this is simpler than adding Hash/Ord to `BalancedReaction`
-            // just to use a set.
-            if let Some(existing_index) = accepted
-                .iter()
-                .position(|a| a.reaction == candidate_set.reaction)
-            {
-                if candidate_set.precursors < accepted[existing_index].precursors {
-                    let superseded =
-                        std::mem::replace(&mut accepted[existing_index], candidate_set);
-                    rejected.push(RejectedCandidate {
-                        precursors: superseded.precursors,
-                        reason_codes: vec![RejectionCode::DuplicatePlan],
-                        explanation: "this precursor set and balanced reaction were already \
-                            found via a different combination of candidates; a \
-                            lexicographically-smaller equivalent precursor set was found \
-                            and is kept instead, so the result does not depend on which \
-                            combination was evaluated first"
-                            .to_string(),
-                    });
-                } else {
-                    rejected.push(RejectedCandidate {
-                        precursors: candidate_set.precursors,
-                        reason_codes: vec![RejectionCode::DuplicatePlan],
-                        explanation: "this precursor set and balanced reaction were already \
-                            found via a different combination of candidates (a larger \
-                            combination's extra precursor solved to a zero coefficient, \
-                            collapsing to the same effective reactants, or a different \
-                            catalog entry shares this composition)"
-                            .to_string(),
-                    });
-                }
-                continue;
+                        .map(|&i| candidates[i].id.clone())
+                        .collect(),
+                    reason_codes: vec![RejectionCode::PrecursorCountExceeded],
+                    explanation: format!(
+                        "reached the {}-precursor limit (SearchBudget::max_precursors_per_plan) \
+                        while still missing target element(s): {}",
+                        budget.max_precursors_per_plan,
+                        join_symbols(&state.missing.iter().copied().collect::<Vec<_>>())
+                    ),
+                });
             }
-            accepted.push(candidate_set);
+            continue;
+        }
+
+        let start = state.chosen.last().map_or(0, |&i| i + 1);
+        for next in start..candidates.len() {
+            if let Some(child) = try_extend_state(
+                &state.chosen,
+                next,
+                candidates,
+                &target_elements,
+                &byproduct_elements,
+                &constraints.forbidden_elements,
+                &mut rejected,
+            ) {
+                frontier.push(child);
+            }
         }
     }
 
@@ -341,8 +537,9 @@ pub fn search_precursor_sets(
             precursors: vec![],
             reason_codes: vec![RejectionCode::SearchBudgetExhausted],
             explanation: format!(
-                "stopped after evaluating {} precursor-set combination(s); more were possible",
-                combos.len()
+                "stopped after considering {considered} precursor-set combination(s) in \
+                priority order ({balance_calls} balance() call(s) attempted); more were \
+                possible"
             ),
         });
     }
@@ -403,6 +600,12 @@ fn index_combinations(n: usize, size: usize) -> Vec<Vec<usize>> {
 /// have been produced. Returns `(combinations, true)` if generation was
 /// cut short by the budget, `(combinations, false)` if every combination
 /// was generated.
+///
+/// Production code no longer calls this (Phase 29 replaced dictionary-
+/// order generation with `search_precursor_sets`'s own guided best-first
+/// frontier) -- kept, test-only, as the brute-force reference oracle for
+/// `search_matches_brute_force_enumeration_under_an_unlimited_budget`.
+#[cfg(test)]
 fn generate_combinations(n: usize, max_size: usize, budget: usize) -> (Vec<Vec<usize>>, bool) {
     let mut result = Vec::new();
     let mut exhausted = false;
@@ -504,13 +707,31 @@ mod tests {
         )
         .unwrap();
 
-        let bad_combo = outcome.rejected.iter().find(|r| {
+        // Sr is unremovable the moment SrCO3 is chosen at all -- a
+        // monotonic violation no later addition can undo (Phase 29's
+        // frontier search prunes the whole subtree here, at the
+        // one-candidate root, rather than re-discovering the same
+        // violation separately for every larger combination built on
+        // top of it -- see `try_extend_state`'s own doc comment). So the
+        // rejection is recorded once, for `{SrCO3}` alone, and covers
+        // `{SrCO3, TiO2}`/`{SrCO3, BaO}`/`{SrCO3, TiO2, BaO}` implicitly,
+        // rather than once per combination as the pre-Phase-29 exhaustive
+        // generator would have recorded it.
+        let bad_root = outcome.rejected.iter().find(|r| {
             let ids: BTreeSet<&str> = r.precursors.iter().map(|p| p.0.as_str()).collect();
-            ids == BTreeSet::from(["SrCO3", "TiO2", "BaO"])
+            ids == BTreeSet::from(["SrCO3"])
         });
         assert_eq!(
-            bad_combo.map(|r| r.reason_codes.clone()),
+            bad_root.map(|r| r.reason_codes.clone()),
             Some(vec![RejectionCode::UnsupportedByproductRequired])
+        );
+        assert!(
+            outcome
+                .accepted
+                .iter()
+                .all(|a| !a.precursors.iter().any(|p| p.0 == "SrCO3")),
+            "no accepted set may use SrCO3, directly or via any larger combination: {:?}",
+            outcome.accepted
         );
     }
 
@@ -884,5 +1105,151 @@ mod tests {
         let mut sorted = ids.clone();
         sorted.sort();
         assert_eq!(ids, sorted);
+    }
+
+    /// Brute-force reference oracle for
+    /// `search_matches_brute_force_enumeration_under_an_unlimited_budget`
+    /// below -- deliberately independent of `search_precursor_sets`'s own
+    /// frontier logic (not the same code path dressed up as a second
+    /// implementation): generates every combination via
+    /// `generate_combinations` (dictionary order, this crate's
+    /// pre-Phase-29 exhaustive algorithm) and evaluates each one with its
+    /// own copy of the cheap forbidden/coverage/removability checks,
+    /// reusing only `evaluate_complete_state` (the balance-then-dedup
+    /// step both algorithms must agree on to produce the same
+    /// `accepted` set at all).
+    fn brute_force_accepted(
+        target: &Composition,
+        candidates: &[PrecursorCandidate],
+        constraints: &PlanningConstraints,
+        max_precursors_per_plan: usize,
+    ) -> Vec<AcceptedPrecursorSet> {
+        let target_elements: BTreeSet<Element> = target.elements().collect();
+        let byproducts = balance::curated_byproducts().unwrap();
+        let byproduct_elements: BTreeSet<Element> =
+            byproducts.iter().flat_map(Composition::elements).collect();
+        let byproduct_subsets = power_set(&byproducts);
+
+        let (combos, _exhausted) =
+            generate_combinations(candidates.len(), max_precursors_per_plan, usize::MAX);
+
+        let mut accepted = Vec::new();
+        let mut rejected = Vec::new();
+        for combo in &combos {
+            let combo_elements: BTreeSet<Element> = combo
+                .iter()
+                .flat_map(|&i| candidates[i].composition.elements())
+                .collect();
+            if combo_elements
+                .iter()
+                .any(|e| constraints.forbidden_elements.contains(e))
+            {
+                continue;
+            }
+            if !target_elements.is_subset(&combo_elements) {
+                continue;
+            }
+            let unremovable = combo_elements
+                .difference(&target_elements)
+                .any(|e| !byproduct_elements.contains(e));
+            if unremovable {
+                continue;
+            }
+            evaluate_complete_state(
+                combo,
+                candidates,
+                target,
+                &byproduct_subsets,
+                &mut accepted,
+                &mut rejected,
+            )
+            .unwrap();
+        }
+        accepted
+    }
+
+    fn canonical_sort(accepted: Vec<AcceptedPrecursorSet>) -> Vec<Vec<String>> {
+        let mut sets: Vec<Vec<String>> = accepted
+            .into_iter()
+            .map(|a| {
+                let mut ids: Vec<String> = a.precursors.iter().map(|p| p.0.clone()).collect();
+                ids.sort();
+                ids
+            })
+            .collect();
+        sets.sort();
+        sets
+    }
+
+    /// Phase 29's core correctness requirement: with an unlimited budget,
+    /// the guided frontier search must visit every combination the old
+    /// exhaustive dictionary-order generator would have, and therefore
+    /// produce the exact same `accepted` set -- only the *order* of
+    /// exploration (and hence what a *limited* budget leaves out)
+    /// differs. Covers a plain case, a redundant-precursor collapse case
+    /// (the exact fixture `duplicate_collapse_keeps_the_lexicographically_smallest_precursor_set_regardless_of_arrival_order`
+    /// and `a_redundant_larger_combination_is_rejected_as_a_duplicate_not_double_accepted`
+    /// already pin individually), and a case with both a forbidden-
+    /// element-shaped decoy and an irrelevant decoy present together.
+    #[test]
+    fn search_matches_brute_force_enumeration_under_an_unlimited_budget() {
+        let scenarios: Vec<(Composition, Vec<PrecursorCandidate>)> = vec![
+            (
+                composition(&[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)]),
+                barium_titanate_catalog(),
+            ),
+            (
+                composition(&[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)]),
+                vec![
+                    candidate("BaCO3", &[("Ba", 1.0), ("C", 1.0), ("O", 3.0)]),
+                    candidate("TiO2", &[("Ti", 1.0), ("O", 2.0)]),
+                    candidate("BaO", &[("Ba", 1.0), ("O", 1.0)]),
+                    candidate("SrCO3", &[("Sr", 1.0), ("C", 1.0), ("O", 3.0)]),
+                    candidate("NaCl", &[("Na", 1.0), ("Cl", 1.0)]),
+                ],
+            ),
+            (
+                composition(&[("Fe", 2.0), ("O", 3.0)]),
+                vec![
+                    candidate("Fe2O3", &[("Fe", 2.0), ("O", 3.0)]),
+                    candidate("Fe", &[("Fe", 1.0)]),
+                    candidate("O2", &[("O", 2.0)]),
+                    candidate("FeCO3", &[("Fe", 1.0), ("C", 1.0), ("O", 3.0)]),
+                ],
+            ),
+        ];
+
+        for (target, catalog) in scenarios {
+            let outcome = search_precursor_sets(
+                &target,
+                &catalog,
+                &PlanningConstraints::default(),
+                &SearchBudget {
+                    max_precursor_sets: usize::MAX,
+                    ..SearchBudget::default()
+                },
+            )
+            .unwrap();
+            let reference = brute_force_accepted(
+                &target,
+                &catalog,
+                &PlanningConstraints::default(),
+                SearchBudget::default().max_precursors_per_plan,
+            );
+
+            assert_eq!(
+                canonical_sort(outcome.accepted),
+                canonical_sort(reference),
+                "frontier search and brute-force enumeration must agree under an \
+                unlimited budget for target {target:?}"
+            );
+            assert!(
+                !outcome
+                    .rejected
+                    .iter()
+                    .any(|r| r.reason_codes == vec![RejectionCode::SearchBudgetExhausted]),
+                "an unlimited budget must never report SearchBudgetExhausted"
+            );
+        }
     }
 }

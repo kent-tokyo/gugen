@@ -490,26 +490,7 @@
     }
   ],
   "not_recommended": [],
-  "rejected_candidates": [
-    {
-      "precursors": [
-        "BaCO3"
-      ],
-      "reason_codes": [
-        "MissingTargetElement"
-      ],
-      "explanation": "precursor set does not cover target element(s): Ti"
-    },
-    {
-      "precursors": [
-        "TiO2"
-      ],
-      "reason_codes": [
-        "MissingTargetElement"
-      ],
-      "explanation": "precursor set does not cover target element(s): Ba"
-    }
-  ],
+  "rejected_candidates": [],
   "unresolved": [],
   "warnings": [],
   "provenance": {

@@ -119,26 +119,29 @@ fn a_route_never_offered_in_the_catalog_is_reported_not_recovered() {
     assert!(!route_recovered(&outcome.accepted, &["BaCO3", "TiO2"]));
 }
 
-/// Pins the exact mechanism Phase 28's own "headroom" gate criterion
-/// depends on: today's search truncates from the high-arity end (see
-/// src/precursor.rs's own `generate_combinations`), so a catalog large
-/// enough to blow the budget on 1-3-precursor combinations *alone*
-/// means a genuinely findable 4-precursor route (arity exactly
-/// `max_precursors_per_plan`, so in principle reachable) is *never even
-/// generated* -- not merely out-ranked or deprioritized. This is real
-/// budget pressure, not a hypothetical --
-/// `exploration_build_frozen_decoy_catalog.py` is sized (28
-/// candidates/row) specifically to reproduce this at scale.
+/// Pins the exact mechanism Phase 29 exists to fix, and confirms it now
+/// works. Before Phase 29, `search_precursor_sets` generated every
+/// combination eagerly in dictionary order (see `src/precursor.rs`'s
+/// now test-only `generate_combinations`): a catalog large enough to
+/// blow the budget on 1-3-precursor combinations *alone* meant a
+/// genuinely findable 4-precursor route (arity exactly
+/// `max_precursors_per_plan`) was *never even generated* -- this exact
+/// 44-candidate fixture (40 irrelevant decoys sharing zero elements with
+/// the target, C(44,1)+C(44,2)+C(44,3) = 14,234, already above the
+/// default budget of 10,000 without any size-4 combination at all)
+/// demonstrated that starvation prior to Phase 29 landing.
+///
+/// Phase 29's guided frontier prunes each irrelevant decoy the moment
+/// it's considered *alone* -- it introduces an element neither the
+/// target nor any curated byproduct can account for, a monotonic
+/// violation no later addition could undo (see
+/// `try_extend_state`'s own doc comment). That prune is O(1) and never
+/// consumes a `SearchBudget::max_precursor_sets` "combination
+/// considered" slot, so the real 4-precursor route is now found with
+/// the budget barely touched -- confirmed here, not assumed.
 #[test]
-fn a_high_arity_route_can_be_starved_out_by_budget_before_ever_being_generated() {
+fn irrelevant_decoys_no_longer_exhaust_the_budget_or_starve_a_findable_route() {
     let target = composition(&[("Fe", 1.0), ("Cu", 1.0), ("Zn", 1.0), ("Ni", 1.0)]);
-    // 40 single-element decoys (real elements, none of which are the
-    // target's own 4) plus the 4 real sources the only known route
-    // needs -- 44 candidates total. C(44,1)+C(44,2)+C(44,3) =
-    // 44+946+13244 = 14,234, already above the default budget (10,000)
-    // *without counting any size-4 combination at all* -- so the real
-    // answer (size 4, exactly at max_precursors_per_plan) is never
-    // reached, regardless of how good any candidate's chemistry is.
     const DECOY_ELEMENTS: [&str; 40] = [
         "Li", "Na", "K", "Rb", "Cs", "Be", "Mg", "Ca", "Sr", "Ba", "Sc", "Y", "Ti", "Zr", "Hf",
         "V", "Nb", "Ta", "Cr", "Mo", "W", "Mn", "Tc", "Re", "Co", "Rh", "Ir", "Pd", "Pt", "Ag",
@@ -162,14 +165,14 @@ fn a_high_arity_route_can_be_starved_out_by_budget_before_ever_being_generated()
     .unwrap();
 
     assert!(
-        budget_exhausted(&outcome),
-        "this catalog must exhaust the default budget for this test to mean anything"
+        !budget_exhausted(&outcome),
+        "every decoy is pruned in O(1) at construction (zero real elements in \
+        common with target or any curated byproduct) -- none of them should \
+        consume a combination-considered slot at all"
     );
     assert!(
-        !route_recovered(&outcome.accepted, &["A_src", "B_src", "C_src", "D_src"]),
-        "the only real route is arity 4 (findable in principle, exactly at \
-        max_precursors_per_plan) but must be starved out by budget \
-        exhaustion during size-1..3 generation alone -- this is the exact \
-        mechanism Phase 29 exists to fix"
+        route_recovered(&outcome.accepted, &["A_src", "B_src", "C_src", "D_src"]),
+        "the arity-4 route must now be found even with 40 irrelevant decoys present -- \
+        this exact fixture was starved out before Phase 29 landed"
     );
 }
