@@ -23,6 +23,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `--format json|markdown|csv` (CSV is new: one row per ranked
   procurement combination). Purely additive -- no public library API
   change (`cargo semver-checks` confirms no breaking changes).
+- Declarative CSV column-name mapping (Phase 24B), behind the same
+  `commercial_catalog` feature: a real-world supplier export rarely uses
+  gugen's exact canonical column names (`formula`, `manufacturer`, ...).
+  New `CommercialCatalogColumnMap` type and
+  `CommercialPrecursorCatalog::load_csv_with_column_map` (the existing
+  `load_csv` is unchanged) rewrite the header row per a declarative
+  canonical-name -> file-header-name map before parsing, so every row
+  loads through the exact same logic as `load_csv` today -- no
+  per-manufacturer adapters. `gugen commercial-plan`'s new
+  `--commercial-catalog-column-map <path>` flag reads this from a small
+  JSON file (only the columns that differ need an entry) and only
+  applies to CSV catalogs (an error, not a silent no-op, if given
+  alongside a `.json` `--commercial-catalog`). Purely additive: new
+  public type and method, existing `load_csv` unchanged (`cargo
+  semver-checks` confirms no breaking changes -- but unlike 24A, this
+  phase does add public API, so the next release must be at least a
+  minor version bump, e.g. `0.6.0`, not a patch release).
 
 ## [0.5.0] - 2026-08-22
 

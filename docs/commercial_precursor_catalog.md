@@ -191,6 +191,38 @@ still loads), mirroring `LiteratureObservationCorpus::load`'s existing
 Strict/Lenient split. A duplicate `offer_id` within one load is always a
 soft rejection in either mode.
 
+## Column-name mapping (Phase 24B)
+
+A real-world supplier export rarely uses gugen's exact canonical column
+names. `CommercialPrecursorCatalog::load_csv_with_column_map` accepts a
+`CommercialCatalogColumnMap` alongside the CSV text and rewrites the
+header row before parsing, so the rest of loading proceeds exactly as
+`load_csv` today — no per-manufacturer adapters, just a declarative
+rename. `gugen commercial-plan`'s `--commercial-catalog-column-map
+<path>` flag reads this from a small JSON file, canonical name -> the
+header this file actually uses:
+
+```json
+{"formula": "Chemical Formula", "manufacturer": "Supplier"}
+```
+
+Only the columns that differ need an entry — anything omitted is looked
+up under its canonical name as usual. `CommercialCatalogColumnMap::new`
+validates the map at construction: every key must be one of the 22
+canonical column names above (an unrecognized key, e.g. a typo, is
+rejected rather than silently ignored), and no two canonical names may
+map to the same header (ambiguous). Loading itself also rejects a header
+row where the mapping would make two columns resolve to the same
+canonical name (e.g. the file already has a literal `formula` column
+*and* the map separately renames another column to `formula`) — this is
+the one failure mode the map introduces (a wrong column silently winning
+gugen's usual first-match header lookup), so it's always a load-time
+error rather than a silent wrong bind.
+
+This flag only applies to CSV catalogs — a `.json` `--commercial-catalog`
+already uses canonical field names, so passing the flag alongside one is
+a CLI error rather than a silent no-op.
+
 ## JSON schema
 
 ```json

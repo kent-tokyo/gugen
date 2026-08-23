@@ -4,13 +4,14 @@
 
 use super::formula::parse_formula;
 use super::model::{
-    CasNumber, CommercialCatalogError, CommercialCatalogLoadMode, CommercialCatalogLoadReport,
-    CommercialOfferId, CommercialPrecursorCatalog, CommercialPrecursorOffer, CurrencyCode, Money,
-    OfferProvenance, PackageMass, ParticleSizeRangeUm, PurityFraction, RejectedOffer,
+    CasNumber, CommercialCatalogColumnMap, CommercialCatalogError, CommercialCatalogLoadMode,
+    CommercialCatalogLoadReport, CommercialOfferId, CommercialPrecursorCatalog,
+    CommercialPrecursorOffer, CurrencyCode, Money, OPTIONAL_CSV_COLUMNS, OfferProvenance,
+    PackageMass, ParticleSizeRangeUm, PurityFraction, REQUIRED_CSV_COLUMNS, RejectedOffer,
     parse_availability, parse_source_type,
 };
 use crate::error::ProviderError;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 // Third of `CommercialPrecursorCatalog`'s three `impl` blocks -- see the
 // cross-referencing comment on `model.rs`'s own `impl` block for why the
@@ -23,7 +24,21 @@ impl CommercialPrecursorCatalog {
         mode: CommercialCatalogLoadMode,
     ) -> std::result::Result<(CommercialPrecursorCatalog, CommercialCatalogLoadReport), ProviderError>
     {
-        load_csv_impl(csv_text, mode)
+        load_csv_impl(csv_text, mode, None)
+    }
+
+    /// Like `load_csv`, but first rewrites the header row per `column_map`
+    /// (canonical name -> the header name this file actually uses) --
+    /// lets a real-world export with non-standard headers (e.g. `Chemical
+    /// Formula` instead of `formula`) load without a hand-edited file.
+    /// Every row is parsed identically to `load_csv` afterward.
+    pub fn load_csv_with_column_map(
+        csv_text: &str,
+        mode: CommercialCatalogLoadMode,
+        column_map: &CommercialCatalogColumnMap,
+    ) -> std::result::Result<(CommercialPrecursorCatalog, CommercialCatalogLoadReport), ProviderError>
+    {
+        load_csv_impl(csv_text, mode, Some(column_map))
     }
 
     #[cfg(feature = "serde")]
@@ -64,26 +79,76 @@ fn validate_particle_size(
     }
 }
 
+/// Rewrites `headers` per `column_map`, so every downstream lookup in
+/// `parse_csv_offer_row` (and the required-column check above) sees
+/// canonical names regardless of what the file's own header row says.
+/// Only flags a collision that the map itself introduces -- two cells
+/// resolving to the same canonical name where at least one was actually
+/// rewritten -- never a collision between two cells the map left alone.
+/// `load_csv` without a column map already tolerates arbitrary duplicate
+/// headers (e.g. duplicate blank headers from trailing-comma exports, or
+/// even a hand-duplicated non-required column); this must stay at least
+/// that permissive, so a file that loads fine via `load_csv` must still
+/// load fine via this function when the map happens not to touch the
+/// colliding cells.
+fn remap_headers(
+    headers: &csv::StringRecord,
+    column_map: &CommercialCatalogColumnMap,
+) -> std::result::Result<csv::StringRecord, ProviderError> {
+    let external_to_canonical = column_map.canonical_by_external();
+    // (canonical-or-original name, was this cell rewritten by the map)
+    let remapped: Vec<(String, bool)> = headers
+        .iter()
+        .map(|h| match external_to_canonical.get(h) {
+            Some(canonical) => (canonical.to_string(), true),
+            None => (h.to_string(), false),
+        })
+        .collect();
+
+    let mut seen_canonical: BTreeMap<&str, bool> = BTreeMap::new();
+    for (h, rewritten) in &remapped {
+        let is_canonical = REQUIRED_CSV_COLUMNS.contains(&h.as_str())
+            || OPTIONAL_CSV_COLUMNS.contains(&h.as_str());
+        if !is_canonical {
+            continue;
+        }
+        match seen_canonical.get(h.as_str()) {
+            Some(&previously_rewritten) if *rewritten || previously_rewritten => {
+                return Err(ProviderError::MalformedRecord(format!(
+                    "column map: header '{h}' would appear more than once after applying the \
+                    column map"
+                )));
+            }
+            _ => {
+                seen_canonical.insert(h.as_str(), *rewritten);
+            }
+        }
+    }
+
+    Ok(csv::StringRecord::from(
+        remapped.into_iter().map(|(h, _)| h).collect::<Vec<_>>(),
+    ))
+}
+
 pub(crate) fn load_csv_impl(
     csv_text: &str,
     mode: CommercialCatalogLoadMode,
+    column_map: Option<&CommercialCatalogColumnMap>,
 ) -> std::result::Result<(CommercialPrecursorCatalog, CommercialCatalogLoadReport), ProviderError> {
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(true)
         .from_reader(csv_text.as_bytes());
-    let headers = reader
+    let mut headers = reader
         .headers()
         .map_err(|e| ProviderError::MalformedRecord(format!("CSV header: {e}")))?
         .clone();
 
-    for required_column in [
-        "offer_id",
-        "manufacturer",
-        "product_name",
-        "formula",
-        "source",
-    ] {
-        if !headers.iter().any(|h| h == required_column) {
+    if let Some(column_map) = column_map {
+        headers = remap_headers(&headers, column_map)?;
+    }
+
+    for required_column in REQUIRED_CSV_COLUMNS {
+        if !headers.iter().any(|h| h == *required_column) {
             return Err(ProviderError::MalformedRecord(format!(
                 "CSV header is missing required column '{required_column}'"
             )));
@@ -545,6 +610,177 @@ mod tests {
             CommercialPrecursorCatalog::load_csv(csv, CommercialCatalogLoadMode::Strict).unwrap();
         assert!(catalog.offers().is_empty());
         assert_eq!(report.accepted, 0);
+    }
+
+    // -- column-mapped CSV loading --
+
+    #[test]
+    fn load_csv_with_column_map_accepts_a_partially_renamed_header_row() {
+        // Only `formula`/`manufacturer` are renamed; everything else keeps
+        // its canonical name -- proves partial mapping, not all-or-nothing.
+        let csv = "offer_id,Supplier,product_name,Chemical Formula,source\n\
+            EML-1,Example Materials Ltd.,Demo Oxide,Fe2O3,synthetic_fixture\n";
+        let column_map = CommercialCatalogColumnMap::new(BTreeMap::from([
+            ("manufacturer".to_string(), "Supplier".to_string()),
+            ("formula".to_string(), "Chemical Formula".to_string()),
+        ]))
+        .unwrap();
+        let (catalog, report) = CommercialPrecursorCatalog::load_csv_with_column_map(
+            csv,
+            CommercialCatalogLoadMode::Strict,
+            &column_map,
+        )
+        .unwrap();
+        assert_eq!(report.accepted, 1);
+        assert_eq!(catalog.offers()[0].manufacturer, "Example Materials Ltd.");
+    }
+
+    #[test]
+    fn load_csv_with_column_map_still_hard_fails_on_a_missing_required_column() {
+        let csv = "offer_id,Supplier,product_name,source\nEML-1,Example Materials Ltd.,Demo Oxide,synthetic_fixture\n";
+        let column_map = CommercialCatalogColumnMap::new(BTreeMap::from([(
+            "manufacturer".to_string(),
+            "Supplier".to_string(),
+        )]))
+        .unwrap();
+        let result = CommercialPrecursorCatalog::load_csv_with_column_map(
+            csv,
+            CommercialCatalogLoadMode::Strict,
+            &column_map,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn load_csv_with_column_map_rejects_a_collision_after_remapping() {
+        // The file already has a literal `formula` column, and the map
+        // separately renames the `chem` column to `formula` too -- both
+        // resolve to `formula`, an ambiguous first-match bind (the
+        // collision involves a cell the map actually rewrote).
+        let csv = "offer_id,manufacturer,product_name,formula,source,chem\n\
+            EML-1,Example Materials Ltd.,Demo Oxide,Fe2O3,synthetic_fixture,TiO2\n";
+        let column_map = CommercialCatalogColumnMap::new(BTreeMap::from([(
+            "formula".to_string(),
+            "chem".to_string(),
+        )]))
+        .unwrap();
+        let result = CommercialPrecursorCatalog::load_csv_with_column_map(
+            csv,
+            CommercialCatalogLoadMode::Strict,
+            &column_map,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn load_csv_with_column_map_does_not_error_on_a_pre_existing_duplicate_the_map_never_touches() {
+        // `load_csv` (no map) has no duplicate-header check at all -- two
+        // `notes` columns just means `position()`'s first match wins. The
+        // column map must not become stricter than that for cells it never
+        // rewrites; only a map-introduced collision (see the test above)
+        // is an error.
+        let csv = "offer_id,Supplier,product_name,formula,source,notes,notes\n\
+            EML-1,Example Materials Ltd.,Demo Oxide,Fe2O3,synthetic_fixture,a,b\n";
+        let column_map = CommercialCatalogColumnMap::new(BTreeMap::from([(
+            "manufacturer".to_string(),
+            "Supplier".to_string(),
+        )]))
+        .unwrap();
+        let result = CommercialPrecursorCatalog::load_csv_with_column_map(
+            csv,
+            CommercialCatalogLoadMode::Strict,
+            &column_map,
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn load_csv_with_column_map_round_trips_every_canonical_column() {
+        // Maps all 22 canonical names to distinct non-standard headers and
+        // populates every field in one row -- catches drift between
+        // `REQUIRED_CSV_COLUMNS`/`OPTIONAL_CSV_COLUMNS` and this file's own
+        // `field(...)` call sites in `parse_csv_offer_row`.
+        let all_canonical: Vec<&str> = REQUIRED_CSV_COLUMNS
+            .iter()
+            .chain(OPTIONAL_CSV_COLUMNS.iter())
+            .copied()
+            .collect();
+        let external_of = |canonical: &str| format!("Col {canonical}");
+        let column_map = CommercialCatalogColumnMap::new(
+            all_canonical
+                .iter()
+                .map(|c| (c.to_string(), external_of(c)))
+                .collect(),
+        )
+        .unwrap();
+
+        let values: BTreeMap<&str, &str> = [
+            ("offer_id", "EML-1"),
+            ("manufacturer", "Example Materials Ltd."),
+            ("product_name", "Demo Oxide"),
+            ("formula", "Fe2O3"),
+            ("source", "synthetic_fixture"),
+            ("purity_fraction", "0.99"),
+            ("package_mass_g", "500"),
+            ("price_minor_units", "4500"),
+            ("currency", "USD"),
+            ("availability", "in_stock"),
+            ("lead_time_days", "7"),
+            ("particle_size_min_um", "1.0"),
+            ("particle_size_max_um", "2.0"),
+            ("cas_number", "7732-18-5"),
+            ("tags", "a;b"),
+            ("catalog_number", "CAT-1"),
+            ("grade", "ACS"),
+            ("physical_form", "powder"),
+            ("country_region", "US"),
+            ("product_url", "https://example.test/p"),
+            ("notes", "note"),
+            ("retrieved_at", "2026-08-14"),
+        ]
+        .into_iter()
+        .collect();
+        assert_eq!(values.len(), all_canonical.len());
+
+        let header_row = all_canonical
+            .iter()
+            .map(|c| external_of(c))
+            .collect::<Vec<_>>()
+            .join(",");
+        let value_row = all_canonical
+            .iter()
+            .map(|c| values[c])
+            .collect::<Vec<_>>()
+            .join(",");
+        let csv = format!("{header_row}\n{value_row}\n");
+
+        let (catalog, report) = CommercialPrecursorCatalog::load_csv_with_column_map(
+            &csv,
+            CommercialCatalogLoadMode::Strict,
+            &column_map,
+        )
+        .unwrap();
+        assert_eq!(report.accepted, 1);
+        let offer = &catalog.offers()[0];
+        assert_eq!(offer.offer_id.0, "EML-1");
+        assert_eq!(offer.manufacturer, "Example Materials Ltd.");
+        assert_eq!(offer.product_name, "Demo Oxide");
+        assert_eq!(offer.formula, "Fe2O3");
+        assert!(offer.purity.is_some());
+        assert!(offer.package_mass.is_some());
+        assert!(offer.unit_price.is_some());
+        assert!(offer.availability.is_some());
+        assert_eq!(offer.lead_time_days, Some(7));
+        assert!(offer.particle_size_range_um.is_some());
+        assert!(offer.cas_number.is_some());
+        assert_eq!(offer.tags.len(), 2);
+        assert!(offer.catalog_number.is_some());
+        assert!(offer.grade.is_some());
+        assert!(offer.physical_form.is_some());
+        assert!(offer.country_region.is_some());
+        assert!(offer.product_url.is_some());
+        assert!(offer.notes.is_some());
+        assert!(offer.provenance.retrieved_at.is_some());
     }
 
     // -- JSON loading --

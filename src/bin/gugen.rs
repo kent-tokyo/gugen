@@ -14,9 +14,9 @@ use gugen::{
 };
 #[cfg(feature = "commercial_catalog")]
 use gugen::{
-    CommercialCatalogLoadMode, CommercialCatalogLoadReport, CommercialPlanAssessment,
-    CommercialPlanningConfig, CommercialPlanningRequest, CommercialPrecursorCatalog, CurrencyCode,
-    Money, PurityFraction, assess_commercial_plans,
+    CommercialCatalogColumnMap, CommercialCatalogLoadMode, CommercialCatalogLoadReport,
+    CommercialPlanAssessment, CommercialPlanningConfig, CommercialPlanningRequest,
+    CommercialPrecursorCatalog, CurrencyCode, Money, PurityFraction, assess_commercial_plans,
 };
 use std::path::{Path, PathBuf};
 
@@ -32,6 +32,7 @@ struct Cli {
 }
 
 #[derive(Subcommand)]
+#[allow(clippy::large_enum_variant)]
 enum Command {
     /// Balance a reaction given as JSON: {"reactants": [...], "products": [...]},
     /// each a list of element-symbol -> amount maps (see AGENTS.md §10).
@@ -95,6 +96,13 @@ enum Command {
             default_value = "lenient"
         )]
         commercial_catalog_mode: CommercialCatalogModeArg,
+        /// Path to a JSON file mapping gugen's canonical CSV column names to
+        /// this file's actual header names, e.g. `{"formula": "Chemical
+        /// Formula", "manufacturer": "Supplier"}`. Only applicable when
+        /// `--commercial-catalog` is a `.csv` file; only columns that
+        /// differ need an entry.
+        #[arg(long = "commercial-catalog-column-map")]
+        commercial_catalog_column_map: Option<PathBuf>,
         /// Narrow to one plan by id (an id from a prior `gugen plan` run --
         /// plan ids are stable across runs). Default: assess every plan.
         #[arg(long = "plan-id")]
@@ -214,6 +222,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             catalog,
             commercial_catalog,
             commercial_catalog_mode,
+            commercial_catalog_column_map,
             plan_id,
             target_mass_g,
             min_purity,
@@ -229,6 +238,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             &catalog,
             &commercial_catalog,
             commercial_catalog_mode.into(),
+            commercial_catalog_column_map.as_deref(),
             plan_id.as_deref(),
             target_mass_g,
             min_purity,
@@ -464,11 +474,32 @@ fn run_batch(
 fn load_commercial_catalog(
     path: &Path,
     mode: CommercialCatalogLoadMode,
+    column_map_path: Option<&Path>,
 ) -> Result<(CommercialPrecursorCatalog, CommercialCatalogLoadReport), Box<dyn std::error::Error>> {
     let text = std::fs::read_to_string(path)?;
     match path.extension().and_then(|ext| ext.to_str()) {
-        Some("csv") => Ok(CommercialPrecursorCatalog::load_csv(&text, mode)?),
-        Some("json") => Ok(CommercialPrecursorCatalog::load_json(&text, mode)?),
+        Some("csv") => match column_map_path {
+            Some(map_path) => {
+                let map_text = std::fs::read_to_string(map_path)?;
+                let map: std::collections::BTreeMap<String, String> =
+                    serde_json::from_str(&map_text)?;
+                let column_map = CommercialCatalogColumnMap::new(map)?;
+                Ok(CommercialPrecursorCatalog::load_csv_with_column_map(
+                    &text,
+                    mode,
+                    &column_map,
+                )?)
+            }
+            None => Ok(CommercialPrecursorCatalog::load_csv(&text, mode)?),
+        },
+        Some("json") => {
+            if column_map_path.is_some() {
+                return Err("--commercial-catalog-column-map is only applicable to CSV \
+                    catalogs, but --commercial-catalog has a .json extension"
+                    .into());
+            }
+            Ok(CommercialPrecursorCatalog::load_json(&text, mode)?)
+        }
         other => {
             Err(format!("commercial catalog path must end in .csv or .json, got {other:?}").into())
         }
@@ -518,6 +549,7 @@ fn run_commercial_plan(
     catalog_path: &Path,
     commercial_catalog_path: &Path,
     commercial_catalog_mode: CommercialCatalogLoadMode,
+    commercial_catalog_column_map: Option<&Path>,
     plan_id: Option<&str>,
     target_mass_g: Option<f64>,
     min_purity: Option<f64>,
@@ -551,8 +583,11 @@ fn run_commercial_plan(
         None => report.plans.clone(),
     };
 
-    let (commercial_catalog, load_report) =
-        load_commercial_catalog(commercial_catalog_path, commercial_catalog_mode)?;
+    let (commercial_catalog, load_report) = load_commercial_catalog(
+        commercial_catalog_path,
+        commercial_catalog_mode,
+        commercial_catalog_column_map,
+    )?;
     eprintln!(
         "commercial catalog: {} accepted, {} duplicate offer id(s) collapsed, {} rejected",
         load_report.accepted,
@@ -1375,6 +1410,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             &[],
             &[],
             Some(&output_path),
@@ -1410,6 +1446,60 @@ mod tests {
             &catalog_path,
             &commercial_catalog_path,
             CommercialCatalogLoadMode::Lenient,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            &[],
+            &[],
+            Some(&output_path),
+            CommercialOutputFormat::Json,
+        )
+        .unwrap();
+
+        let text = std::fs::read_to_string(&output_path).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert!(!value.as_array().unwrap().is_empty());
+    }
+
+    #[cfg(feature = "commercial_catalog")]
+    #[test]
+    fn commercial_plan_accepts_a_column_mapped_csv_catalog() {
+        let target_path = write_temp(
+            "commercial_target_column_mapped",
+            &barium_titanate_target_json(),
+        );
+        let catalog_path = write_temp(
+            "commercial_catalog_for_column_mapped",
+            &barium_titanate_catalog_json(),
+        );
+
+        let original = include_str!("../../tests/fixtures/commercial_catalog_sample.csv");
+        let mut lines = original.lines();
+        let header = lines
+            .next()
+            .unwrap()
+            .replace("manufacturer", "Supplier")
+            .replace("formula", "Chemical Formula");
+        let renamed_csv = format!("{header}\n{}\n", lines.collect::<Vec<_>>().join("\n"));
+        let commercial_catalog_path =
+            write_temp_csv("commercial_offers_column_mapped", &renamed_csv);
+        let map_path = write_temp(
+            "commercial_offers_column_map",
+            r#"{"manufacturer": "Supplier", "formula": "Chemical Formula"}"#,
+        );
+        let output_path =
+            std::env::temp_dir().join("gugen_cli_test_commercial_plan_column_mapped_output.json");
+
+        run_commercial_plan(
+            &target_path,
+            &catalog_path,
+            &commercial_catalog_path,
+            CommercialCatalogLoadMode::Lenient,
+            Some(&map_path),
             None,
             None,
             None,
@@ -1454,6 +1544,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             &[],
             &[],
             Some(&output_path),
@@ -1483,6 +1574,7 @@ mod tests {
             &catalog_path,
             &commercial_catalog_path,
             CommercialCatalogLoadMode::Lenient,
+            None,
             None,
             None,
             None,
@@ -1539,6 +1631,7 @@ mod tests {
             &catalog_path,
             &commercial_catalog_path,
             CommercialCatalogLoadMode::Lenient,
+            None,
             Some(&plan_id),
             None,
             None,
@@ -1561,6 +1654,7 @@ mod tests {
                 &catalog_path,
                 &commercial_catalog_path,
                 CommercialCatalogLoadMode::Lenient,
+                None,
                 Some("plan-does-not-exist"),
                 None,
                 None,
@@ -1584,7 +1678,7 @@ mod tests {
             include_str!("../../tests/fixtures/commercial_catalog_sample.csv"),
         );
         let (_, csv_report) =
-            load_commercial_catalog(&csv_path, CommercialCatalogLoadMode::Lenient).unwrap();
+            load_commercial_catalog(&csv_path, CommercialCatalogLoadMode::Lenient, None).unwrap();
         assert!(csv_report.accepted > 0);
 
         let json_path = write_temp(
@@ -1592,12 +1686,57 @@ mod tests {
             include_str!("../../tests/fixtures/commercial_catalog_sample.json"),
         );
         let (_, json_report) =
-            load_commercial_catalog(&json_path, CommercialCatalogLoadMode::Lenient).unwrap();
+            load_commercial_catalog(&json_path, CommercialCatalogLoadMode::Lenient, None).unwrap();
         assert!(json_report.accepted > 0);
 
         let txt_path = std::env::temp_dir().join("gugen_cli_test_load_dispatch.txt");
         std::fs::write(&txt_path, "irrelevant").unwrap();
-        assert!(load_commercial_catalog(&txt_path, CommercialCatalogLoadMode::Lenient).is_err());
+        assert!(
+            load_commercial_catalog(&txt_path, CommercialCatalogLoadMode::Lenient, None).is_err()
+        );
+    }
+
+    #[cfg(feature = "commercial_catalog")]
+    #[test]
+    fn load_commercial_catalog_accepts_a_column_mapped_csv() {
+        let csv_path = write_temp_csv(
+            "load_column_mapped_csv",
+            "offer_id,Supplier,product_name,Chemical Formula,source\n\
+            EML-1,Example Materials Ltd.,Demo Oxide,Fe2O3,synthetic_fixture\n",
+        );
+        let map_path = write_temp(
+            "load_column_map",
+            r#"{"manufacturer": "Supplier", "formula": "Chemical Formula"}"#,
+        );
+        let (catalog, report) = load_commercial_catalog(
+            &csv_path,
+            CommercialCatalogLoadMode::Lenient,
+            Some(&map_path),
+        )
+        .unwrap();
+        assert_eq!(report.accepted, 1);
+        assert_eq!(catalog.offers()[0].manufacturer, "Example Materials Ltd.");
+    }
+
+    #[cfg(feature = "commercial_catalog")]
+    #[test]
+    fn load_commercial_catalog_column_map_with_a_json_catalog_is_an_error() {
+        let json_path = write_temp(
+            "load_column_map_json_catalog",
+            include_str!("../../tests/fixtures/commercial_catalog_sample.json"),
+        );
+        let map_path = write_temp(
+            "load_column_map_for_json",
+            r#"{"manufacturer": "Supplier"}"#,
+        );
+        assert!(
+            load_commercial_catalog(
+                &json_path,
+                CommercialCatalogLoadMode::Lenient,
+                Some(&map_path)
+            )
+            .is_err()
+        );
     }
 
     #[cfg(feature = "commercial_catalog")]
