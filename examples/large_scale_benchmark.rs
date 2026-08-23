@@ -524,11 +524,15 @@ fn main() {
         {coverage_passing} combinations that *did* pass the element-coverage gate (byproduct + \
         no-balance + duplicate + accepted-and-kept): {byproduct_count}/{coverage_passing} \
         ({:.1}%). This isolates genuine byproduct-allow-list gaps from decoy-driven coverage \
-        noise -- nitrate/acetate/oxalate/chloride precursors (common in this corpus) release \
-        byproduct species outside gugen's curated allow-list (CO2/H2O/O2 only, \
-        `src/balance.rs::curated_byproducts`). Not widened reactively in response to this \
-        number -- doing so without independent literature grounding per target would be exactly \
-        the benchmark-driven overfitting AGENTS.md §27 forbids.\n",
+        noise -- acetate/oxalate/chloride precursors (common in this corpus) still release \
+        byproduct species outside gugen's curated allow-list (CO2/H2O/O2/NO2, \
+        `src/balance.rs::curated_byproducts`); nitrate precursors no longer do, since this list's \
+        fourth entry (NO2) was added on standard metal-nitrate thermal-decomposition grounds \
+        (`2 Ba(NO3)2 -> 2 BaO + 4 NO2 + O2`), with explicit owner sign-off scoped to nitrate only \
+        -- see `curated_byproducts`'s own doc comment for the citation. Acetate/oxalate/chloride \
+        remain unwidened: doing so without independent literature grounding per target would be \
+        exactly the benchmark-driven overfitting AGENTS.md §27 forbids, and that bar has not been \
+        cleared for those three classes.\n",
         pct(missing_element_count, total_rejected),
         pct(byproduct_count, total_rejected),
         pct(byproduct_count, coverage_passing),

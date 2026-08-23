@@ -8,14 +8,25 @@ use std::collections::BTreeSet;
 /// without target-specific evidence (AGENTS.md §10). A reaction that needs
 /// a byproduct outside this list is `RejectionCode::UnsupportedByproductRequired`,
 /// not a silently invented one.
+///
+/// Covers carbonate decomposition (CO2), hydrate/hydroxide decomposition
+/// (H2O), oxidation-state byproducts (O2), and metal-nitrate thermal
+/// decomposition (NO2) -- standard solid-state/sol-gel precursor routes,
+/// e.g. `2 Ba(NO3)2 -> 2 BaO + 4 NO2 + O2`. `NO2` (not the `N2O4` dimer)
+/// matches this list's existing single-formula-unit convention (`CO2`,
+/// not `C2O4`). Acetate, oxalate, and chloride byproducts are a known,
+/// separate gap (see `docs/large_scale_benchmark_report.md`) and are
+/// intentionally not covered here.
 pub fn curated_byproducts() -> Result<Vec<Composition>> {
     let c = Element::new("C")?;
     let h = Element::new("H")?;
+    let n = Element::new("N")?;
     let o = Element::new("O")?;
     Ok(vec![
         Composition::new([(c, 1.0), (o, 2.0)])?, // CO2
         Composition::new([(h, 2.0), (o, 1.0)])?, // H2O
         Composition::new([(o, 2.0)])?,           // O2
+        Composition::new([(n, 1.0), (o, 2.0)])?, // NO2
     ])
 }
 
@@ -300,6 +311,33 @@ mod tests {
         assert!(r.products().iter().all(|s| s.coefficient() == 1));
     }
 
+    /// Metal-nitrate thermal decomposition -- standard solid-state/sol-gel
+    /// precursor chemistry (see `curated_byproducts()`'s doc comment):
+    /// `2 Ba(NO3)2 -> 2 BaO + 4 NO2 + O2`.
+    #[test]
+    fn nitrate_decomposes_to_oxide_plus_no2_and_o2() {
+        let reactants = vec![composition(&[("Ba", 1.0), ("N", 2.0), ("O", 6.0)])];
+        let bao = composition(&[("Ba", 1.0), ("O", 1.0)]);
+        let no2 = composition(&[("N", 1.0), ("O", 2.0)]);
+        let o2 = composition(&[("O", 2.0)]);
+        let products = vec![bao.clone(), no2.clone(), o2.clone()];
+
+        let results = balance(&reactants, &products).unwrap();
+        assert_eq!(results.len(), 1);
+        let r = &results[0];
+        assert_eq!(r.reactants()[0].coefficient(), 2);
+        let coeff_of = |c: &Composition| {
+            r.products()
+                .iter()
+                .find(|s| s.composition == *c)
+                .unwrap()
+                .coefficient()
+        };
+        assert_eq!(coeff_of(&bao), 2);
+        assert_eq!(coeff_of(&no2), 4);
+        assert_eq!(coeff_of(&o2), 1);
+    }
+
     /// Checks an assumption precursor search (Phase 3) is built on: does
     /// offering *every* curated byproduct at once (rather than a targeted
     /// subset) risk defeating the single-basis-vector heuristic documented
@@ -325,6 +363,7 @@ mod tests {
         let co2 = composition(&[("C", 1.0), ("O", 2.0)]);
         let h2o = composition(&[("H", 2.0), ("O", 1.0)]);
         let o2 = composition(&[("O", 2.0)]);
+        let no2 = composition(&[("N", 1.0), ("O", 2.0)]);
 
         let targeted = balance(&reactants, &[target.clone(), co2.clone()]).unwrap();
         assert_eq!(
@@ -333,12 +372,12 @@ mod tests {
             "targeted subset {{target, CO2}} must balance"
         );
 
-        let everything = balance(&reactants, &[target, co2, h2o, o2]).unwrap();
+        let everything = balance(&reactants, &[target, co2, h2o, o2, no2]).unwrap();
         assert_eq!(everything.len(), 1);
         assert_eq!(
             everything[0].products().len(),
             2,
-            "H2O and O2 must be dropped at zero coefficient"
+            "H2O, O2, and NO2 must be dropped at zero coefficient"
         );
         assert_eq!(everything[0], targeted[0]);
     }
