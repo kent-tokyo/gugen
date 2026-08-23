@@ -5,8 +5,42 @@
 use crate::composition::Composition;
 use crate::precursor::PrecursorId;
 use crate::report::{PlanId, WarningSeverity};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
+
+/// The 5 CSV header names `load_csv` cannot proceed without. Single source
+/// of truth shared by the required-column check in `loader.rs` and
+/// `CommercialCatalogColumnMap`'s key validation below -- previously these
+/// existed as two unsynced hardcoded copies.
+pub(crate) const REQUIRED_CSV_COLUMNS: &[&str] = &[
+    "offer_id",
+    "manufacturer",
+    "product_name",
+    "formula",
+    "source",
+];
+
+/// The 17 CSV header names `load_csv` reads if present. See
+/// `REQUIRED_CSV_COLUMNS` above.
+pub(crate) const OPTIONAL_CSV_COLUMNS: &[&str] = &[
+    "purity_fraction",
+    "package_mass_g",
+    "price_minor_units",
+    "currency",
+    "availability",
+    "lead_time_days",
+    "particle_size_min_um",
+    "particle_size_max_um",
+    "cas_number",
+    "tags",
+    "catalog_number",
+    "grade",
+    "physical_form",
+    "country_region",
+    "product_url",
+    "notes",
+    "retrieved_at",
+];
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -387,6 +421,54 @@ pub enum CommercialCatalogError {
     FormulaParseError { formula: String, reason: String },
     #[error("inconsistent commercial planning request: {reason}")]
     InconsistentRequest { reason: String },
+    #[error("invalid CSV column map: {reason}")]
+    InvalidColumnMap { reason: String },
+}
+
+/// A declarative mapping from gugen's canonical CSV column names (e.g.
+/// `formula`, `manufacturer`) to the header names an actual supplier's
+/// export file uses (e.g. `Chemical Formula`, `Supplier`) -- lets
+/// `CommercialPrecursorCatalog::load_csv_with_column_map` accept
+/// non-standard headers without inventing per-manufacturer adapters. Only
+/// the columns that differ need an entry; anything omitted is looked up
+/// under its canonical name as usual.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct CommercialCatalogColumnMap(BTreeMap<String, String>);
+
+impl CommercialCatalogColumnMap {
+    /// `map` is canonical name -> external header name. Rejects an unknown
+    /// canonical name (typo protection -- this is user-supplied config) and
+    /// a non-injective map (two canonical names claiming the same external
+    /// header is ambiguous).
+    pub fn new(map: BTreeMap<String, String>) -> Result<Self, CommercialCatalogError> {
+        let mut seen_external: BTreeSet<&str> = BTreeSet::new();
+        for (canonical, external) in &map {
+            if !REQUIRED_CSV_COLUMNS.contains(&canonical.as_str())
+                && !OPTIONAL_CSV_COLUMNS.contains(&canonical.as_str())
+            {
+                return Err(CommercialCatalogError::InvalidColumnMap {
+                    reason: format!("'{canonical}' is not a known canonical column name"),
+                });
+            }
+            if !seen_external.insert(external.as_str()) {
+                return Err(CommercialCatalogError::InvalidColumnMap {
+                    reason: format!(
+                        "external header '{external}' is claimed by more than one canonical column"
+                    ),
+                });
+            }
+        }
+        Ok(Self(map))
+    }
+
+    /// External header name -> canonical column name, for `loader.rs`'s
+    /// header-row remap step.
+    pub(crate) fn canonical_by_external(&self) -> BTreeMap<&str, &str> {
+        self.0
+            .iter()
+            .map(|(canonical, external)| (external.as_str(), canonical.as_str()))
+            .collect()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -705,6 +787,39 @@ mod tests {
         assert!(CurrencyCode::new("us").is_err());
         assert!(CurrencyCode::new("usd").is_err());
         assert!(CurrencyCode::new("USDD").is_err());
+    }
+
+    #[test]
+    fn column_map_rejects_an_unknown_canonical_name() {
+        let map = BTreeMap::from([("formulla".to_string(), "Chemical Formula".to_string())]);
+        assert!(matches!(
+            CommercialCatalogColumnMap::new(map),
+            Err(CommercialCatalogError::InvalidColumnMap { .. })
+        ));
+    }
+
+    #[test]
+    fn column_map_rejects_two_canonical_names_claiming_the_same_header() {
+        let map = BTreeMap::from([
+            ("formula".to_string(), "Product".to_string()),
+            ("product_name".to_string(), "Product".to_string()),
+        ]);
+        assert!(matches!(
+            CommercialCatalogColumnMap::new(map),
+            Err(CommercialCatalogError::InvalidColumnMap { .. })
+        ));
+    }
+
+    #[test]
+    fn column_map_accepts_a_valid_partial_map() {
+        let map = BTreeMap::from([
+            ("formula".to_string(), "Chemical Formula".to_string()),
+            ("manufacturer".to_string(), "Supplier".to_string()),
+        ]);
+        let column_map = CommercialCatalogColumnMap::new(map).unwrap();
+        let by_external = column_map.canonical_by_external();
+        assert_eq!(by_external.get("Chemical Formula"), Some(&"formula"));
+        assert_eq!(by_external.get("Supplier"), Some(&"manufacturer"));
     }
 
     #[test]
