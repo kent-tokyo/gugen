@@ -148,6 +148,11 @@ name = "commercial_catalog_assessment"
 path = "examples/commercial_catalog_assessment.rs"
 required-features = ["commercial_catalog"]
 
+[[example]]
+name = "execution_record_demo"
+path = "examples/execution_record_demo.rs"
+required-features = ["serde"]
+
 [[bin]]
 name = "gugen"
 path = "src/bin/gugen.rs"

@@ -100,6 +100,7 @@ mod composition;
 mod config;
 mod error;
 mod evidence;
+mod execution_record;
 mod frac;
 mod literature_conditions;
 mod literature_evidence;
@@ -144,6 +145,15 @@ pub use composition::{Composition, ELEMENT_SYMBOLS, Element};
 pub use config::{PlanningConfig, SearchBudget};
 pub use error::{GugenError, ProviderError, Result};
 pub use evidence::{EvidenceKind, EvidenceScope, EvidenceStrength, PlanningEvidence};
+pub use execution_record::{
+    ActualPrecursorAmount, ActualProcessStep, ActualStepDetail, Deviation, DeviationCategory,
+    EXECUTION_RECORD_SCHEMA_VERSION, ExecutionCharacterization, ExecutionProvenance, PlanIdentity,
+    SynthesisExecutionRecord, SynthesisOutcome,
+};
+#[cfg(feature = "serde")]
+pub use execution_record::{
+    ExecutionRecordLoadMode, ExecutionRecordLoadReport, parse_execution_records,
+};
 pub use literature_conditions::{CuratedConditionRecord, InMemoryLiteratureConditionProvider};
 pub use literature_evidence::{
     CrossDoiFieldStatus, LiteratureRouteEvidence, RouteObservationAssessment, SourcedValue,
