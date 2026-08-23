@@ -178,6 +178,11 @@ name = "exploration_result_oxalate_byproduct"
 path = "examples/exploration_result_oxalate_byproduct.rs"
 required-features = ["serde"]
 
+[[example]]
+name = "exploration_result_acetate_byproduct"
+path = "examples/exploration_result_acetate_byproduct.rs"
+required-features = ["serde"]
+
 [[bin]]
 name = "gugen"
 path = "src/bin/gugen.rs"
