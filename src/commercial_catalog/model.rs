@@ -568,6 +568,40 @@ pub enum MissingCommercialDataPolicy {
     KeepWithWarning,
 }
 
+/// Named procurement-combination ranking policies (Phase 24C), selected via
+/// `assess_commercial_precursors_with_policy`/`assess_commercial_plans_with_policy`.
+/// The plain `assess_commercial_precursors`/`assess_commercial_plans` always
+/// use `Balanced`, unchanged from their pre-24C behavior.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CommercialRankingPolicy {
+    /// Today's original ranking: fewest unresolved fields, then cheapest,
+    /// then shortest lead time, then highest purity, then deterministic
+    /// name tiebreaks.
+    #[default]
+    Balanced,
+    /// Cheapest first; the remaining `Balanced` dimensions (unresolved
+    /// count, lead time, purity, name tiebreaks) apply in their original
+    /// order as tiebreakers.
+    CostFirst,
+    /// Shortest lead time first, then the remaining `Balanced` dimensions
+    /// as tiebreakers.
+    LeadTimeFirst,
+    /// Highest purity first, then the remaining `Balanced` dimensions as
+    /// tiebreakers.
+    PurityFirst,
+    /// Identical to `Balanced` -- unresolved-field count is already
+    /// `Balanced`'s primary key, so there is no distinct metric to promote.
+    /// Kept as its own named variant because ROADMAP names it explicitly;
+    /// do not "fix" this into a fabricated distinct metric.
+    MinimumUnresolvedData,
+    /// The non-dominated set over (cost, lead time, purity, excess
+    /// purchased mass) -- minimize cost/lead-time/excess-mass, maximize
+    /// purity. A combination missing any of the 4 dimensions (including a
+    /// cost that isn't currency-comparable) is excluded from the frontier
+    /// and reported via a summary warning, never silently dropped.
+    Pareto,
+}
+
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct CommercialPlanningRequest {
     /// Required only if `target_batch_mass_grams` is `Some` -- identifies
@@ -679,6 +713,10 @@ pub struct CommercialOfferSelection {
     /// computable from the plan alone. Never a yield claim, never adjusted
     /// for process loss or weighing margin.
     pub theoretical_pure_mass_required_grams: f64,
+    /// The selected offer's own purity, carried through so
+    /// `CommercialCombination.min_purity` is traceable to the selection
+    /// that produced it. `None` if the offer's purity is unknown.
+    pub purity: Option<PurityFraction>,
     /// `None` if the offer's purity is unknown.
     pub purity_adjusted_purchase_mass_grams: Option<f64>,
     /// `None` if the offer's package mass is unknown.
@@ -716,6 +754,13 @@ pub struct CommercialCombination {
     /// acceptable-but-unknown, not unacceptable -- missing metadata is not
     /// evidence the compound can't be procured.
     pub all_availability_acceptable: bool,
+    /// The lowest purity among this combination's selections. `None` if any
+    /// selection's purity is unknown (same convention as
+    /// `max_lead_time_days`).
+    pub min_purity: Option<PurityFraction>,
+    /// Sum of every selection's `excess_mass_grams`. `None` if any
+    /// selection's excess mass is unknown.
+    pub total_excess_mass_grams: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

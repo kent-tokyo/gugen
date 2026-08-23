@@ -6,8 +6,8 @@
 
 use super::model::{
     AvailabilityStatus, CommercialCombination, CommercialExclusionCode, CommercialOfferSelection,
-    CommercialPlanningConfig, CommercialPlanningRequest, CommercialPrecursorOffer, CurrencyCode,
-    MissingCommercialDataPolicy, Money,
+    CommercialPlanningConfig, CommercialPlanningRequest, CommercialPrecursorOffer,
+    CommercialRankingPolicy, CurrencyCode, MissingCommercialDataPolicy, Money, PurityFraction,
 };
 use super::quantity::{OfferQuantity, cost_rank_key};
 use crate::composition::Composition;
@@ -326,6 +326,20 @@ pub(crate) fn search_combinations(
 /// direct enumeration, no monotonicity assumption. `total_space` is
 /// guaranteed `<= config.max_combinations_evaluated` by the caller, so this
 /// never allocates more than the caller's own configured budget.
+/// Decodes `combo_index` (in `0..total_space`) into a per-row candidate
+/// index vector -- shared by `exhaustive_search`, `ranked_search_by_policy`,
+/// and `pareto_search`, all of which enumerate the same mixed-radix space.
+fn decode_combo_index(combo_index: u64, rows: &[Vec<OfferCandidate>]) -> Vec<usize> {
+    let mut remainder = combo_index;
+    let mut indices = vec![0usize; rows.len()];
+    for (row_i, row) in rows.iter().enumerate() {
+        let len = row.len() as u64;
+        indices[row_i] = (remainder % len) as usize;
+        remainder /= len;
+    }
+    indices
+}
+
 fn exhaustive_search(
     rows: &[Vec<OfferCandidate>],
     config: &CommercialPlanningConfig,
@@ -334,14 +348,7 @@ fn exhaustive_search(
 ) -> (Vec<Vec<usize>>, usize, u64) {
     let mut all: Vec<HeapEntry> = Vec::with_capacity(total_space as usize);
     for combo_index in 0..total_space {
-        let mut remainder = combo_index;
-        let mut indices = vec![0usize; rows.len()];
-        for (row_i, row) in rows.iter().enumerate() {
-            let len = row.len() as u64;
-            indices[row_i] = (remainder % len) as usize;
-            remainder /= len;
-        }
-        all.push(HeapEntry::new(indices, rows));
+        all.push(HeapEntry::new(decode_combo_index(combo_index, rows), rows));
     }
     all.sort_by(|a, b| b.cmp(a)); // descending: best (greatest) first
     // Filter by max_total_cost *before* truncating -- otherwise a
@@ -412,6 +419,299 @@ fn heuristic_search(
     (results, evaluated, total_space)
 }
 
+// ---------------------------------------------------------------------
+// Named policies (Phase 24C) -- `Balanced` keeps using `search_combinations`
+// above, completely unchanged. Every other policy runs one of the two
+// functions below instead: a capped direct enumeration of the same
+// mixed-radix space, deliberately simpler and always-correct-for-what-it-
+// evaluates rather than reusing the heuristic tier, which is only proven
+// monotonic for `Balanced`'s own aggregates (see `search_combinations`'s
+// doc comment above).
+// ---------------------------------------------------------------------
+
+/// Per-combination metrics for the named-policy and `Pareto` search paths
+/// below -- deliberately separate from `HeapEntry` (used only by
+/// `Balanced`'s own search, left untouched) so this new code can never
+/// perturb `Balanced`'s behavior. Every optional dimension stays a genuine
+/// `Option`, unlike `HeapEntry`'s internal unknown-value sentinels, since
+/// `Pareto` specifically needs to tell "worst known value" apart from
+/// "unknown".
+struct PolicyEntry {
+    indices: Vec<usize>,
+    unresolved_sum: usize,
+    total_cost: Option<Money>,
+    cost_key: (u8, Option<CurrencyCode>, u64),
+    max_lead_time_days: Option<u32>,
+    min_purity: Option<f64>,
+    total_excess_mass_grams: Option<f64>,
+    manufacturers: Vec<String>,
+    catalog_numbers: Vec<String>,
+    offer_ids: Vec<String>,
+}
+
+impl PolicyEntry {
+    fn new(indices: Vec<usize>, rows: &[Vec<OfferCandidate>]) -> Self {
+        let selected: Vec<&OfferCandidate> =
+            indices.iter().zip(rows).map(|(&i, row)| &row[i]).collect();
+        let unresolved_sum = selected.iter().map(|c| c.unresolved_fields.len()).sum();
+        let total_cost = combination_total_cost(&selected);
+        let cost_key = cost_rank_key(total_cost);
+        // `None` if any selection's lead time/purity is unknown --
+        // `try_fold` short-circuits to `None` the moment one selection's
+        // value is `None`, so this never falls back to a sentinel.
+        let max_lead_time_days = selected
+            .iter()
+            .try_fold(0u32, |acc, c| c.offer.lead_time_days.map(|lt| acc.max(lt)));
+        let min_purity = selected.iter().try_fold(f64::INFINITY, |acc, c| {
+            c.offer.purity.map(|p| acc.min(p.value()))
+        });
+        let total_excess_mass_grams: Option<f64> =
+            selected.iter().map(|c| c.quantity.excess_mass_grams).sum();
+        let mut manufacturers: Vec<String> = selected
+            .iter()
+            .map(|c| c.offer.manufacturer.clone())
+            .collect();
+        manufacturers.sort();
+        let mut catalog_numbers: Vec<String> = selected
+            .iter()
+            .map(|c| c.offer.catalog_number.clone().unwrap_or_default())
+            .collect();
+        catalog_numbers.sort();
+        let mut offer_ids: Vec<String> = selected
+            .iter()
+            .map(|c| c.offer.offer_id.0.clone())
+            .collect();
+        offer_ids.sort();
+        Self {
+            indices,
+            unresolved_sum,
+            total_cost,
+            cost_key,
+            max_lead_time_days,
+            min_purity,
+            total_excess_mass_grams,
+            manufacturers,
+            catalog_numbers,
+            offer_ids,
+        }
+    }
+
+    /// Deterministic name-based tiebreak -- same fields/order as
+    /// `HeapEntry::Ord`'s own tail.
+    fn name_tiebreak(&self, other: &Self) -> std::cmp::Ordering {
+        self.manufacturers
+            .cmp(&other.manufacturers)
+            .then_with(|| self.catalog_numbers.cmp(&other.catalog_numbers))
+            .then_with(|| self.offer_ids.cmp(&other.offer_ids))
+    }
+}
+
+/// `None` sorts last (worst) -- shorter is better, and an unknown lead time
+/// must never be preferred over a known one just because it's unmeasured.
+fn cmp_lead_time_best_first(a: Option<u32>, b: Option<u32>) -> std::cmp::Ordering {
+    match (a, b) {
+        (Some(a), Some(b)) => a.cmp(&b),
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => std::cmp::Ordering::Equal,
+    }
+}
+
+/// `None` sorts last (worst) -- higher purity is better, same
+/// unknown-is-never-preferred rule as `cmp_lead_time_best_first`.
+fn cmp_purity_best_first(a: Option<f64>, b: Option<f64>) -> std::cmp::Ordering {
+    match (a, b) {
+        (Some(a), Some(b)) => b.total_cmp(&a), // descending: higher purity first
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => std::cmp::Ordering::Equal,
+    }
+}
+
+/// Best-first comparator for `CostFirst`/`LeadTimeFirst`/`PurityFirst`:
+/// promotes the named dimension to primary, keeps `Balanced`'s remaining 3
+/// dimensions (of its original 5-key chain, `unresolved_sum` excepted --
+/// see below) as tiebreakers in their original relative order, then the
+/// same deterministic name tiebreak `HeapEntry::Ord` uses. `unresolved_sum`
+/// is always the first tiebreaker after the promoted primary, matching
+/// `Balanced`'s own primary key -- a policy choosing *what's optimized*
+/// should not also have to give up the "prefer more complete data" tiebreak
+/// `Balanced` already establishes as the module's baseline expectation.
+fn policy_compare(
+    a: &PolicyEntry,
+    b: &PolicyEntry,
+    policy: CommercialRankingPolicy,
+) -> std::cmp::Ordering {
+    let unresolved = || a.unresolved_sum.cmp(&b.unresolved_sum);
+    let cost = || a.cost_key.cmp(&b.cost_key);
+    let lead_time = || cmp_lead_time_best_first(a.max_lead_time_days, b.max_lead_time_days);
+    let purity = || cmp_purity_best_first(a.min_purity, b.min_purity);
+    let names = || a.name_tiebreak(b);
+    match policy {
+        CommercialRankingPolicy::CostFirst => cost()
+            .then_with(unresolved)
+            .then_with(lead_time)
+            .then_with(purity)
+            .then_with(names),
+        CommercialRankingPolicy::LeadTimeFirst => lead_time()
+            .then_with(unresolved)
+            .then_with(cost)
+            .then_with(purity)
+            .then_with(names),
+        CommercialRankingPolicy::PurityFirst => purity()
+            .then_with(unresolved)
+            .then_with(cost)
+            .then_with(lead_time)
+            .then_with(names),
+        CommercialRankingPolicy::Balanced
+        | CommercialRankingPolicy::MinimumUnresolvedData
+        | CommercialRankingPolicy::Pareto => {
+            // `Balanced`/`MinimumUnresolvedData` are handled entirely by
+            // `search_combinations` above; `Pareto` uses `dominates`, not a
+            // total order. This function is never called for them.
+            unreachable!("policy_compare is only called for CostFirst/LeadTimeFirst/PurityFirst")
+        }
+    }
+}
+
+/// `ranked_search_by_policy`/`pareto_search`'s shared enumeration step:
+/// every combination in `0..total_space.min(config.max_combinations_evaluated)`,
+/// decoded and scored. Capping here (rather than enumerating everything and
+/// truncating after) keeps this bounded by the caller's own configured
+/// budget, matching `exhaustive_search`'s guarantee.
+fn evaluate_all_by_policy(
+    rows: &[Vec<OfferCandidate>],
+    config: &CommercialPlanningConfig,
+    total_space: u64,
+) -> Vec<PolicyEntry> {
+    let evaluated = total_space.min(config.max_combinations_evaluated as u64);
+    (0..evaluated)
+        .map(|combo_index| PolicyEntry::new(decode_combo_index(combo_index, rows), rows))
+        .collect()
+}
+
+/// Used for `CostFirst`/`LeadTimeFirst`/`PurityFirst`/`MinimumUnresolvedData`
+/// (the last of which reuses `search_combinations` instead -- see
+/// `CommercialRankingPolicy::MinimumUnresolvedData`'s doc comment; this
+/// function is only reached for the first three). Ranks the capped
+/// enumeration by `policy`'s comparator, filters `max_total_cost` *before*
+/// truncating to `max_results_returned` -- mirroring `exhaustive_search`'s
+/// own ordering, for the same reason (see `passes_max_total_cost`'s doc
+/// comment).
+pub(crate) fn ranked_search_by_policy(
+    rows: &[Vec<OfferCandidate>],
+    config: &CommercialPlanningConfig,
+    max_total_cost: Option<Money>,
+    policy: CommercialRankingPolicy,
+) -> (Vec<Vec<usize>>, usize, u64) {
+    if rows.is_empty() || rows.iter().any(|row| row.is_empty()) {
+        return (Vec::new(), 0, 0);
+    }
+    let total_space: u64 = rows
+        .iter()
+        .fold(1u64, |acc, row| acc.saturating_mul(row.len() as u64));
+    let mut all = evaluate_all_by_policy(rows, config, total_space);
+    let evaluated = all.len();
+    all.sort_by(|a, b| policy_compare(a, b, policy));
+    let results = all
+        .into_iter()
+        .filter(|e| passes_max_total_cost(e.total_cost, max_total_cost))
+        .take(config.max_results_returned)
+        .map(|e| e.indices)
+        .collect();
+    (results, evaluated, total_space)
+}
+
+/// Pareto dominance: `a` dominates `b` iff `a` is at least as good as `b`
+/// on every dimension and strictly better on at least one. Minimizes
+/// cost/lead-time/excess-mass, maximizes purity. Callers must only pass
+/// entries that already passed `pareto_search`'s "all 4 dimensions known,
+/// same currency" filter -- every `unwrap()` here relies on that
+/// precondition, and the currency check specifically is why this compares
+/// raw `minor_units()` rather than the full `cost_key` (which would
+/// otherwise compare mismatched currencies lexicographically instead of by
+/// magnitude, silently wrong).
+fn dominates(a: &PolicyEntry, b: &PolicyEntry) -> bool {
+    let a_cost = a.total_cost.unwrap().minor_units();
+    let b_cost = b.total_cost.unwrap().minor_units();
+    let a_lead = a.max_lead_time_days.unwrap();
+    let b_lead = b.max_lead_time_days.unwrap();
+    let a_purity = a.min_purity.unwrap();
+    let b_purity = b.min_purity.unwrap();
+    let a_excess = a.total_excess_mass_grams.unwrap();
+    let b_excess = b.total_excess_mass_grams.unwrap();
+
+    let at_least_as_good =
+        a_cost <= b_cost && a_lead <= b_lead && a_purity >= b_purity && a_excess <= b_excess;
+    let strictly_better =
+        a_cost < b_cost || a_lead < b_lead || a_purity > b_purity || a_excess < b_excess;
+    at_least_as_good && strictly_better
+}
+
+/// `CommercialRankingPolicy::Pareto`. Enumerates the same capped
+/// mixed-radix space as `ranked_search_by_policy`, excludes any
+/// combination missing cost, lead time, purity, or excess mass, and
+/// separately excludes a combination whose cost is known but priced in a
+/// different currency than the rest of the evaluated set (this crate never
+/// converts currencies -- comparing costs across currencies would be
+/// silently wrong, so the reference currency is simply the first one seen
+/// in enumeration order, which is already deterministic; anything else is
+/// excluded the same way missing data is, not partially compared). The
+/// non-dominated set is ordered deterministically (cheapest first, via
+/// `CostFirst`'s own comparator) and truncated to `max_results_returned`.
+/// Returns `(combination_indices, evaluated, total_space,
+/// excluded_for_missing_data)`. `O(n^2)` in the number of evaluated
+/// combinations for the dominance pass -- fine at
+/// `CommercialPlanningConfig::default()`'s 10,000-combination budget;
+/// revisit only if a real workload measures this as a bottleneck.
+pub(crate) fn pareto_search(
+    rows: &[Vec<OfferCandidate>],
+    config: &CommercialPlanningConfig,
+    max_total_cost: Option<Money>,
+) -> (Vec<Vec<usize>>, usize, u64, usize) {
+    if rows.is_empty() || rows.iter().any(|row| row.is_empty()) {
+        return (Vec::new(), 0, 0, 0);
+    }
+    let total_space: u64 = rows
+        .iter()
+        .fold(1u64, |acc, row| acc.saturating_mul(row.len() as u64));
+    let all = evaluate_all_by_policy(rows, config, total_space);
+    let evaluated = all.len();
+
+    let (individually_known, mut excluded): (Vec<PolicyEntry>, Vec<PolicyEntry>) =
+        all.into_iter().partition(|e| {
+            e.total_cost.is_some()
+                && e.max_lead_time_days.is_some()
+                && e.min_purity.is_some()
+                && e.total_excess_mass_grams.is_some()
+        });
+
+    let reference_currency = individually_known
+        .first()
+        .and_then(|e| e.total_cost)
+        .map(|cost| cost.currency());
+    let (comparable, mut cross_currency): (Vec<PolicyEntry>, Vec<PolicyEntry>) = individually_known
+        .into_iter()
+        .partition(|e| e.total_cost.map(|c| c.currency()) == reference_currency);
+    excluded.append(&mut cross_currency);
+
+    let frontier: Vec<&PolicyEntry> = comparable
+        .iter()
+        .filter(|candidate| !comparable.iter().any(|other| dominates(other, candidate)))
+        .collect();
+    let mut frontier_sorted = frontier;
+    frontier_sorted.sort_by(|a, b| policy_compare(a, b, CommercialRankingPolicy::CostFirst));
+
+    let results = frontier_sorted
+        .into_iter()
+        .filter(|e| passes_max_total_cost(e.total_cost, max_total_cost))
+        .take(config.max_results_returned)
+        .map(|e| e.indices.clone())
+        .collect();
+
+    (results, evaluated, total_space, excluded.len())
+}
+
 pub(crate) fn build_combination(
     indices: &[usize],
     rows: &[Vec<OfferCandidate>],
@@ -448,6 +748,7 @@ pub(crate) fn build_combination(
                 reaction_coefficient: *coefficient,
                 offer_id: candidate.offer.offer_id.clone(),
                 theoretical_pure_mass_required_grams: *theoretical_mass,
+                purity: candidate.offer.purity,
                 purity_adjusted_purchase_mass_grams: candidate
                     .quantity
                     .purity_adjusted_purchase_mass_grams,
@@ -471,6 +772,13 @@ pub(crate) fn build_combination(
             None => lead_time_known = false,
         }
     }
+    // `None` if any selection's purity/excess mass is unknown -- matching
+    // `max_lead_time_days`'s existing convention above.
+    let min_purity = selections
+        .iter()
+        .try_fold(f64::INFINITY, |acc, s| s.purity.map(|p| acc.min(p.value())))
+        .and_then(|value| PurityFraction::new(value).ok());
+    let total_excess_mass_grams: Option<f64> = selections.iter().map(|s| s.excess_mass_grams).sum();
     // "Acceptable" here is a fixed, documented judgment independent of the
     // request's own availability filter (which may not have restricted
     // availability at all): not explicitly Discontinued. Unreported
@@ -494,6 +802,8 @@ pub(crate) fn build_combination(
         all_costs_known,
         max_lead_time_days: lead_time_known.then_some(max_lead_time),
         all_availability_acceptable,
+        min_purity,
+        total_excess_mass_grams,
     }
 }
 

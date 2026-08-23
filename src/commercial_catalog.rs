@@ -50,14 +50,17 @@ mod search;
 #[cfg(test)]
 mod test_support;
 
-pub use assessment::{assess_commercial_plans, assess_commercial_precursors};
+pub use assessment::{
+    assess_commercial_plans, assess_commercial_plans_with_policy, assess_commercial_precursors,
+    assess_commercial_precursors_with_policy,
+};
 pub use model::{
     AvailabilityStatus, CasNumber, CommercialCatalogColumnMap, CommercialCatalogError,
     CommercialCatalogLoadMode, CommercialCatalogLoadReport, CommercialCombination,
     CommercialExclusion, CommercialExclusionCode, CommercialOfferId, CommercialOfferSelection,
     CommercialPlanAssessment, CommercialPlanningConfig, CommercialPlanningRequest,
-    CommercialPrecursorCatalog, CommercialPrecursorOffer, CommercialSourceType, CommercialWarning,
-    CurrencyCode, MissingCommercialDataPolicy, Money, OfferProvenance, PackageMass,
-    ParticleSizeRangeUm, PurityFraction, RejectedOffer, SearchBudgetSummary,
-    UnresolvedCommercialField,
+    CommercialPrecursorCatalog, CommercialPrecursorOffer, CommercialRankingPolicy,
+    CommercialSourceType, CommercialWarning, CurrencyCode, MissingCommercialDataPolicy, Money,
+    OfferProvenance, PackageMass, ParticleSizeRangeUm, PurityFraction, RejectedOffer,
+    SearchBudgetSummary, UnresolvedCommercialField,
 };

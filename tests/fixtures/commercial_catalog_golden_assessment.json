@@ -15,6 +15,7 @@
           "reaction_coefficient": 1,
           "offer_id": "OSK-BACO3-006",
           "theoretical_pure_mass_required_grams": 197.33499999999998,
+          "purity": 0.999,
           "purity_adjusted_purchase_mass_grams": 197.5325325325325,
           "package_count": 1,
           "purchased_mass_grams": 250.0,
@@ -38,6 +39,7 @@
           "reaction_coefficient": 1,
           "offer_id": "OSK-TIO2-025",
           "theoretical_pure_mass_required_grams": 79.865,
+          "purity": 0.97,
           "purity_adjusted_purchase_mass_grams": 82.33505154639175,
           "package_count": 1,
           "purchased_mass_grams": 1000.0,
@@ -59,7 +61,9 @@
       },
       "all_costs_known": true,
       "max_lead_time_days": 12,
-      "all_availability_acceptable": true
+      "all_availability_acceptable": true,
+      "min_purity": 0.97,
+      "total_excess_mass_grams": 970.1324159210758
     },
     {
       "combination_id": "OSK-BACO3-006|OSK-TIO2-026",
@@ -74,6 +78,7 @@
           "reaction_coefficient": 1,
           "offer_id": "OSK-BACO3-006",
           "theoretical_pure_mass_required_grams": 197.33499999999998,
+          "purity": 0.999,
           "purity_adjusted_purchase_mass_grams": 197.5325325325325,
           "package_count": 1,
           "purchased_mass_grams": 250.0,
@@ -97,6 +102,7 @@
           "reaction_coefficient": 1,
           "offer_id": "OSK-TIO2-026",
           "theoretical_pure_mass_required_grams": 79.865,
+          "purity": 0.999,
           "purity_adjusted_purchase_mass_grams": 79.94494494494494,
           "package_count": 1,
           "purchased_mass_grams": 250.0,
@@ -118,7 +124,9 @@
       },
       "all_costs_known": true,
       "max_lead_time_days": 7,
-      "all_availability_acceptable": true
+      "all_availability_acceptable": true,
+      "min_purity": 0.999,
+      "total_excess_mass_grams": 222.52252252252254
     },
     {
       "combination_id": "OSK-BACO3-005|OSK-TIO2-025",
@@ -133,6 +141,7 @@
           "reaction_coefficient": 1,
           "offer_id": "OSK-BACO3-005",
           "theoretical_pure_mass_required_grams": 197.33499999999998,
+          "purity": 0.97,
           "purity_adjusted_purchase_mass_grams": 203.4381443298969,
           "package_count": 1,
           "purchased_mass_grams": 1000.0,
@@ -156,6 +165,7 @@
           "reaction_coefficient": 1,
           "offer_id": "OSK-TIO2-025",
           "theoretical_pure_mass_required_grams": 79.865,
+          "purity": 0.97,
           "purity_adjusted_purchase_mass_grams": 82.33505154639175,
           "package_count": 1,
           "purchased_mass_grams": 1000.0,
@@ -177,7 +187,9 @@
       },
       "all_costs_known": true,
       "max_lead_time_days": 14,
-      "all_availability_acceptable": true
+      "all_availability_acceptable": true,
+      "min_purity": 0.97,
+      "total_excess_mass_grams": 1714.2268041237114
     },
     {
       "combination_id": "OSK-BACO3-005|OSK-TIO2-026",
@@ -192,6 +204,7 @@
           "reaction_coefficient": 1,
           "offer_id": "OSK-BACO3-005",
           "theoretical_pure_mass_required_grams": 197.33499999999998,
+          "purity": 0.97,
           "purity_adjusted_purchase_mass_grams": 203.4381443298969,
           "package_count": 1,
           "purchased_mass_grams": 1000.0,
@@ -215,6 +228,7 @@
           "reaction_coefficient": 1,
           "offer_id": "OSK-TIO2-026",
           "theoretical_pure_mass_required_grams": 79.865,
+          "purity": 0.999,
           "purity_adjusted_purchase_mass_grams": 79.94494494494494,
           "package_count": 1,
           "purchased_mass_grams": 250.0,
@@ -236,7 +250,9 @@
       },
       "all_costs_known": true,
       "max_lead_time_days": 14,
-      "all_availability_acceptable": true
+      "all_availability_acceptable": true,
+      "min_purity": 0.97,
+      "total_excess_mass_grams": 966.6169107251582
     },
     {
       "combination_id": "OSK-BACO3-019|OSK-TIO2-025",
@@ -251,6 +267,7 @@
           "reaction_coefficient": 1,
           "offer_id": "OSK-BACO3-019",
           "theoretical_pure_mass_required_grams": 197.33499999999998,
+          "purity": 0.95,
           "purity_adjusted_purchase_mass_grams": 207.72105263157894,
           "package_count": 1,
           "purchased_mass_grams": 5000.0,
@@ -274,6 +291,7 @@
           "reaction_coefficient": 1,
           "offer_id": "OSK-TIO2-025",
           "theoretical_pure_mass_required_grams": 79.865,
+          "purity": 0.97,
           "purity_adjusted_purchase_mass_grams": 82.33505154639175,
           "package_count": 1,
           "purchased_mass_grams": 1000.0,
@@ -295,7 +313,9 @@
       },
       "all_costs_known": true,
       "max_lead_time_days": 20,
-      "all_availability_acceptable": true
+      "all_availability_acceptable": true,
+      "min_purity": 0.95,
+      "total_excess_mass_grams": 5709.943895822029
     }
   ],
   "unmatched_precursors": [],

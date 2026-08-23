@@ -18,6 +18,7 @@
               "reaction_coefficient": 1,
               "offer_id": "EML-BACO3-99",
               "theoretical_pure_mass_required_grams": 197.33499999999998,
+              "purity": 0.99,
               "purity_adjusted_purchase_mass_grams": 199.32828282828282,
               "package_count": 1,
               "purchased_mass_grams": 500.0,
@@ -41,6 +42,7 @@
               "reaction_coefficient": 1,
               "offer_id": "EML-TIO2-995",
               "theoretical_pure_mass_required_grams": 79.865,
+              "purity": 0.995,
               "purity_adjusted_purchase_mass_grams": 80.26633165829145,
               "package_count": 1,
               "purchased_mass_grams": 500.0,
@@ -62,7 +64,9 @@
           },
           "all_costs_known": true,
           "max_lead_time_days": 5,
-          "all_availability_acceptable": true
+          "all_availability_acceptable": true,
+          "min_purity": 0.99,
+          "total_excess_mass_grams": 720.4053855134257
         },
         {
           "combination_id": "EML-BACO3-99|DCS-TIO2-98",
@@ -77,6 +81,7 @@
               "reaction_coefficient": 1,
               "offer_id": "EML-BACO3-99",
               "theoretical_pure_mass_required_grams": 197.33499999999998,
+              "purity": 0.99,
               "purity_adjusted_purchase_mass_grams": 199.32828282828282,
               "package_count": 1,
               "purchased_mass_grams": 500.0,
@@ -100,6 +105,7 @@
               "reaction_coefficient": 1,
               "offer_id": "DCS-TIO2-98",
               "theoretical_pure_mass_required_grams": 79.865,
+              "purity": 0.98,
               "purity_adjusted_purchase_mass_grams": 81.49489795918367,
               "package_count": 1,
               "purchased_mass_grams": 2500.0,
@@ -121,7 +127,9 @@
           },
           "all_costs_known": true,
           "max_lead_time_days": 21,
-          "all_availability_acceptable": true
+          "all_availability_acceptable": true,
+          "min_purity": 0.98,
+          "total_excess_mass_grams": 2719.1768192125337
         },
         {
           "combination_id": "DCS-BACO3-995|EML-TIO2-995",
@@ -136,6 +144,7 @@
               "reaction_coefficient": 1,
               "offer_id": "DCS-BACO3-995",
               "theoretical_pure_mass_required_grams": 197.33499999999998,
+              "purity": 0.995,
               "purity_adjusted_purchase_mass_grams": 198.32663316582912,
               "package_count": 1,
               "purchased_mass_grams": 1000.0,
@@ -159,6 +168,7 @@
               "reaction_coefficient": 1,
               "offer_id": "EML-TIO2-995",
               "theoretical_pure_mass_required_grams": 79.865,
+              "purity": 0.995,
               "purity_adjusted_purchase_mass_grams": 80.26633165829145,
               "package_count": 1,
               "purchased_mass_grams": 500.0,
@@ -180,7 +190,9 @@
           },
           "all_costs_known": true,
           "max_lead_time_days": 10,
-          "all_availability_acceptable": true
+          "all_availability_acceptable": true,
+          "min_purity": 0.995,
+          "total_excess_mass_grams": 1221.4070351758794
         },
         {
           "combination_id": "DCS-BACO3-995|DCS-TIO2-98",
@@ -195,6 +207,7 @@
               "reaction_coefficient": 1,
               "offer_id": "DCS-BACO3-995",
               "theoretical_pure_mass_required_grams": 197.33499999999998,
+              "purity": 0.995,
               "purity_adjusted_purchase_mass_grams": 198.32663316582912,
               "package_count": 1,
               "purchased_mass_grams": 1000.0,
@@ -218,6 +231,7 @@
               "reaction_coefficient": 1,
               "offer_id": "DCS-TIO2-98",
               "theoretical_pure_mass_required_grams": 79.865,
+              "purity": 0.98,
               "purity_adjusted_purchase_mass_grams": 81.49489795918367,
               "package_count": 1,
               "purchased_mass_grams": 2500.0,
@@ -239,7 +253,9 @@
           },
           "all_costs_known": true,
           "max_lead_time_days": 21,
-          "all_availability_acceptable": true
+          "all_availability_acceptable": true,
+          "min_purity": 0.98,
+          "total_excess_mass_grams": 3220.178468874987
         },
         {
           "combination_id": "OSK-BACO3-EUR|EML-TIO2-995",
@@ -254,6 +270,7 @@
               "reaction_coefficient": 1,
               "offer_id": "OSK-BACO3-EUR",
               "theoretical_pure_mass_required_grams": 197.33499999999998,
+              "purity": 0.97,
               "purity_adjusted_purchase_mass_grams": 203.4381443298969,
               "package_count": 1,
               "purchased_mass_grams": 1000.0,
@@ -277,6 +294,7 @@
               "reaction_coefficient": 1,
               "offer_id": "EML-TIO2-995",
               "theoretical_pure_mass_required_grams": 79.865,
+              "purity": 0.995,
               "purity_adjusted_purchase_mass_grams": 80.26633165829145,
               "package_count": 1,
               "purchased_mass_grams": 500.0,
@@ -295,7 +313,9 @@
           "total_cost": null,
           "all_costs_known": true,
           "max_lead_time_days": 14,
-          "all_availability_acceptable": true
+          "all_availability_acceptable": true,
+          "min_purity": 0.97,
+          "total_excess_mass_grams": 1216.2955240118117
         }
       ],
       "unmatched_precursors": [],
@@ -328,6 +348,7 @@
               "reaction_coefficient": 1,
               "offer_id": "EML-BACO3-99",
               "theoretical_pure_mass_required_grams": 197.33499999999998,
+              "purity": 0.99,
               "purity_adjusted_purchase_mass_grams": 199.32828282828282,
               "package_count": 1,
               "purchased_mass_grams": 500.0,
@@ -351,6 +372,7 @@
               "reaction_coefficient": 1,
               "offer_id": "EML-TIO2-995",
               "theoretical_pure_mass_required_grams": 79.865,
+              "purity": 0.995,
               "purity_adjusted_purchase_mass_grams": 80.26633165829145,
               "package_count": 1,
               "purchased_mass_grams": 500.0,
@@ -372,7 +394,9 @@
           },
           "all_costs_known": true,
           "max_lead_time_days": 5,
-          "all_availability_acceptable": true
+          "all_availability_acceptable": true,
+          "min_purity": 0.99,
+          "total_excess_mass_grams": 720.4053855134257
         },
         {
           "combination_id": "EML-BACO3-99|DCS-TIO2-98",
@@ -387,6 +411,7 @@
               "reaction_coefficient": 1,
               "offer_id": "EML-BACO3-99",
               "theoretical_pure_mass_required_grams": 197.33499999999998,
+              "purity": 0.99,
               "purity_adjusted_purchase_mass_grams": 199.32828282828282,
               "package_count": 1,
               "purchased_mass_grams": 500.0,
@@ -410,6 +435,7 @@
               "reaction_coefficient": 1,
               "offer_id": "DCS-TIO2-98",
               "theoretical_pure_mass_required_grams": 79.865,
+              "purity": 0.98,
               "purity_adjusted_purchase_mass_grams": 81.49489795918367,
               "package_count": 1,
               "purchased_mass_grams": 2500.0,
@@ -431,7 +457,9 @@
           },
           "all_costs_known": true,
           "max_lead_time_days": 21,
-          "all_availability_acceptable": true
+          "all_availability_acceptable": true,
+          "min_purity": 0.98,
+          "total_excess_mass_grams": 2719.1768192125337
         },
         {
           "combination_id": "DCS-BACO3-995|EML-TIO2-995",
@@ -446,6 +474,7 @@
               "reaction_coefficient": 1,
               "offer_id": "DCS-BACO3-995",
               "theoretical_pure_mass_required_grams": 197.33499999999998,
+              "purity": 0.995,
               "purity_adjusted_purchase_mass_grams": 198.32663316582912,
               "package_count": 1,
               "purchased_mass_grams": 1000.0,
@@ -469,6 +498,7 @@
               "reaction_coefficient": 1,
               "offer_id": "EML-TIO2-995",
               "theoretical_pure_mass_required_grams": 79.865,
+              "purity": 0.995,
               "purity_adjusted_purchase_mass_grams": 80.26633165829145,
               "package_count": 1,
               "purchased_mass_grams": 500.0,
@@ -490,7 +520,9 @@
           },
           "all_costs_known": true,
           "max_lead_time_days": 10,
-          "all_availability_acceptable": true
+          "all_availability_acceptable": true,
+          "min_purity": 0.995,
+          "total_excess_mass_grams": 1221.4070351758794
         },
         {
           "combination_id": "DCS-BACO3-995|DCS-TIO2-98",
@@ -505,6 +537,7 @@
               "reaction_coefficient": 1,
               "offer_id": "DCS-BACO3-995",
               "theoretical_pure_mass_required_grams": 197.33499999999998,
+              "purity": 0.995,
               "purity_adjusted_purchase_mass_grams": 198.32663316582912,
               "package_count": 1,
               "purchased_mass_grams": 1000.0,
@@ -528,6 +561,7 @@
               "reaction_coefficient": 1,
               "offer_id": "DCS-TIO2-98",
               "theoretical_pure_mass_required_grams": 79.865,
+              "purity": 0.98,
               "purity_adjusted_purchase_mass_grams": 81.49489795918367,
               "package_count": 1,
               "purchased_mass_grams": 2500.0,
@@ -549,7 +583,9 @@
           },
           "all_costs_known": true,
           "max_lead_time_days": 21,
-          "all_availability_acceptable": true
+          "all_availability_acceptable": true,
+          "min_purity": 0.98,
+          "total_excess_mass_grams": 3220.178468874987
         },
         {
           "combination_id": "OSK-BACO3-EUR|EML-TIO2-995",
@@ -564,6 +600,7 @@
               "reaction_coefficient": 1,
               "offer_id": "OSK-BACO3-EUR",
               "theoretical_pure_mass_required_grams": 197.33499999999998,
+              "purity": 0.97,
               "purity_adjusted_purchase_mass_grams": 203.4381443298969,
               "package_count": 1,
               "purchased_mass_grams": 1000.0,
@@ -587,6 +624,7 @@
               "reaction_coefficient": 1,
               "offer_id": "EML-TIO2-995",
               "theoretical_pure_mass_required_grams": 79.865,
+              "purity": 0.995,
               "purity_adjusted_purchase_mass_grams": 80.26633165829145,
               "package_count": 1,
               "purchased_mass_grams": 500.0,
@@ -605,7 +643,9 @@
           "total_cost": null,
           "all_costs_known": true,
           "max_lead_time_days": 14,
-          "all_availability_acceptable": true
+          "all_availability_acceptable": true,
+          "min_purity": 0.97,
+          "total_excess_mass_grams": 1216.2955240118117
         }
       ],
       "unmatched_precursors": [],

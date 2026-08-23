@@ -40,6 +40,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   semver-checks` confirms no breaking changes -- but unlike 24A, this
   phase does add public API, so the next release must be at least a
   minor version bump, e.g. `0.6.0`, not a patch release).
+- Named procurement ranking policies (Phase 24C), behind the same
+  `commercial_catalog` feature: a new `CommercialRankingPolicy` enum
+  (`Balanced` -- today's original ranking, unchanged; `CostFirst`;
+  `LeadTimeFirst`; `PurityFirst`; `MinimumUnresolvedData` -- identical to
+  `Balanced` by construction, since unresolved-field count is already
+  its primary key; `Pareto` -- the non-dominated set over cost, lead
+  time, purity, and excess purchased mass). New sibling functions
+  `assess_commercial_plans_with_policy`/
+  `assess_commercial_precursors_with_policy`; the existing
+  `assess_commercial_plans`/`assess_commercial_precursors` are unchanged
+  thin wrappers always passing `Balanced` (pinned by a regression test).
+  `gugen commercial-plan --ranking-policy <policy>` (default `balanced`).
+  **This phase's new `min_purity`/`total_excess_mass_grams` fields on
+  `CommercialCombination` and `purity` on `CommercialOfferSelection` ARE
+  a breaking change**, confirmed by `cargo semver-checks`
+  (`constructible_struct_adds_field`, both structs have no private
+  fields so an external caller may already construct them via a full
+  struct literal, which the new fields would break) -- semver-checks
+  reports this as requiring a new major version, which for this
+  pre-1.0 crate means the next release must bump the minor version
+  (`0.6.0`), per Cargo's own SemVer compatibility rules for `0.y.z`.
+  Not a patch release.
 
 ## [0.5.0] - 2026-08-22
 

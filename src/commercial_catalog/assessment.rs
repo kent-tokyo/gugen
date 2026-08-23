@@ -6,12 +6,12 @@ use super::model::{
     CommercialCatalogError, CommercialCombination, CommercialExclusion, CommercialExclusionCode,
     CommercialOfferId, CommercialPlanAssessment, CommercialPlanningConfig,
     CommercialPlanningRequest, CommercialPrecursorCatalog, CommercialPrecursorOffer,
-    CommercialWarning, SearchBudgetSummary, UnresolvedCommercialField,
+    CommercialRankingPolicy, CommercialWarning, SearchBudgetSummary, UnresolvedCommercialField,
 };
 use super::quantity::{compute_offer_quantity, molar_mass_g_per_mol, unresolved_fields_for};
 use super::search::{
-    OfferCandidate, build_combination, hard_constraint_violations, offer_rank_order,
-    search_combinations,
+    OfferCandidate, build_combination, hard_constraint_violations, offer_rank_order, pareto_search,
+    ranked_search_by_policy, search_combinations,
 };
 use crate::composition::Composition;
 use crate::precursor::PrecursorId;
@@ -88,11 +88,30 @@ fn resolve_target_scale(
     target_mass / target_basis_grams
 }
 
+/// Always ranks via `CommercialRankingPolicy::Balanced` -- unchanged from
+/// this function's pre-24C behavior. See
+/// `assess_commercial_precursors_with_policy` for named-policy selection.
 pub fn assess_commercial_precursors(
     plan: &SynthesisPlan,
     catalog: &CommercialPrecursorCatalog,
     request: &CommercialPlanningRequest,
     config: &CommercialPlanningConfig,
+) -> Result<CommercialPlanAssessment, CommercialCatalogError> {
+    assess_commercial_precursors_with_policy(
+        plan,
+        catalog,
+        request,
+        config,
+        CommercialRankingPolicy::Balanced,
+    )
+}
+
+pub fn assess_commercial_precursors_with_policy(
+    plan: &SynthesisPlan,
+    catalog: &CommercialPrecursorCatalog,
+    request: &CommercialPlanningRequest,
+    config: &CommercialPlanningConfig,
+    policy: CommercialRankingPolicy,
 ) -> Result<CommercialPlanAssessment, CommercialCatalogError> {
     validate_request(request)?;
 
@@ -203,8 +222,27 @@ pub fn assess_commercial_precursors(
     }
 
     let every_precursor_has_a_match = unmatched_precursors.is_empty();
+    let mut pareto_excluded_for_missing_data = 0usize;
     let (index_vectors, evaluated, total_space) = if every_precursor_has_a_match {
-        search_combinations(&rows, config, request.max_total_cost)
+        match policy {
+            // `MinimumUnresolvedData` is `Balanced`'s ordering by
+            // construction (see the enum variant's own doc comment) --
+            // both reuse `search_combinations` unmodified.
+            CommercialRankingPolicy::Balanced | CommercialRankingPolicy::MinimumUnresolvedData => {
+                search_combinations(&rows, config, request.max_total_cost)
+            }
+            CommercialRankingPolicy::CostFirst
+            | CommercialRankingPolicy::LeadTimeFirst
+            | CommercialRankingPolicy::PurityFirst => {
+                ranked_search_by_policy(&rows, config, request.max_total_cost, policy)
+            }
+            CommercialRankingPolicy::Pareto => {
+                let (indices, evaluated, total_space, excluded) =
+                    pareto_search(&rows, config, request.max_total_cost);
+                pareto_excluded_for_missing_data = excluded;
+                (indices, evaluated, total_space)
+            }
+        }
     } else {
         (Vec::new(), 0, 0)
     };
@@ -217,6 +255,16 @@ pub fn assess_commercial_precursors(
             message: format!(
                 "combination search is not exhaustive: {evaluated} combination(s) evaluated, \
                  {combinations_omitted} omitted"
+            ),
+            severity: WarningSeverity::Info,
+        });
+    }
+    if pareto_excluded_for_missing_data > 0 {
+        warnings.push(CommercialWarning {
+            message: format!(
+                "{pareto_excluded_for_missing_data} combination(s) excluded from the Pareto \
+                 frontier: cost, lead time, purity, or excess mass was unknown, or the cost \
+                 was not comparable (a different currency than the rest of the evaluated set)"
             ),
             severity: WarningSeverity::Info,
         });
@@ -308,16 +356,37 @@ pub fn assess_commercial_precursors(
 /// identical for every plan in the batch; a single malformed *plan* never
 /// aborts the batch (see `assess_commercial_precursors`'s degraded-`Ok`
 /// handling for plan-shape issues).
+/// Always ranks via `CommercialRankingPolicy::Balanced` -- unchanged from
+/// this function's pre-24C behavior. See `assess_commercial_plans_with_policy`
+/// for named-policy selection.
 pub fn assess_commercial_plans(
     plans: &[SynthesisPlan],
     catalog: &CommercialPrecursorCatalog,
     request: &CommercialPlanningRequest,
     config: &CommercialPlanningConfig,
 ) -> Result<Vec<CommercialPlanAssessment>, CommercialCatalogError> {
+    assess_commercial_plans_with_policy(
+        plans,
+        catalog,
+        request,
+        config,
+        CommercialRankingPolicy::Balanced,
+    )
+}
+
+pub fn assess_commercial_plans_with_policy(
+    plans: &[SynthesisPlan],
+    catalog: &CommercialPrecursorCatalog,
+    request: &CommercialPlanningRequest,
+    config: &CommercialPlanningConfig,
+    policy: CommercialRankingPolicy,
+) -> Result<Vec<CommercialPlanAssessment>, CommercialCatalogError> {
     validate_request(request)?;
     plans
         .iter()
-        .map(|plan| assess_commercial_precursors(plan, catalog, request, config))
+        .map(|plan| {
+            assess_commercial_precursors_with_policy(plan, catalog, request, config, policy)
+        })
         .collect()
 }
 
@@ -1243,4 +1312,531 @@ mod tests {
     }
 
     // -- brute-force oracle for the bounded combination search --
+
+    // ===================================================================
+    // Phase 24C: named ranking policies
+    // ===================================================================
+
+    #[test]
+    fn balanced_is_assess_commercial_precursors_own_wrapper_by_construction() {
+        // Pins the sibling-function relationship: the plain function must
+        // always agree with the explicit Balanced policy, not just today
+        // but for any future refactor of either.
+        let plan = barium_titanate_plan();
+        let catalog = baco3_tio2_catalog(default_baco3_tio2_offers());
+        let plain = assess_commercial_precursors(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &CommercialPlanningConfig::default(),
+        )
+        .unwrap();
+        let via_policy = assess_commercial_precursors_with_policy(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &CommercialPlanningConfig::default(),
+            CommercialRankingPolicy::Balanced,
+        )
+        .unwrap();
+        assert_eq!(plain, via_policy);
+    }
+
+    #[test]
+    fn minimum_unresolved_data_is_todays_balanced_order_by_construction() {
+        // Unresolved-field count is already Balanced's primary key, so
+        // there is no distinct metric for this policy to promote --
+        // documented on the enum variant itself; pinned here so nobody
+        // "fixes" this into a fabricated distinct metric later.
+        let plan = barium_titanate_plan();
+        let catalog = baco3_tio2_catalog(default_baco3_tio2_offers());
+        let balanced = assess_commercial_precursors_with_policy(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &CommercialPlanningConfig::default(),
+            CommercialRankingPolicy::Balanced,
+        )
+        .unwrap();
+        let minimum_unresolved = assess_commercial_precursors_with_policy(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &CommercialPlanningConfig::default(),
+            CommercialRankingPolicy::MinimumUnresolvedData,
+        )
+        .unwrap();
+        assert_eq!(balanced, minimum_unresolved);
+    }
+
+    #[test]
+    fn cost_first_overrides_balanceds_unresolved_field_preference() {
+        // Both BaCO3 offers' lead time is known-vs-unknown, mirroring the
+        // existing max_total_cost/truncation regression test's own trick:
+        // Balanced ranks the pricier, fully-resolved offer first (fewer
+        // unresolved fields wins its primary key); CostFirst must instead
+        // pick the cheaper one despite its unknown lead time.
+        let plan = barium_titanate_plan();
+        let catalog = baco3_tio2_catalog(vec![
+            priced_offer(
+                "BACO3-CHEAP-UNKNOWN-LEADTIME",
+                "BaCO3",
+                "Demo Chemical Supply Co.",
+                Some(0.9),
+                Some(250.0),
+                Some((1_000, "USD")),
+                None,
+                Some(AvailabilityStatus::InStock),
+            ),
+            priced_offer(
+                "BACO3-EXPENSIVE-KNOWN-LEADTIME",
+                "BaCO3",
+                "Example Materials Ltd.",
+                Some(0.9),
+                Some(250.0),
+                Some((9_000, "USD")),
+                Some(5),
+                Some(AvailabilityStatus::InStock),
+            ),
+            priced_offer(
+                "TIO2-FIXED",
+                "TiO2",
+                "Example Materials Ltd.",
+                Some(0.9),
+                Some(100.0),
+                Some((800, "USD")),
+                Some(5),
+                Some(AvailabilityStatus::InStock),
+            ),
+        ]);
+        let config = CommercialPlanningConfig {
+            max_results_returned: 1,
+            ..CommercialPlanningConfig::default()
+        };
+        let balanced = assess_commercial_precursors_with_policy(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &config,
+            CommercialRankingPolicy::Balanced,
+        )
+        .unwrap();
+        assert!(
+            balanced.combinations[0]
+                .selections
+                .iter()
+                .any(|s| s.offer_id.0 == "BACO3-EXPENSIVE-KNOWN-LEADTIME"),
+            "Balanced must prefer the fully-resolved offer first"
+        );
+
+        let cost_first = assess_commercial_precursors_with_policy(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &config,
+            CommercialRankingPolicy::CostFirst,
+        )
+        .unwrap();
+        assert!(
+            cost_first.combinations[0]
+                .selections
+                .iter()
+                .any(|s| s.offer_id.0 == "BACO3-CHEAP-UNKNOWN-LEADTIME"),
+            "CostFirst must override the unresolved-field preference and pick the cheaper offer"
+        );
+    }
+
+    #[test]
+    fn lead_time_first_overrides_balanceds_cost_preference() {
+        let plan = barium_titanate_plan();
+        let catalog = baco3_tio2_catalog(vec![
+            priced_offer(
+                "BACO3-SLOW-CHEAP",
+                "BaCO3",
+                "Example Materials Ltd.",
+                Some(0.9),
+                Some(250.0),
+                Some((1_000, "USD")),
+                Some(30),
+                Some(AvailabilityStatus::InStock),
+            ),
+            priced_offer(
+                "BACO3-FAST-EXPENSIVE",
+                "BaCO3",
+                "Example Materials Ltd.",
+                Some(0.9),
+                Some(250.0),
+                Some((9_000, "USD")),
+                Some(2),
+                Some(AvailabilityStatus::InStock),
+            ),
+            priced_offer(
+                "TIO2-FIXED",
+                "TiO2",
+                "Example Materials Ltd.",
+                Some(0.9),
+                Some(100.0),
+                Some((800, "USD")),
+                Some(5),
+                Some(AvailabilityStatus::InStock),
+            ),
+        ]);
+        let config = CommercialPlanningConfig {
+            max_results_returned: 1,
+            ..CommercialPlanningConfig::default()
+        };
+        let balanced = assess_commercial_precursors_with_policy(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &config,
+            CommercialRankingPolicy::Balanced,
+        )
+        .unwrap();
+        assert!(
+            balanced.combinations[0]
+                .selections
+                .iter()
+                .any(|s| s.offer_id.0 == "BACO3-SLOW-CHEAP"),
+            "Balanced must prefer the cheaper offer (both fully resolved, tied on unresolved count)"
+        );
+
+        let lead_time_first = assess_commercial_precursors_with_policy(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &config,
+            CommercialRankingPolicy::LeadTimeFirst,
+        )
+        .unwrap();
+        assert!(
+            lead_time_first.combinations[0]
+                .selections
+                .iter()
+                .any(|s| s.offer_id.0 == "BACO3-FAST-EXPENSIVE"),
+            "LeadTimeFirst must override the cost preference and pick the faster offer"
+        );
+    }
+
+    #[test]
+    fn purity_first_overrides_balanceds_cost_preference() {
+        let plan = barium_titanate_plan();
+        let catalog = baco3_tio2_catalog(vec![
+            priced_offer(
+                "BACO3-LOWPURITY-CHEAP",
+                "BaCO3",
+                "Example Materials Ltd.",
+                Some(0.90),
+                Some(250.0),
+                Some((1_000, "USD")),
+                Some(5),
+                Some(AvailabilityStatus::InStock),
+            ),
+            priced_offer(
+                "BACO3-HIGHPURITY-EXPENSIVE",
+                "BaCO3",
+                "Example Materials Ltd.",
+                Some(0.999),
+                Some(250.0),
+                Some((9_000, "USD")),
+                Some(5),
+                Some(AvailabilityStatus::InStock),
+            ),
+            priced_offer(
+                "TIO2-FIXED",
+                "TiO2",
+                "Example Materials Ltd.",
+                Some(0.99),
+                Some(100.0),
+                Some((800, "USD")),
+                Some(5),
+                Some(AvailabilityStatus::InStock),
+            ),
+        ]);
+        let config = CommercialPlanningConfig {
+            max_results_returned: 1,
+            ..CommercialPlanningConfig::default()
+        };
+        let balanced = assess_commercial_precursors_with_policy(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &config,
+            CommercialRankingPolicy::Balanced,
+        )
+        .unwrap();
+        assert!(
+            balanced.combinations[0]
+                .selections
+                .iter()
+                .any(|s| s.offer_id.0 == "BACO3-LOWPURITY-CHEAP"),
+            "Balanced must prefer the cheaper offer (both fully resolved, tied on unresolved count)"
+        );
+
+        let purity_first = assess_commercial_precursors_with_policy(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &config,
+            CommercialRankingPolicy::PurityFirst,
+        )
+        .unwrap();
+        assert!(
+            purity_first.combinations[0]
+                .selections
+                .iter()
+                .any(|s| s.offer_id.0 == "BACO3-HIGHPURITY-EXPENSIVE"),
+            "PurityFirst must override the cost preference and pick the higher-purity offer"
+        );
+    }
+
+    #[test]
+    fn purity_first_filters_max_total_cost_before_truncating_not_after() {
+        // Same class of regression as
+        // assess_commercial_precursors_max_total_cost_filters_before_truncation_not_after,
+        // now for the new capped-enumeration policy path: the purest combo
+        // ranks first under PurityFirst but exceeds max_total_cost; a
+        // less-pure, budget-satisfying combo must still be returned, not
+        // dropped by a filter-after-truncate bug.
+        let plan = barium_titanate_plan();
+        let catalog = baco3_tio2_catalog(vec![
+            priced_offer(
+                "BACO3-PURE-EXPENSIVE",
+                "BaCO3",
+                "Example Materials Ltd.",
+                Some(0.999),
+                Some(250.0),
+                Some((1_000_000, "USD")),
+                Some(5),
+                Some(AvailabilityStatus::InStock),
+            ),
+            priced_offer(
+                "BACO3-IMPURE-CHEAP",
+                "BaCO3",
+                "Example Materials Ltd.",
+                Some(0.90),
+                Some(250.0),
+                Some((5_000, "USD")),
+                Some(5),
+                Some(AvailabilityStatus::InStock),
+            ),
+            priced_offer(
+                "TIO2-FIXED",
+                "TiO2",
+                "Example Materials Ltd.",
+                Some(0.99),
+                Some(100.0),
+                Some((800, "USD")),
+                Some(5),
+                Some(AvailabilityStatus::InStock),
+            ),
+        ]);
+        let request = CommercialPlanningRequest {
+            max_total_cost: Some(money(10_000, "USD")),
+            ..Default::default()
+        };
+        let config = CommercialPlanningConfig {
+            max_results_returned: 1,
+            ..CommercialPlanningConfig::default()
+        };
+        let assessment = assess_commercial_precursors_with_policy(
+            &plan,
+            &catalog,
+            &request,
+            &config,
+            CommercialRankingPolicy::PurityFirst,
+        )
+        .unwrap();
+        assert_eq!(
+            assessment.combinations.len(),
+            1,
+            "a budget-satisfying combination exists and must be returned, not dropped"
+        );
+        assert!(
+            assessment.combinations[0]
+                .selections
+                .iter()
+                .any(|s| s.offer_id.0 == "BACO3-IMPURE-CHEAP")
+        );
+    }
+
+    #[test]
+    fn pareto_excludes_a_strictly_dominated_combination() {
+        let plan = barium_titanate_plan();
+        let catalog = baco3_tio2_catalog(vec![
+            priced_offer(
+                "BACO3-DOMINATED",
+                "BaCO3",
+                "Example Materials Ltd.",
+                Some(0.90),
+                Some(300.0),
+                Some((5_000, "USD")),
+                Some(30),
+                Some(AvailabilityStatus::InStock),
+            ),
+            priced_offer(
+                "BACO3-DOMINATES",
+                "BaCO3",
+                "Example Materials Ltd.",
+                Some(0.99),
+                Some(100.0),
+                Some((1_000, "USD")),
+                Some(5),
+                Some(AvailabilityStatus::InStock),
+            ),
+            priced_offer(
+                "TIO2-FIXED",
+                "TiO2",
+                "Example Materials Ltd.",
+                Some(0.99),
+                Some(50.0),
+                Some((800, "USD")),
+                Some(5),
+                Some(AvailabilityStatus::InStock),
+            ),
+        ]);
+        let assessment = assess_commercial_precursors_with_policy(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &CommercialPlanningConfig::default(),
+            CommercialRankingPolicy::Pareto,
+        )
+        .unwrap();
+        let ids: Vec<&str> = assessment
+            .combinations
+            .iter()
+            .flat_map(|c| c.selections.iter().map(|s| s.offer_id.0.as_str()))
+            .collect();
+        assert!(
+            ids.contains(&"BACO3-DOMINATES"),
+            "the dominating combination must be on the frontier: {ids:?}"
+        );
+        assert!(
+            !ids.contains(&"BACO3-DOMINATED"),
+            "a combination that's worse on every dimension must not be on the frontier: {ids:?}"
+        );
+    }
+
+    #[test]
+    fn pareto_keeps_both_of_two_incomparable_combinations() {
+        let plan = barium_titanate_plan();
+        let catalog = baco3_tio2_catalog(vec![
+            priced_offer(
+                "BACO3-CHEAP-SLOW",
+                "BaCO3",
+                "Example Materials Ltd.",
+                Some(0.99),
+                Some(100.0),
+                Some((1_000, "USD")),
+                Some(30),
+                Some(AvailabilityStatus::InStock),
+            ),
+            priced_offer(
+                "BACO3-EXPENSIVE-FAST",
+                "BaCO3",
+                "Example Materials Ltd.",
+                Some(0.99),
+                Some(100.0),
+                Some((5_000, "USD")),
+                Some(5),
+                Some(AvailabilityStatus::InStock),
+            ),
+            priced_offer(
+                "TIO2-FIXED",
+                "TiO2",
+                "Example Materials Ltd.",
+                Some(0.99),
+                Some(50.0),
+                Some((800, "USD")),
+                Some(5),
+                Some(AvailabilityStatus::InStock),
+            ),
+        ]);
+        let assessment = assess_commercial_precursors_with_policy(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &CommercialPlanningConfig::default(),
+            CommercialRankingPolicy::Pareto,
+        )
+        .unwrap();
+        let ids: Vec<&str> = assessment
+            .combinations
+            .iter()
+            .flat_map(|c| c.selections.iter().map(|s| s.offer_id.0.as_str()))
+            .collect();
+        assert!(
+            ids.contains(&"BACO3-CHEAP-SLOW"),
+            "cheaper-but-slower must survive (neither dominates the other): {ids:?}"
+        );
+        assert!(
+            ids.contains(&"BACO3-EXPENSIVE-FAST"),
+            "faster-but-pricier must survive (neither dominates the other): {ids:?}"
+        );
+    }
+
+    #[test]
+    fn pareto_excludes_a_combination_missing_one_dimension_and_warns_once() {
+        let plan = barium_titanate_plan();
+        let catalog = baco3_tio2_catalog(vec![
+            priced_offer(
+                "BACO3-COMPLETE",
+                "BaCO3",
+                "Example Materials Ltd.",
+                Some(0.99),
+                Some(100.0),
+                Some((1_000, "USD")),
+                Some(5),
+                Some(AvailabilityStatus::InStock),
+            ),
+            priced_offer(
+                "BACO3-MISSING-PURITY",
+                "BaCO3",
+                "Example Materials Ltd.",
+                None,
+                Some(100.0),
+                Some((900, "USD")),
+                Some(5),
+                Some(AvailabilityStatus::InStock),
+            ),
+            priced_offer(
+                "TIO2-FIXED",
+                "TiO2",
+                "Example Materials Ltd.",
+                Some(0.99),
+                Some(50.0),
+                Some((800, "USD")),
+                Some(5),
+                Some(AvailabilityStatus::InStock),
+            ),
+        ]);
+        let assessment = assess_commercial_precursors_with_policy(
+            &plan,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &CommercialPlanningConfig::default(),
+            CommercialRankingPolicy::Pareto,
+        )
+        .unwrap();
+        let ids: Vec<&str> = assessment
+            .combinations
+            .iter()
+            .flat_map(|c| c.selections.iter().map(|s| s.offer_id.0.as_str()))
+            .collect();
+        assert!(
+            !ids.contains(&"BACO3-MISSING-PURITY"),
+            "a combination missing purity must never appear on the Pareto frontier: {ids:?}"
+        );
+        assert_eq!(
+            assessment
+                .warnings
+                .iter()
+                .filter(|w| w.message.contains("excluded from the Pareto frontier"))
+                .count(),
+            1,
+            "exactly one summary warning, not one per excluded combination: {:?}",
+            assessment.warnings
+        );
+    }
 }
