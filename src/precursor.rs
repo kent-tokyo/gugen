@@ -766,6 +766,81 @@ mod tests {
         );
     }
 
+    /// `curated_byproducts()` now includes CO (metal-oxalate thermal
+    /// decomposition, `FeC2O4 -> FeO + CO2 + CO`) -- an oxalate
+    /// precursor that previously introduced an uncoverable second
+    /// carbon-and-oxygen sink must now be accepted.
+    #[test]
+    fn accepts_an_oxalate_precursor_via_the_curated_co_byproduct() {
+        let target = composition(&[("Fe", 1.0), ("O", 1.0)]);
+        let catalog = vec![candidate("FeC2O4", &[("Fe", 1.0), ("C", 2.0), ("O", 4.0)])];
+        let outcome = search_precursor_sets(
+            &target,
+            &catalog,
+            &PlanningConstraints::default(),
+            &generous_budget(),
+        )
+        .unwrap();
+
+        let oxalate_route = outcome.accepted.iter().find(|a| {
+            let ids: BTreeSet<&str> = a.precursors.iter().map(|p| p.0.as_str()).collect();
+            ids == BTreeSet::from(["FeC2O4"])
+        });
+        assert!(
+            oxalate_route.is_some(),
+            "FeC2O4 -> FeO + CO2 + CO must now be accepted: {:?}",
+            outcome
+        );
+    }
+
+    /// `src/balance.rs`'s
+    /// `offering_every_curated_byproduct_at_once_can_introduce_real_ambiguity_co_does_here`
+    /// found that raw `balance()`, given every curated byproduct at
+    /// once, now returns *two* independently valid solutions for
+    /// BaCO3 + TiO2 -> BaTiO3 (CO's presence alongside CO2/O2 opens a
+    /// second basis vector). This confirms, at the real search level,
+    /// that `search_precursor_sets` is unaffected: `power_set`'s
+    /// strictly smallest-cardinality-first subset order means the
+    /// size-1 `{CO2}` subset alone balances this combination and the
+    /// loop breaks before ever trying a CO-inclusive subset, so exactly
+    /// one BaTiO3 route is accepted, not two.
+    #[test]
+    fn search_finds_exactly_one_batio3_route_even_though_the_full_curated_set_is_ambiguous() {
+        let target = composition(&[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)]);
+        let catalog = vec![
+            candidate("BaCO3", &[("Ba", 1.0), ("C", 1.0), ("O", 3.0)]),
+            candidate("TiO2", &[("Ti", 1.0), ("O", 2.0)]),
+        ];
+        let outcome = search_precursor_sets(
+            &target,
+            &catalog,
+            &PlanningConstraints::default(),
+            &generous_budget(),
+        )
+        .unwrap();
+
+        let ba_ti_routes: Vec<_> = outcome
+            .accepted
+            .iter()
+            .filter(|a| {
+                let ids: BTreeSet<&str> = a.precursors.iter().map(|p| p.0.as_str()).collect();
+                ids == BTreeSet::from(["BaCO3", "TiO2"])
+            })
+            .collect();
+        assert_eq!(
+            ba_ti_routes.len(),
+            1,
+            "exactly one BaCO3+TiO2 route must be accepted, not the CO-inclusive ambiguous \
+            second solution: {:?}",
+            outcome.accepted
+        );
+        assert_eq!(
+            ba_ti_routes[0].reaction.products().len(),
+            2,
+            "the accepted route's byproduct must be plain CO2, not the CO+O2 split"
+        );
+    }
+
     /// AGENTS.md §21.2: 最大前駆体数 (max precursor count is respected).
     #[test]
     fn never_generates_a_combination_larger_than_the_configured_maximum() {
