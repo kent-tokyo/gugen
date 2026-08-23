@@ -524,11 +524,20 @@ fn main() {
         {coverage_passing} combinations that *did* pass the element-coverage gate (byproduct + \
         no-balance + duplicate + accepted-and-kept): {byproduct_count}/{coverage_passing} \
         ({:.1}%). This isolates genuine byproduct-allow-list gaps from decoy-driven coverage \
-        noise -- nitrate/acetate/oxalate/chloride precursors (common in this corpus) release \
-        byproduct species outside gugen's curated allow-list (CO2/H2O/O2 only, \
-        `src/balance.rs::curated_byproducts`). Not widened reactively in response to this \
-        number -- doing so without independent literature grounding per target would be exactly \
-        the benchmark-driven overfitting AGENTS.md §27 forbids.\n",
+        noise -- acetate/chloride precursors (common in this corpus) still release byproduct \
+        species outside gugen's curated allow-list (CO2/H2O/O2/NO2/CO, \
+        `src/balance.rs::curated_byproducts`); nitrate and oxalate precursors no longer do. \
+        NO2 (nitrate) was added on standard metal-nitrate thermal-decomposition grounds \
+        (`2 Ba(NO3)2 -> 2 BaO + 4 NO2 + O2`); CO (oxalate) was added on standard cross-metal \
+        oxalate thermal-decomposition grounds (`FeC2O4 -> FeO + CO2 + CO`) -- both with explicit \
+        owner sign-off, each scoped to its own single class -- see `curated_byproducts`'s own \
+        doc comment for the citations. Acetate and chloride remain unwidened: each has its own \
+        distinct reason it wasn't bundled into the nitrate/oxalate fixes (acetate's grounding is \
+        real but metal-dependent, not a universal cross-metal claim; chloride's likely byproduct \
+        -- an alkali chloride salt via solid-state metathesis -- introduces new elements to the \
+        search's global pruning set, a different kind of risk needing its own dedicated check) -- \
+        widening either without clearing that same bar would be exactly the benchmark-driven \
+        overfitting AGENTS.md §27 forbids.\n",
         pct(missing_element_count, total_rejected),
         pct(byproduct_count, total_rejected),
         pct(byproduct_count, coverage_passing),

@@ -8,14 +8,33 @@ use std::collections::BTreeSet;
 /// without target-specific evidence (AGENTS.md §10). A reaction that needs
 /// a byproduct outside this list is `RejectionCode::UnsupportedByproductRequired`,
 /// not a silently invented one.
+///
+/// Covers carbonate decomposition (CO2), hydrate/hydroxide decomposition
+/// (H2O), oxidation-state byproducts (O2), metal-nitrate thermal
+/// decomposition (NO2) -- e.g. `2 Ba(NO3)2 -> 2 BaO + 4 NO2 + O2` -- and
+/// metal-oxalate thermal decomposition (CO), e.g.
+/// `FeC2O4 -> FeO + CO2 + CO`, standard cross-metal thermal-analysis
+/// chemistry (metal oxalates decompose to the oxide plus a CO2/CO
+/// mixture). `NO2` (not the `N2O4` dimer) matches this list's existing
+/// single-formula-unit convention (`CO2`, not `C2O4`). CO contributes no
+/// new element beyond what CO2/O2 already cover, so it cannot change
+/// pruning behavior for any target that doesn't involve carbon. Acetate
+/// and chloride byproducts are a known, separate gap (see
+/// `docs/large_scale_benchmark_report.md`) and are intentionally not
+/// covered here -- each has its own distinct risk profile (weaker
+/// cross-metal grounding for acetate; new pruning-relevant elements for
+/// chloride) needing its own decision before being added.
 pub fn curated_byproducts() -> Result<Vec<Composition>> {
     let c = Element::new("C")?;
     let h = Element::new("H")?;
+    let n = Element::new("N")?;
     let o = Element::new("O")?;
     Ok(vec![
         Composition::new([(c, 1.0), (o, 2.0)])?, // CO2
         Composition::new([(h, 2.0), (o, 1.0)])?, // H2O
         Composition::new([(o, 2.0)])?,           // O2
+        Composition::new([(n, 1.0), (o, 2.0)])?, // NO2
+        Composition::new([(c, 1.0), (o, 1.0)])?, // CO
     ])
 }
 
@@ -300,23 +319,94 @@ mod tests {
         assert!(r.products().iter().all(|s| s.coefficient() == 1));
     }
 
+    /// Metal-nitrate thermal decomposition -- standard solid-state/sol-gel
+    /// precursor chemistry (see `curated_byproducts()`'s doc comment):
+    /// `2 Ba(NO3)2 -> 2 BaO + 4 NO2 + O2`.
+    #[test]
+    fn nitrate_decomposes_to_oxide_plus_no2_and_o2() {
+        let reactants = vec![composition(&[("Ba", 1.0), ("N", 2.0), ("O", 6.0)])];
+        let bao = composition(&[("Ba", 1.0), ("O", 1.0)]);
+        let no2 = composition(&[("N", 1.0), ("O", 2.0)]);
+        let o2 = composition(&[("O", 2.0)]);
+        let products = vec![bao.clone(), no2.clone(), o2.clone()];
+
+        let results = balance(&reactants, &products).unwrap();
+        assert_eq!(results.len(), 1);
+        let r = &results[0];
+        assert_eq!(r.reactants()[0].coefficient(), 2);
+        let coeff_of = |c: &Composition| {
+            r.products()
+                .iter()
+                .find(|s| s.composition == *c)
+                .unwrap()
+                .coefficient()
+        };
+        assert_eq!(coeff_of(&bao), 2);
+        assert_eq!(coeff_of(&no2), 4);
+        assert_eq!(coeff_of(&o2), 1);
+    }
+
+    /// Metal-oxalate thermal decomposition -- standard cross-metal
+    /// thermal-analysis chemistry (see `curated_byproducts()`'s doc
+    /// comment): `FeC2O4 -> FeO + CO2 + CO`.
+    #[test]
+    fn oxalate_decomposes_to_oxide_plus_co2_and_co() {
+        let reactants = vec![composition(&[("Fe", 1.0), ("C", 2.0), ("O", 4.0)])];
+        let feo = composition(&[("Fe", 1.0), ("O", 1.0)]);
+        let co2 = composition(&[("C", 1.0), ("O", 2.0)]);
+        let co = composition(&[("C", 1.0), ("O", 1.0)]);
+        let products = vec![feo.clone(), co2.clone(), co.clone()];
+
+        let results = balance(&reactants, &products).unwrap();
+        assert_eq!(results.len(), 1);
+        let r = &results[0];
+        assert_eq!(r.reactants()[0].coefficient(), 1);
+        let coeff_of = |c: &Composition| {
+            r.products()
+                .iter()
+                .find(|s| s.composition == *c)
+                .unwrap()
+                .coefficient()
+        };
+        assert_eq!(coeff_of(&feo), 1);
+        assert_eq!(coeff_of(&co2), 1);
+        assert_eq!(coeff_of(&co), 1);
+    }
+
     /// Checks an assumption precursor search (Phase 3) is built on: does
     /// offering *every* curated byproduct at once (rather than a targeted
     /// subset) risk defeating the single-basis-vector heuristic documented
     /// in `balance()`'s `ponytail:` note? For BaCO3 + TiO2 -> BaTiO3 + CO2,
-    /// empirically no: H2O and O2 each touch elements (H, extra O) that
-    /// don't create genuine ambiguity here, so both forms return the same
-    /// single correct answer with H2O/O2 correctly dropped at zero
-    /// coefficient. That does NOT prove the general case is always safe --
-    /// a target or byproduct set that shares more structure could still
-    /// hit the combination-of-basis-vectors ceiling. Precursor search uses
-    /// the more expensive but strictly safer smallest-subset-first strategy
-    /// anyway (trivial cost: 2^3 = 8 subsets for 3 curated byproducts), and
-    /// this test exists so a future change to `curated_byproducts()` that
-    /// breaks this assumption is caught here instead of silently.
+    /// mostly no: H2O and NO2 touch elements (H, N) that don't create
+    /// genuine ambiguity here, so both forms return the same single
+    /// correct answer with H2O/NO2 correctly dropped at zero coefficient.
+    ///
+    /// **CO is the exception, confirmed empirically, not hypothetically**:
+    /// once both `CO` and `O2` are offered as products alongside `CO2`,
+    /// this specific reaction genuinely admits a *second*, independently
+    /// valid, all-positive-coefficient balance --
+    /// `2 BaCO3 + 2 TiO2 -> 2 BaTiO3 + O2 + 2 CO` (splitting the same net
+    /// carbon/oxygen across CO+O2 instead of CO2 -- chemically
+    /// implausible as a real reaction path, since free CO and O2
+    /// wouldn't coexist without recombining, but formally balanced all
+    /// the same). This is exactly the "combination-of-basis-vectors"
+    /// ceiling `balance()`'s own `ponytail:` note warns about, and this
+    /// test is what turned the warning from hypothetical to real.
+    ///
+    /// This does **not** affect real search results:
+    /// `search_precursor_sets` never offers every curated byproduct at
+    /// once -- it tries `power_set(&byproducts)` subsets strictly
+    /// smallest-cardinality-first (confirmed in `power_set`'s own
+    /// implementation) and stops at the first non-empty result. The
+    /// size-1 `{CO2}` subset alone already balances this reaction (see
+    /// `targeted` below), so the search loop breaks there and the
+    /// CO-inclusive subset that introduces the ambiguity is never even
+    /// tried for this combination. `src/precursor.rs`'s
+    /// `search_finds_exactly_one_batio3_route_even_though_the_full_curated_set_is_ambiguous`
+    /// confirms this directly at the real search level, not just by
+    /// this argument.
     #[test]
-    fn all_curated_byproducts_at_once_happens_to_work_for_this_case_but_search_does_not_rely_on_it()
-    {
+    fn offering_every_curated_byproduct_at_once_can_introduce_real_ambiguity_co_does_here() {
         let reactants = vec![
             composition(&[("Ba", 1.0), ("C", 1.0), ("O", 3.0)]),
             composition(&[("Ti", 1.0), ("O", 2.0)]),
@@ -325,6 +415,12 @@ mod tests {
         let co2 = composition(&[("C", 1.0), ("O", 2.0)]);
         let h2o = composition(&[("H", 2.0), ("O", 1.0)]);
         let o2 = composition(&[("O", 2.0)]);
+        let no2 = composition(&[("N", 1.0), ("O", 2.0)]);
+        // CO shares both its elements (C, O) with this reaction's own
+        // carbonate/CO2, unlike NO2's brand-new N -- the case most
+        // likely to actually exercise genuine null-space ambiguity, and
+        // (per this test's own name) it does.
+        let co = composition(&[("C", 1.0), ("O", 1.0)]);
 
         let targeted = balance(&reactants, &[target.clone(), co2.clone()]).unwrap();
         assert_eq!(
@@ -333,14 +429,17 @@ mod tests {
             "targeted subset {{target, CO2}} must balance"
         );
 
-        let everything = balance(&reactants, &[target, co2, h2o, o2]).unwrap();
-        assert_eq!(everything.len(), 1);
+        let everything = balance(&reactants, &[target, co2, h2o, o2, no2, co]).unwrap();
         assert_eq!(
-            everything[0].products().len(),
+            everything.len(),
             2,
-            "H2O and O2 must be dropped at zero coefficient"
+            "CO's presence alongside CO2/O2 now creates a second, genuinely valid basis \
+            vector for this specific reaction -- see this test's own doc comment"
         );
-        assert_eq!(everything[0], targeted[0]);
+        assert!(
+            everything.contains(&targeted[0]),
+            "the canonical, search-found answer must still be among the results"
+        );
     }
 
     /// AGENTS.md §21.1: "酸素を副生成物または反応物として含む反応" (O2 as

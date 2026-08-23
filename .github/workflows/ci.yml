@@ -23,3 +23,4 @@ jobs:
       - run: python3 .github/scripts/test_check_oqmd_recovery.py -v
       - run: python3 benchmarks/test_fetch_oqmd_coverage.py -v
       - run: python3 benchmarks/test_analyze_oqmd_coverage_gate.py -v
+      - run: python3 benchmarks/test_exploration_build_recall_manifest.py -v

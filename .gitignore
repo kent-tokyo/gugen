@@ -16,3 +16,17 @@ CLAUDE.md
 # oqmd_coverage_gate_result.json ship. Raw entries are reproducible
 # from OQMD's own public API.
 /benchmarks/data/oqmd_coverage_snapshot.json
+# Phase 28 exploration-benchmark intermediate artifacts: both large
+# (3.6MB, 11.5MB) and fully deterministic/regenerable from the two
+# already-committed source datasets (kononova_sample.jsonl,
+# thermodynamic_selectivity_clean_population.json) via
+# benchmarks/exploration_build_recall_manifest.py and
+# benchmarks/exploration_build_frozen_decoy_catalog.py -- not comparable
+# in size to the kononova_sample.jsonl ~500KB commit precedent, matching
+# the same rule already applied to oqmd_coverage_snapshot.json.
+# exploration_baseline_v0_6_0.json (the actual immutable gate artifact,
+# ~285KB) IS committed -- small enough, and the one file this whole
+# gate depends on, so a directly git-tracked/auditable history beats a
+# regenerable-plus-checksum indirection here.
+/benchmarks/data/exploration_recall_manifest.json
+/benchmarks/data/exploration_frozen_catalog_manifest.json

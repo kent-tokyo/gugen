@@ -89,6 +89,11 @@ path = "tests/large_scale_benchmark.rs"
 required-features = ["serde"]
 
 [[test]]
+name = "exploration_recall"
+path = "tests/exploration_recall.rs"
+required-features = ["serde"]
+
+[[test]]
 name = "literature_observations"
 path = "tests/literature_observations.rs"
 required-features = ["literature_corpus"]
@@ -151,6 +156,26 @@ required-features = ["commercial_catalog"]
 [[example]]
 name = "execution_record_demo"
 path = "examples/execution_record_demo.rs"
+required-features = ["serde"]
+
+[[example]]
+name = "exploration_recall_baseline"
+path = "examples/exploration_recall_baseline.rs"
+required-features = ["serde"]
+
+[[example]]
+name = "exploration_recall_result_v0_7_0"
+path = "examples/exploration_recall_result_v0_7_0.rs"
+required-features = ["serde"]
+
+[[example]]
+name = "exploration_result_nitrate_byproduct"
+path = "examples/exploration_result_nitrate_byproduct.rs"
+required-features = ["serde"]
+
+[[example]]
+name = "exploration_result_oxalate_byproduct"
+path = "examples/exploration_result_oxalate_byproduct.rs"
 required-features = ["serde"]
 
 [[bin]]
