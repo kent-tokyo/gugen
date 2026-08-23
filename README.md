@@ -15,18 +15,20 @@ solid-state process plans — each with its evidence, assumptions, and
 unresolved conditions kept explicit and machine-readable. It does not
 predict experimental success.
 
-> **Status: v0.5.0 published** (breaking API-hardening release, no new
-> planning capability -- see CHANGELOG.md).
+> **Status: v0.6.0 pending publication** (commercial workflow surface +
+> reference-only prior-experiment evidence, breaking change -- see
+> CHANGELOG.md).
 > [crates.io](https://crates.io/crates/gugen) /
-> [docs.rs](https://docs.rs/gugen) / [v0.5.0 release](https://github.com/kent-tokyo/gugen/releases/tag/v0.5.0).
-> v0.5.0 closes a validation-bypass gap in `BalancedReaction`/
-> `ReactionSpecies` (private fields, a required element-conservation
-> check), adds `Planner::builder(...)` covering any combination of the 4
-> optional providers, extends existing provider-call deduplication to
-> `ProcessEvidenceProvider::precedents`, and marks 5 enums
-> `#[non_exhaustive]` -- see [`CHANGELOG.md`](CHANGELOG.md) and
-> [`docs/api_stability_policy.md`](docs/api_stability_policy.md) for the
-> full list.
+> [docs.rs](https://docs.rs/gugen).
+> v0.6.0 adds a `gugen commercial-plan` CLI subcommand, declarative CSV
+> column-name mapping for real-world supplier catalogs, named commercial
+> ranking policies (`Balanced`/`CostFirst`/`LeadTimeFirst`/`PurityFirst`/
+> `MinimumUnresolvedData`/`Pareto`, including a Pareto frontier), an
+> append-only `SynthesisExecutionRecord` for real lab outcomes, and
+> reference-only prior-experiment evidence surfaced during planning --
+> none of it changes a plan's `score`, `confidence`, or ranking order.
+> See [`CHANGELOG.md`](CHANGELOG.md) for the full breaking-change list
+> and migration notes.
 
 ## What gugen does and doesn't guarantee
 
@@ -186,7 +188,16 @@ Output (`serde_json::to_string_pretty`, one field per line):
 ]
 ```
 
-Build the CLI with `cargo build --features serde,clap --bin gugen`.
+The `gugen` binary itself requires the `serde` and `clap` features
+(`[[bin]]` in `Cargo.toml`) — `cargo install gugen` with no `--features`
+flag builds **no binary at all** (default features are `[]`), it only
+installs the library. To get the CLI:
+
+```
+cargo install gugen --features serde,clap
+```
+
+or, from a checkout, `cargo build --features serde,clap --bin gugen`.
 Subcommands (AGENTS.md §19):
 
 ```
@@ -203,6 +214,30 @@ shapes (`TargetSpecification`, a JSON array of `PrecursorCandidate`, and a
 JSON array of `TargetSpecification` respectively) rather than a separate
 CLI-specific format. `gugen batch` plans every target independently — one
 target's failure doesn't abort the rest.
+
+`commercial-plan` (Commercial Precursor Catalog, matching a target's
+plans against a commercial-offers catalog for price/purity/lead-time)
+additionally needs the `commercial_catalog` feature:
+
+```
+cargo install gugen --features serde,clap,commercial_catalog
+```
+
+```
+gugen commercial-plan target.json --catalog precursors.json \
+  --commercial-catalog offers.csv \
+  [--commercial-catalog-column-map column_map.json] \
+  [--ranking-policy balanced|cost-first|lead-time-first|purity-first|minimum-unresolved-data|pareto] \
+  [--min-purity 0.99] [--max-lead-time-days 30] [--max-total-cost 50000 --currency USD] \
+  [--format json|markdown|csv]
+```
+
+Without `commercial_catalog` enabled, `commercial-plan` doesn't exist as
+a subcommand at all (not a runtime error — the binary is built without
+it). See `docs/commercial_precursor_catalog.md` for the full option
+list and `--commercial-catalog-column-map`'s declarative CSV
+column-name mapping for real-world supplier exports with non-standard
+headers.
 
 ### Worked example: a full synthesis plan
 
