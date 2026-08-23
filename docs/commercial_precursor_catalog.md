@@ -346,7 +346,51 @@ combinations (one offer per precursor row) are searched up to
 
 This is called **procurement ordering** in gugen's own naming, deliberately
 not "ranking" or "score" — it is never combined with, and never influences,
-`SynthesisPlan.score`/`RankingWeights`/scientific ranking.
+`SynthesisPlan.score`/`RankingWeights`/scientific ranking. The 5-key order
+above is `CommercialRankingPolicy::Balanced` (see "Named ranking policies"
+below) — `assess_commercial_plans`/`assess_commercial_precursors` always
+use it, unchanged from before Phase 24C.
+
+## Named ranking policies (Phase 24C)
+
+`assess_commercial_plans_with_policy`/`assess_commercial_precursors_with_policy`
+(and `gugen commercial-plan --ranking-policy <policy>`) select among:
+
+- **`Balanced`** (default) — the order described above, unchanged.
+- **`CostFirst`** / **`LeadTimeFirst`** / **`PurityFirst`** — promotes the
+  named dimension to primary; `Balanced`'s remaining 4 keys apply as
+  tiebreakers in their original relative order. Not a pure single-dimension
+  sort: a lexicographic chain still means a worse cost can never be offset
+  by a better lead time, matching "named policies instead of one blended
+  score," while keeping a more useful tiebreak than an arbitrary
+  alphabetical one among otherwise-equal combinations.
+- **`MinimumUnresolvedData`** — identical to `Balanced`, since unresolved
+  field count is already `Balanced`'s own primary key; there is no
+  distinct metric to promote. Kept as its own named variant because it has
+  its own name in gugen's policy vocabulary.
+- **`Pareto`** — the non-dominated set over cost, lead time, purity, and
+  excess purchased mass (minimize cost/lead-time/excess-mass, maximize
+  purity). A combination missing any of the 4 dimensions — including a
+  known cost that isn't currency-comparable with the rest of the evaluated
+  set (this crate never converts currencies) — is excluded from the
+  frontier and reported via one summary warning with a count, never
+  silently dropped. The frontier is ordered deterministically (cheapest
+  first, `CostFirst`'s own tiebreak chain) and truncated to
+  `max_results_returned`.
+
+Every named policy except `Balanced` runs its own capped, direct
+enumeration of the same combination space `exhaustive_search` decodes
+(bounded by `max_combinations_evaluated`), rather than reusing the lazy
+frontier search below — that search's optimality guarantee only holds for
+`Balanced`'s own aggregates (see "Search algorithm"), and extending it per
+policy would risk the same class of bug the total-cost criterion already
+exposed once. `max_total_cost` is still applied as a hard filter before
+truncation for every policy, same reasoning as below.
+
+`CommercialCombination.min_purity`/`total_excess_mass_grams` and
+`CommercialOfferSelection.purity` (new in Phase 24C) make the values these
+policies optimize for inspectable in the output, regardless of which
+policy was used — not just for `Pareto`.
 
 ## Search algorithm
 

@@ -16,22 +16,32 @@ _gugen does not certify commercial data: prices are estimates, availability may 
    - BaCO3 <- offer EML-BACO3-99 (197.335 g theoretical)
    - TiO2 <- offer EML-TIO2-995 (79.865 g theoretical)
    - Estimated subtotal: 10750 USD
+   - Min purity: 0.9900
+   - Total excess mass: 720.405 g
 2. `EML-BACO3-99|DCS-TIO2-98`
    - BaCO3 <- offer EML-BACO3-99 (197.335 g theoretical)
    - TiO2 <- offer DCS-TIO2-98 (79.865 g theoretical)
    - Estimated subtotal: 14350 USD
+   - Min purity: 0.9800
+   - Total excess mass: 2719.177 g
 3. `DCS-BACO3-995|EML-TIO2-995`
    - BaCO3 <- offer DCS-BACO3-995 (197.335 g theoretical)
    - TiO2 <- offer EML-TIO2-995 (79.865 g theoretical)
    - Estimated subtotal: 18200 USD
+   - Min purity: 0.9950
+   - Total excess mass: 1221.407 g
 4. `DCS-BACO3-995|DCS-TIO2-98`
    - BaCO3 <- offer DCS-BACO3-995 (197.335 g theoretical)
    - TiO2 <- offer DCS-TIO2-98 (79.865 g theoretical)
    - Estimated subtotal: 21800 USD
+   - Min purity: 0.9800
+   - Total excess mass: 3220.178 g
 5. `OSK-BACO3-EUR|EML-TIO2-995`
    - BaCO3 <- offer OSK-BACO3-EUR (197.335 g theoretical)
    - TiO2 <- offer EML-TIO2-995 (79.865 g theoretical)
    - Total cost unknown (unresolved price/package size, or the selected offers span more than one currency -- gugen never converts currencies).
+   - Min purity: 0.9700
+   - Total excess mass: 1216.296 g
 
 ### Search budget
 
@@ -53,22 +63,32 @@ SearchBudgetSummary {
    - BaCO3 <- offer EML-BACO3-99 (197.335 g theoretical)
    - TiO2 <- offer EML-TIO2-995 (79.865 g theoretical)
    - Estimated subtotal: 10750 USD
+   - Min purity: 0.9900
+   - Total excess mass: 720.405 g
 2. `EML-BACO3-99|DCS-TIO2-98`
    - BaCO3 <- offer EML-BACO3-99 (197.335 g theoretical)
    - TiO2 <- offer DCS-TIO2-98 (79.865 g theoretical)
    - Estimated subtotal: 14350 USD
+   - Min purity: 0.9800
+   - Total excess mass: 2719.177 g
 3. `DCS-BACO3-995|EML-TIO2-995`
    - BaCO3 <- offer DCS-BACO3-995 (197.335 g theoretical)
    - TiO2 <- offer EML-TIO2-995 (79.865 g theoretical)
    - Estimated subtotal: 18200 USD
+   - Min purity: 0.9950
+   - Total excess mass: 1221.407 g
 4. `DCS-BACO3-995|DCS-TIO2-98`
    - BaCO3 <- offer DCS-BACO3-995 (197.335 g theoretical)
    - TiO2 <- offer DCS-TIO2-98 (79.865 g theoretical)
    - Estimated subtotal: 21800 USD
+   - Min purity: 0.9800
+   - Total excess mass: 3220.178 g
 5. `OSK-BACO3-EUR|EML-TIO2-995`
    - BaCO3 <- offer OSK-BACO3-EUR (197.335 g theoretical)
    - TiO2 <- offer EML-TIO2-995 (79.865 g theoretical)
    - Total cost unknown (unresolved price/package size, or the selected offers span more than one currency -- gugen never converts currencies).
+   - Min purity: 0.9700
+   - Total excess mass: 1216.296 g
 
 ### Search budget
 

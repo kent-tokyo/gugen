@@ -133,10 +133,12 @@ pub use commercial_catalog::{
     CommercialCatalogLoadMode, CommercialCatalogLoadReport, CommercialCombination,
     CommercialExclusion, CommercialExclusionCode, CommercialOfferId, CommercialOfferSelection,
     CommercialPlanAssessment, CommercialPlanningConfig, CommercialPlanningRequest,
-    CommercialPrecursorCatalog, CommercialPrecursorOffer, CommercialSourceType, CommercialWarning,
-    CurrencyCode, MissingCommercialDataPolicy, Money, OfferProvenance, PackageMass,
-    ParticleSizeRangeUm, PurityFraction, RejectedOffer, SearchBudgetSummary,
-    UnresolvedCommercialField, assess_commercial_plans, assess_commercial_precursors,
+    CommercialPrecursorCatalog, CommercialPrecursorOffer, CommercialRankingPolicy,
+    CommercialSourceType, CommercialWarning, CurrencyCode, MissingCommercialDataPolicy, Money,
+    OfferProvenance, PackageMass, ParticleSizeRangeUm, PurityFraction, RejectedOffer,
+    SearchBudgetSummary, UnresolvedCommercialField, assess_commercial_plans,
+    assess_commercial_plans_with_policy, assess_commercial_precursors,
+    assess_commercial_precursors_with_policy,
 };
 pub use composition::{Composition, ELEMENT_SYMBOLS, Element};
 pub use config::{PlanningConfig, SearchBudget};

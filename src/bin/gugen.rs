@@ -16,7 +16,8 @@ use gugen::{
 use gugen::{
     CommercialCatalogColumnMap, CommercialCatalogLoadMode, CommercialCatalogLoadReport,
     CommercialPlanAssessment, CommercialPlanningConfig, CommercialPlanningRequest,
-    CommercialPrecursorCatalog, CurrencyCode, Money, PurityFraction, assess_commercial_plans,
+    CommercialPrecursorCatalog, CommercialRankingPolicy, CurrencyCode, Money, PurityFraction,
+    assess_commercial_plans_with_policy,
 };
 use std::path::{Path, PathBuf};
 
@@ -122,6 +123,8 @@ enum Command {
         allowed_manufacturers: Vec<String>,
         #[arg(long = "excluded-manufacturer")]
         excluded_manufacturers: Vec<String>,
+        #[arg(long = "ranking-policy", value_enum, default_value = "balanced")]
+        ranking_policy: CommercialRankingPolicyArg,
         #[arg(long)]
         output: Option<PathBuf>,
         #[arg(long, value_enum, default_value = "json")]
@@ -158,6 +161,33 @@ enum CommercialOutputFormat {
     Json,
     Markdown,
     Csv,
+}
+
+#[cfg(feature = "commercial_catalog")]
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum CommercialRankingPolicyArg {
+    Balanced,
+    CostFirst,
+    LeadTimeFirst,
+    PurityFirst,
+    MinimumUnresolvedData,
+    Pareto,
+}
+
+#[cfg(feature = "commercial_catalog")]
+impl From<CommercialRankingPolicyArg> for CommercialRankingPolicy {
+    fn from(policy: CommercialRankingPolicyArg) -> Self {
+        match policy {
+            CommercialRankingPolicyArg::Balanced => CommercialRankingPolicy::Balanced,
+            CommercialRankingPolicyArg::CostFirst => CommercialRankingPolicy::CostFirst,
+            CommercialRankingPolicyArg::LeadTimeFirst => CommercialRankingPolicy::LeadTimeFirst,
+            CommercialRankingPolicyArg::PurityFirst => CommercialRankingPolicy::PurityFirst,
+            CommercialRankingPolicyArg::MinimumUnresolvedData => {
+                CommercialRankingPolicy::MinimumUnresolvedData
+            }
+            CommercialRankingPolicyArg::Pareto => CommercialRankingPolicy::Pareto,
+        }
+    }
 }
 
 /// One assessed plan within a `commercial-plan` run's JSON output -- pairs
@@ -231,6 +261,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             currency,
             allowed_manufacturers,
             excluded_manufacturers,
+            ranking_policy,
             output,
             format,
         } => run_commercial_plan(
@@ -247,6 +278,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             currency.as_deref(),
             &allowed_manufacturers,
             &excluded_manufacturers,
+            ranking_policy.into(),
             output.as_deref(),
             format,
         ),
@@ -558,6 +590,7 @@ fn run_commercial_plan(
     currency: Option<&str>,
     allowed_manufacturers: &[String],
     excluded_manufacturers: &[String],
+    ranking_policy: CommercialRankingPolicy,
     output: Option<&Path>,
     format: CommercialOutputFormat,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -606,11 +639,12 @@ fn run_commercial_plan(
         excluded_manufacturers,
     )?;
 
-    let assessments = assess_commercial_plans(
+    let assessments = assess_commercial_plans_with_policy(
         &plans,
         &commercial_catalog,
         &request,
         &CommercialPlanningConfig::default(),
+        ranking_policy,
     )?;
 
     let rendered = match format {
@@ -933,6 +967,16 @@ fn render_commercial_assessment_markdown(
                     offers span more than one currency -- gugen never converts currencies).\n",
                 ),
             }
+            match combo.min_purity {
+                Some(p) => out.push_str(&format!("   - Min purity: {:.4}\n", p.value())),
+                None => out.push_str(
+                    "   - Min purity: unknown (at least one selection's purity is unknown)\n",
+                ),
+            }
+            match combo.total_excess_mass_grams {
+                Some(mass) => out.push_str(&format!("   - Total excess mass: {mass:.3} g\n")),
+                None => out.push_str("   - Total excess mass: unknown\n"),
+            }
         }
         out.push('\n');
     }
@@ -988,6 +1032,8 @@ fn render_commercial_report_csv(
         "currency",
         "all_costs_known",
         "max_lead_time_days",
+        "min_purity",
+        "total_excess_mass_grams",
         "all_availability_acceptable",
         "note",
     ])?;
@@ -997,6 +1043,8 @@ fn render_commercial_report_csv(
             writer.write_record([
                 assessment.plan_id.0.as_str(),
                 &assessment.every_precursor_has_a_match.to_string(),
+                "",
+                "",
                 "",
                 "",
                 "",
@@ -1034,6 +1082,12 @@ fn render_commercial_report_csv(
                 &combo
                     .max_lead_time_days
                     .map_or(String::new(), |d| d.to_string()),
+                &combo
+                    .min_purity
+                    .map_or(String::new(), |p| p.value().to_string()),
+                &combo
+                    .total_excess_mass_grams
+                    .map_or(String::new(), |m| m.to_string()),
                 &combo.all_availability_acceptable.to_string(),
                 note,
             ])?;
@@ -1344,11 +1398,12 @@ mod tests {
             CommercialCatalogLoadMode::Lenient,
         )
         .unwrap();
-        let assessments = assess_commercial_plans(
+        let assessments = assess_commercial_plans_with_policy(
             &report.plans,
             &catalog,
             &CommercialPlanningRequest::default(),
             &CommercialPlanningConfig::default(),
+            CommercialRankingPolicy::Balanced,
         )
         .unwrap();
         (report, assessments, load_report)
@@ -1413,6 +1468,7 @@ mod tests {
             None,
             &[],
             &[],
+            CommercialRankingPolicy::Balanced,
             Some(&output_path),
             CommercialOutputFormat::Json,
         )
@@ -1455,6 +1511,7 @@ mod tests {
             None,
             &[],
             &[],
+            CommercialRankingPolicy::Balanced,
             Some(&output_path),
             CommercialOutputFormat::Json,
         )
@@ -1508,6 +1565,7 @@ mod tests {
             None,
             &[],
             &[],
+            CommercialRankingPolicy::Balanced,
             Some(&output_path),
             CommercialOutputFormat::Json,
         )
@@ -1547,6 +1605,7 @@ mod tests {
             None,
             &[],
             &[],
+            CommercialRankingPolicy::Balanced,
             Some(&output_path),
             CommercialOutputFormat::Markdown,
         )
@@ -1583,6 +1642,7 @@ mod tests {
             None,
             &[],
             &[],
+            CommercialRankingPolicy::Balanced,
             Some(&output_path),
             CommercialOutputFormat::Csv,
         )
@@ -1594,7 +1654,7 @@ mod tests {
             lines.next().unwrap(),
             "plan_id,every_precursor_has_a_match,combination_rank,combination_id,\
             total_cost_minor_units,currency,all_costs_known,max_lead_time_days,\
-            all_availability_acceptable,note"
+            min_purity,total_excess_mass_grams,all_availability_acceptable,note"
         );
         assert!(lines.next().is_some());
     }
@@ -1640,6 +1700,7 @@ mod tests {
             None,
             &[],
             &[],
+            CommercialRankingPolicy::Balanced,
             Some(&output_path),
             CommercialOutputFormat::Json,
         )
@@ -1663,6 +1724,7 @@ mod tests {
                 None,
                 &[],
                 &[],
+                CommercialRankingPolicy::Balanced,
                 None,
                 CommercialOutputFormat::Json,
             )
