@@ -2,6 +2,7 @@ use crate::composition::Composition;
 use crate::error::ProviderError;
 use crate::literature_evidence::LiteratureRouteEvidence;
 use crate::precursor::{PrecursorCandidate, PrecursorSelection};
+use crate::prior_experiment_evidence::PriorExperimentEvidence;
 use crate::process::{ProcessPrecedent, RouteFamily};
 use crate::reaction::{BalancedReaction, CompetingPhase, ReactionEnergy, ThermodynamicConditions};
 use crate::route_suitability::SuitabilityFinding;
@@ -92,4 +93,32 @@ pub trait LiteratureEvidenceProvider {
         route_family: RouteFamily,
         precursors: &[Composition],
     ) -> std::result::Result<Option<LiteratureRouteEvidence>, ProviderError>;
+}
+
+/// Source of reference-only prior-experiment evidence for an exact
+/// target/precursor-set/route-family combination (Phase 26). Mirrors
+/// [`LiteratureEvidenceProvider`]'s own exact-match contract exactly:
+/// this trait's output ([`PriorExperimentEvidence`]) is never applied to
+/// a `ProcessStep`, never converted to a `ConditionPrecedent`, and never
+/// passed to `score_plan` -- `Planner` attaches it to `SynthesisPlan` as
+/// its own field, structurally isolated from every scoring input. Not
+/// gated behind any Cargo feature: unlike `LiteratureEvidenceProvider`
+/// (whose one real implementation needs the `literature_corpus`
+/// feature's corpus loader), [`crate::execution_record::SynthesisExecutionRecord`]
+/// itself carries no feature gate, so neither does the one real
+/// implementation of this trait
+/// ([`crate::prior_experiment_evidence::InMemoryExecutionRecordProvider`]).
+/// `Ok(Some(evidence))` implies `evidence.records` is non-empty -- an
+/// empty match is `Ok(None)`, never a rendered "0 prior experiments"
+/// disclosure. Unlike `LiteratureEvidenceProvider`, `Planner` does not
+/// restrict which route families this provider is asked about (see
+/// `docs/prior_experiment_evidence.md` for why that restriction doesn't
+/// apply here).
+pub trait PriorExperimentEvidenceProvider {
+    fn prior_experiments(
+        &self,
+        target: &Composition,
+        route_family: RouteFamily,
+        precursors: &[Composition],
+    ) -> std::result::Result<Option<PriorExperimentEvidence>, ProviderError>;
 }

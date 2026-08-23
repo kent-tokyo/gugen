@@ -12,9 +12,10 @@
 use gugen::{
     ActualPrecursorAmount, ActualProcessStep, ActualStepDetail, Composition, Deviation,
     DeviationCategory, EXECUTION_RECORD_SCHEMA_VERSION, Element, ExecutionCharacterization,
-    ExecutionProvenance, ExecutionRecordLoadMode, InMemoryPrecursorCatalog, PlanIdentity, Planner,
-    PlanningConfig, PlanningConstraints, PrecursorCandidate, PrecursorId, SynthesisExecutionRecord,
-    SynthesisOutcome, TargetSpecification, parse_execution_records,
+    ExecutionProvenance, ExecutionRecordLoadMode, InMemoryExecutionRecordProvider,
+    InMemoryPrecursorCatalog, PlanIdentity, Planner, PlanningConfig, PlanningConstraints,
+    PrecursorCandidate, PrecursorId, SynthesisExecutionRecord, SynthesisOutcome,
+    TargetSpecification, parse_execution_records,
 };
 use std::io::Write;
 
@@ -58,56 +59,70 @@ fn main() {
         .expect("BaCO3 + TiO2 -> BaTiO3 must produce a plan");
     println!("Chemical plan {} was proposed.", plan.plan_id);
 
-    // Stage 2: a real (fictional, for this demo) lab attempt of that plan,
-    // recorded as a SynthesisExecutionRecord -- structurally separate from
-    // Planner/score_plan; nothing here feeds back into plan.score.
-    let record = SynthesisExecutionRecord {
-        schema_version: EXECUTION_RECORD_SCHEMA_VERSION.to_string(),
-        plan_identity: PlanIdentity::from_plan(target_composition, plan),
-        commercial_catalog_source: None,
-        selected_commercial_offers: Vec::new(),
-        actual_precursor_amounts: vec![
-            ActualPrecursorAmount {
-                precursor: PrecursorId("BaCO3".to_string()),
-                mass_grams: Some(197.5),
-                formula_units: Some(1),
+    // Stage 2: two real (fictional, for this demo) lab attempts of that
+    // plan, each recorded as a SynthesisExecutionRecord -- structurally
+    // separate from Planner/score_plan; nothing here feeds back into
+    // plan.score. Different outcomes on purpose, to demonstrate that
+    // Phase 26 surfaces every match, never collapsing them into one
+    // "best" result.
+    let make_record =
+        |outcome: SynthesisOutcome, notes: &str, batch_id: &str| SynthesisExecutionRecord {
+            schema_version: EXECUTION_RECORD_SCHEMA_VERSION.to_string(),
+            plan_identity: PlanIdentity::from_plan(target_composition.clone(), plan),
+            commercial_catalog_source: None,
+            selected_commercial_offers: Vec::new(),
+            actual_precursor_amounts: vec![
+                ActualPrecursorAmount {
+                    precursor: PrecursorId("BaCO3".to_string()),
+                    mass_grams: Some(197.5),
+                    formula_units: Some(1),
+                },
+                ActualPrecursorAmount {
+                    precursor: PrecursorId("TiO2".to_string()),
+                    mass_grams: Some(80.2),
+                    formula_units: Some(1),
+                },
+            ],
+            actual_process_conditions: vec![ActualProcessStep {
+                planned_step_index: None,
+                step: ActualStepDetail::Heat {
+                    purpose: gugen::HeatingPurpose::Sintering,
+                    temperature_celsius: Some(1180.0),
+                    duration_hours: Some(4.0),
+                    atmosphere: Some(gugen::Atmosphere::Air),
+                    ramp_celsius_per_hour: None,
+                },
+            }],
+            deviations_from_plan: vec![Deviation {
+                category: DeviationCategory::TemperatureDeviation,
+                description: "furnace ran 30C above the target setpoint".to_string(),
+            }],
+            outcome,
+            characterization: ExecutionCharacterization {
+                phase_purity_fraction: Some(0.95),
+                yield_fraction: Some(0.88),
+                xrd_reference: Some("XRD-2026-08-23-001".to_string()),
+                measurement_method: Some("Rietveld refinement".to_string()),
             },
-            ActualPrecursorAmount {
-                precursor: PrecursorId("TiO2".to_string()),
-                mass_grams: Some(80.2),
-                formula_units: Some(1),
+            operator_notes: Some(notes.to_string()),
+            experiment_date: Some("2026-08-23".to_string()),
+            batch_id: Some(batch_id.to_string()),
+            provenance: ExecutionProvenance {
+                gugen_version: env!("CARGO_PKG_VERSION").to_string(),
+                recorded_by: Some("demo-operator".to_string()),
+                recorded_at: "2026-08-23T12:00:00Z".to_string(),
             },
-        ],
-        actual_process_conditions: vec![ActualProcessStep {
-            planned_step_index: None,
-            step: ActualStepDetail::Heat {
-                purpose: gugen::HeatingPurpose::Sintering,
-                temperature_celsius: Some(1180.0),
-                duration_hours: Some(4.0),
-                atmosphere: Some(gugen::Atmosphere::Air),
-                ramp_celsius_per_hour: None,
-            },
-        }],
-        deviations_from_plan: vec![Deviation {
-            category: DeviationCategory::TemperatureDeviation,
-            description: "furnace ran 30C above the target setpoint".to_string(),
-        }],
-        outcome: SynthesisOutcome::TargetPhaseObtained,
-        characterization: ExecutionCharacterization {
-            phase_purity_fraction: Some(0.95),
-            yield_fraction: Some(0.88),
-            xrd_reference: Some("XRD-2026-08-23-001".to_string()),
-            measurement_method: Some("Rietveld refinement".to_string()),
-        },
-        operator_notes: Some("slight discoloration on the crucible edge".to_string()),
-        experiment_date: Some("2026-08-23".to_string()),
-        batch_id: Some("batch-042".to_string()),
-        provenance: ExecutionProvenance {
-            gugen_version: env!("CARGO_PKG_VERSION").to_string(),
-            recorded_by: Some("demo-operator".to_string()),
-            recorded_at: "2026-08-23T12:00:00Z".to_string(),
-        },
-    };
+        };
+    let record_a = make_record(
+        SynthesisOutcome::TargetPhaseObtained,
+        "slight discoloration on the crucible edge",
+        "batch-042",
+    );
+    let record_b = make_record(
+        SynthesisOutcome::CompetingPhaseObserved,
+        "a second attempt, different batch -- competing phase observed instead",
+        "batch-043",
+    );
 
     // Appending is the caller's own 3-line responsibility -- the library
     // never opens a file itself.
@@ -117,8 +132,10 @@ fn main() {
         .append(true)
         .open(&path)
         .unwrap();
-    writeln!(file, "{}", serde_json::to_string(&record).unwrap()).unwrap();
-    println!("Appended one record to {}", path.display());
+    for record in [&record_a, &record_b] {
+        writeln!(file, "{}", serde_json::to_string(record).unwrap()).unwrap();
+    }
+    println!("Appended 2 records to {}", path.display());
 
     let contents = std::fs::read_to_string(&path).unwrap();
     let (records, load_report) =
@@ -129,13 +146,50 @@ fn main() {
         load_report.rejected.len(),
         path.display()
     );
-    let last = records.last().unwrap();
-    println!(
-        "Most recent: plan {}, outcome {:?}, {} deviation(s) from plan.",
-        last.plan_identity.plan_id,
-        last.outcome,
-        last.deviations_from_plan.len()
-    );
+
+    // Stage 3: surface those records back during planning, as
+    // reference-only evidence -- structurally separate from score_plan.
+    let provider = InMemoryExecutionRecordProvider::new(records);
+    let planner_with_history = Planner::builder(
+        InMemoryPrecursorCatalog::new(vec![
+            PrecursorCandidate {
+                id: PrecursorId("BaCO3".to_string()),
+                composition: composition(&[("Ba", 1.0), ("C", 1.0), ("O", 3.0)]),
+                availability: None,
+            },
+            PrecursorCandidate {
+                id: PrecursorId("TiO2".to_string()),
+                composition: composition(&[("Ti", 1.0), ("O", 2.0)]),
+                availability: None,
+            },
+        ]),
+        PlanningConfig::default(),
+    )
+    .prior_experiment_evidence_provider(provider)
+    .build();
+    let report_with_history = planner_with_history
+        .plan(&target, "2026-08-23T00:00:00Z")
+        .unwrap();
+    let plan_with_history = report_with_history
+        .plans
+        .iter()
+        .find(|p| p.plan_id == plan.plan_id)
+        .unwrap();
+    match &plan_with_history.prior_experiment_evidence {
+        Some(evidence) => {
+            println!(
+                "Prior experiment evidence for {}: {} record(s), outcome tally: {:?}",
+                plan_with_history.plan_id,
+                evidence.records.len(),
+                evidence.outcome_tally()
+            );
+            println!(
+                "score unchanged by this evidence: {}",
+                plan_with_history.score == plan.score
+            );
+        }
+        None => println!("No prior experiment evidence matched (unexpected for this demo)."),
+    }
 
     std::fs::remove_file(&path).ok();
 }

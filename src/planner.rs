@@ -9,8 +9,8 @@ use crate::process::{
 };
 use crate::provenance::PlanningProvenance;
 use crate::provider::{
-    LiteratureEvidenceProvider, PrecursorCatalog, ProcessEvidenceProvider,
-    RouteSuitabilityProvider, ThermodynamicProvider,
+    LiteratureEvidenceProvider, PrecursorCatalog, PriorExperimentEvidenceProvider,
+    ProcessEvidenceProvider, RouteSuitabilityProvider, ThermodynamicProvider,
 };
 use crate::reaction::{BalancedReaction, CompetingPhase, ReactionEnergy, ThermodynamicConditions};
 use crate::rejection::{RejectedCandidate, RejectionCode};
@@ -42,10 +42,11 @@ pub struct Planner {
     process_evidence_provider: Option<Box<dyn ProcessEvidenceProvider>>,
     route_suitability_provider: Option<Box<dyn RouteSuitabilityProvider>>,
     literature_evidence_provider: Option<Box<dyn LiteratureEvidenceProvider>>,
+    prior_experiment_evidence_provider: Option<Box<dyn PriorExperimentEvidenceProvider>>,
     config: PlanningConfig,
 }
 
-/// Builds a [`Planner`] with any combination of its 4 optional providers
+/// Builds a [`Planner`] with any combination of its 5 optional providers
 /// (v0.5.0, Phase 23B) -- `catalog`/`config` are required up front (there is
 /// nothing to plan from without a catalog), each provider is attached by
 /// name in any order or combination, and `build()` is infallible (no
@@ -60,6 +61,7 @@ pub struct PlannerBuilder {
     process_evidence_provider: Option<Box<dyn ProcessEvidenceProvider>>,
     route_suitability_provider: Option<Box<dyn RouteSuitabilityProvider>>,
     literature_evidence_provider: Option<Box<dyn LiteratureEvidenceProvider>>,
+    prior_experiment_evidence_provider: Option<Box<dyn PriorExperimentEvidenceProvider>>,
 }
 
 impl PlannerBuilder {
@@ -95,6 +97,14 @@ impl PlannerBuilder {
         self
     }
 
+    pub fn prior_experiment_evidence_provider(
+        mut self,
+        provider: impl PriorExperimentEvidenceProvider + 'static,
+    ) -> Self {
+        self.prior_experiment_evidence_provider = Some(Box::new(provider));
+        self
+    }
+
     pub fn build(self) -> Planner {
         Planner {
             catalog: self.catalog,
@@ -102,6 +112,7 @@ impl PlannerBuilder {
             process_evidence_provider: self.process_evidence_provider,
             route_suitability_provider: self.route_suitability_provider,
             literature_evidence_provider: self.literature_evidence_provider,
+            prior_experiment_evidence_provider: self.prior_experiment_evidence_provider,
             config: self.config,
         }
     }
@@ -109,7 +120,7 @@ impl PlannerBuilder {
 
 impl Planner {
     /// Starts a [`PlannerBuilder`] -- the general construction path,
-    /// covering any combination of the 4 optional providers (v0.5.0,
+    /// covering any combination of the 5 optional providers (v0.5.0,
     /// Phase 23B). Superseded the 5 named constructors below, none of
     /// which covered the real 2+-optional-provider combination space; kept
     /// as `#[deprecated]` wrappers around this builder for one release.
@@ -124,6 +135,7 @@ impl Planner {
             process_evidence_provider: None,
             route_suitability_provider: None,
             literature_evidence_provider: None,
+            prior_experiment_evidence_provider: None,
         }
     }
 
@@ -588,6 +600,64 @@ impl Planner {
                     }
                 }
 
+                // Phase 26: same reasoning as the literature-evidence
+                // lookup above -- looked up after score_plan has already
+                // run and returned, never a score_plan input. Unlike
+                // literature evidence, not restricted to
+                // ConventionalSolidState: route_family is already part
+                // of the match key, so cross-family leakage can't
+                // happen regardless of which route families this
+                // provider is asked about.
+                let mut prior_experiment_evidence = None;
+                if let Some(provider) = &self.prior_experiment_evidence_provider {
+                    let precursor_compositions: Vec<_> = accepted
+                        .reaction
+                        .reactants()
+                        .iter()
+                        .map(|s| s.composition.clone())
+                        .collect();
+                    match provider.prior_experiments(
+                        composition,
+                        template.route_family,
+                        &precursor_compositions,
+                    ) {
+                        Ok(Some(evidence)) => {
+                            // Always disclosed, same "a clean/unanimous
+                            // result is exactly the case most likely to
+                            // be misread as endorsement if left silent"
+                            // reasoning as the literature-evidence
+                            // warning above.
+                            let tally = evidence.outcome_tally();
+                            let tally_prose = tally
+                                .iter()
+                                .map(|(outcome, count)| format!("{count} {outcome:?}"))
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            provider_warnings.push(PlanningWarning {
+                                message: format!(
+                                    "{} prior experiment record(s) for this exact route: {} \
+                                    -- reference-only; recorded conditions, grades and \
+                                    catalogs differ between records, so this is not a \
+                                    success rate, and none of it is applied to conditions \
+                                    or score",
+                                    evidence.records.len(),
+                                    tally_prose,
+                                ),
+                                severity: WarningSeverity::Info,
+                            });
+                            prior_experiment_evidence = Some(evidence);
+                        }
+                        Ok(None) => {}
+                        Err(err) => provider_warnings.push(PlanningWarning {
+                            message: format!(
+                                "prior experiment evidence provider failed for this \
+                                candidate, continuing without it: {err}"
+                            ),
+                            severity: WarningSeverity::Info,
+                        }),
+                    }
+                }
+
                 let mut plan_warnings = template.warnings;
                 plan_warnings.extend(assessment.warnings);
                 plan_warnings.extend(provider_warnings);
@@ -611,6 +681,7 @@ impl Planner {
                     unresolved: assessment.unresolved,
                     manual_review_required: assessment.manual_review_required,
                     literature_evidence,
+                    prior_experiment_evidence,
                 });
             }
         }
@@ -880,6 +951,7 @@ mod tests {
         StepGroupAssessment, StepGroupKey,
     };
     use crate::precursor::{AvailabilityMetadata, InMemoryPrecursorCatalog, PrecursorCandidate};
+    use crate::prior_experiment_evidence::PriorExperimentEvidence;
     use crate::process::ProcessPrecedent;
     use crate::reaction::ReactionEnergy;
     use crate::target::PlanningConstraints;
@@ -1713,5 +1785,242 @@ mod tests {
             "the literature evidence provider must never be asked about a route family other \
             than ConventionalSolidState: {queried:?}"
         );
+    }
+
+    // Phase 26: PriorExperimentEvidenceProvider wiring. Ungated (the
+    // trait and its types are always compiled), mirroring the
+    // literature-evidence tests above -- but unlike that provider, this
+    // one is deliberately *not* restricted to ConventionalSolidState
+    // (route_family is already part of the match key, so cross-family
+    // leakage can't happen regardless of which route families it's
+    // asked about).
+
+    fn sample_execution_record(
+        route_family: RouteFamily,
+        outcome: crate::execution_record::SynthesisOutcome,
+    ) -> crate::execution_record::SynthesisExecutionRecord {
+        use crate::execution_record::{
+            EXECUTION_RECORD_SCHEMA_VERSION, ExecutionCharacterization, ExecutionProvenance,
+            PlanIdentity,
+        };
+
+        crate::execution_record::SynthesisExecutionRecord {
+            schema_version: EXECUTION_RECORD_SCHEMA_VERSION.to_string(),
+            plan_identity: PlanIdentity {
+                plan_id: PlanId("plan-test".to_string()),
+                route_family,
+                target_composition: composition(&[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)]),
+                precursor_compositions: [
+                    composition(&[("Ba", 1.0), ("C", 1.0), ("O", 3.0)]),
+                    composition(&[("Ti", 1.0), ("O", 2.0)]),
+                ]
+                .into_iter()
+                .collect(),
+            },
+            commercial_catalog_source: None,
+            selected_commercial_offers: Vec::new(),
+            actual_precursor_amounts: Vec::new(),
+            actual_process_conditions: Vec::new(),
+            deviations_from_plan: Vec::new(),
+            outcome,
+            characterization: ExecutionCharacterization {
+                phase_purity_fraction: None,
+                yield_fraction: None,
+                xrd_reference: None,
+                measurement_method: None,
+            },
+            operator_notes: None,
+            experiment_date: None,
+            batch_id: None,
+            provenance: ExecutionProvenance {
+                gugen_version: "0.0.0-test".to_string(),
+                recorded_by: None,
+                recorded_at: "2026-08-14T00:00:00Z".to_string(),
+            },
+        }
+    }
+
+    fn sample_prior_experiment_evidence(route_family: RouteFamily) -> PriorExperimentEvidence {
+        use crate::execution_record::SynthesisOutcome;
+        PriorExperimentEvidence {
+            records: vec![
+                sample_execution_record(route_family, SynthesisOutcome::TargetPhaseObtained),
+                sample_execution_record(route_family, SynthesisOutcome::TargetPhaseObtained),
+                sample_execution_record(route_family, SynthesisOutcome::CompetingPhaseObserved),
+            ],
+        }
+    }
+
+    /// Always returns 3 matching records (2 `TargetPhaseObtained`, 1
+    /// `CompetingPhaseObserved`), regardless of query -- used to prove
+    /// the disclosure warning fires and never changes score/steps.
+    struct StubPriorExperimentEvidenceProvider;
+    impl PriorExperimentEvidenceProvider for StubPriorExperimentEvidenceProvider {
+        fn prior_experiments(
+            &self,
+            _target: &Composition,
+            route_family: RouteFamily,
+            _precursors: &[Composition],
+        ) -> std::result::Result<Option<PriorExperimentEvidence>, ProviderError> {
+            Ok(Some(sample_prior_experiment_evidence(route_family)))
+        }
+    }
+
+    struct FailingPriorExperimentEvidenceProvider;
+    impl PriorExperimentEvidenceProvider for FailingPriorExperimentEvidenceProvider {
+        fn prior_experiments(
+            &self,
+            _target: &Composition,
+            _route_family: RouteFamily,
+            _precursors: &[Composition],
+        ) -> std::result::Result<Option<PriorExperimentEvidence>, ProviderError> {
+            Err(ProviderError::Unavailable("simulated outage".to_string()))
+        }
+    }
+
+    #[test]
+    fn no_prior_experiment_evidence_without_a_provider() {
+        let report = Planner::builder(barium_titanate_catalog(), generous_config())
+            .build()
+            .plan(&barium_titanate_target(), "2026-08-14T00:00:00Z")
+            .unwrap();
+        assert!(!report.plans.is_empty());
+        assert!(
+            report
+                .plans
+                .iter()
+                .all(|p| p.prior_experiment_evidence.is_none())
+        );
+    }
+
+    #[test]
+    fn prior_experiment_evidence_provider_attaches_evidence_without_changing_score_or_steps() {
+        let target = barium_titanate_target();
+        let baseline = Planner::builder(barium_titanate_catalog(), generous_config())
+            .build()
+            .plan(&target, "2026-08-14T00:00:00Z")
+            .unwrap();
+        let with_evidence = Planner::builder(barium_titanate_catalog(), generous_config())
+            .prior_experiment_evidence_provider(StubPriorExperimentEvidenceProvider)
+            .build()
+            .plan(&target, "2026-08-14T00:00:00Z")
+            .unwrap();
+
+        assert_eq!(baseline.plans.len(), with_evidence.plans.len());
+        for (before, after) in baseline.plans.iter().zip(with_evidence.plans.iter()) {
+            assert_eq!(before.plan_id, after.plan_id);
+            assert_eq!(
+                before.score, after.score,
+                "a configured PriorExperimentEvidenceProvider must never change score"
+            );
+            assert_eq!(
+                before.confidence, after.confidence,
+                "a configured PriorExperimentEvidenceProvider must never change confidence"
+            );
+            assert_eq!(
+                before.steps, after.steps,
+                "a configured PriorExperimentEvidenceProvider must never auto-fill ProcessStep \
+                fields"
+            );
+            assert!(before.prior_experiment_evidence.is_none());
+            assert!(
+                after.prior_experiment_evidence.is_some(),
+                "the stub provider always returns evidence, for every route family"
+            );
+            assert!(
+                after
+                    .warnings
+                    .iter()
+                    .any(|w| w.message.contains("prior experiment")
+                        && w.message.contains("not a success rate")),
+                "a match must surface a disclosure warning: {:?}",
+                after.warnings
+            );
+        }
+
+        let baseline_order: Vec<&str> = baseline
+            .plans
+            .iter()
+            .map(|p| p.plan_id.0.as_str())
+            .collect();
+        let with_evidence_order: Vec<&str> = with_evidence
+            .plans
+            .iter()
+            .map(|p| p.plan_id.0.as_str())
+            .collect();
+        assert_eq!(baseline_order, with_evidence_order);
+    }
+
+    #[test]
+    fn prior_experiment_evidence_surfaced_for_mechanochemical_plans() {
+        let report = Planner::builder(barium_titanate_catalog(), generous_config())
+            .prior_experiment_evidence_provider(StubPriorExperimentEvidenceProvider)
+            .build()
+            .plan(&barium_titanate_target(), "2026-08-14T00:00:00Z")
+            .unwrap();
+
+        assert!(
+            report
+                .plans
+                .iter()
+                .any(|p| p.route_family == RouteFamily::Mechanochemical),
+            "test setup must actually exercise the Mechanochemical path"
+        );
+        assert!(
+            report
+                .plans
+                .iter()
+                .all(|p| p.prior_experiment_evidence.is_some()),
+            "unlike literature evidence, prior-experiment evidence is not restricted to \
+            ConventionalSolidState -- every plan must have it here"
+        );
+    }
+
+    #[test]
+    fn prior_experiment_evidence_provider_failure_degrades_to_a_warning() {
+        let report = Planner::builder(barium_titanate_catalog(), generous_config())
+            .prior_experiment_evidence_provider(FailingPriorExperimentEvidenceProvider)
+            .build()
+            .plan(&barium_titanate_target(), "2026-08-14T00:00:00Z")
+            .unwrap();
+
+        assert!(!report.plans.is_empty());
+        for plan in &report.plans {
+            assert!(plan.prior_experiment_evidence.is_none());
+            assert!(
+                plan.warnings.iter().any(|w| w
+                    .message
+                    .contains("prior experiment evidence provider failed")),
+                "expected the provider failure reflected as a warning: {:?}",
+                plan.warnings
+            );
+        }
+    }
+
+    #[test]
+    fn prior_experiment_warning_never_claims_a_success_rate() {
+        let report = Planner::builder(barium_titanate_catalog(), generous_config())
+            .prior_experiment_evidence_provider(StubPriorExperimentEvidenceProvider)
+            .build()
+            .plan(&barium_titanate_target(), "2026-08-14T00:00:00Z")
+            .unwrap();
+
+        let mut checked_any = false;
+        for plan in &report.plans {
+            for warning in plan
+                .warnings
+                .iter()
+                .filter(|w| w.message.contains("prior experiment"))
+            {
+                checked_any = true;
+                assert!(warning.message.contains("not a success rate"));
+                assert!(
+                    !warning.message.contains('%'),
+                    "must never render as a percentage: {}",
+                    warning.message
+                );
+            }
+        }
+        assert!(checked_any, "test setup must actually surface a warning");
     }
 }

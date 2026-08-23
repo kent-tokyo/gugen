@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "target": {
     "composition": {
       "Ba": 1.0,
@@ -278,7 +278,8 @@
         }
       ],
       "manual_review_required": true,
-      "literature_evidence": null
+      "literature_evidence": null,
+      "prior_experiment_evidence": null
     },
     {
       "plan_id": "plan-ee311be9350b7d8b",
@@ -484,7 +485,8 @@
         }
       ],
       "manual_review_required": true,
-      "literature_evidence": null
+      "literature_evidence": null,
+      "prior_experiment_evidence": null
     }
   ],
   "not_recommended": [],
@@ -513,7 +515,7 @@
   "provenance": {
     "gugen_version": "0.5.0",
     "build_identifier": null,
-    "schema_version": 2,
+    "schema_version": 3,
     "chematic_crystal_version": null,
     "mikiwame_version": null,
     "precursor_catalog_version": null,
