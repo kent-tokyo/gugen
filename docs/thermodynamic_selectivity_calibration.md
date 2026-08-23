@@ -1,31 +1,32 @@
 # Phase 21B: thermodynamic-selectivity calibration
 
-**Status: in progress.** Phase 21A's GO for Phase 21B was conditioned on
-four requirements. Conditions 2 and 3 completed first (§2, §3). Condition
-1 was originally scoped against Materials Project, but the owner
-explicitly redirected it to **OQMD** instead (unauthenticated REST API,
-own data licensed CC BY 4.0 — verified, §6.1) to avoid blocking this
-phase on a credential. As of this document's current revision, condition
-1's live data pull is itself blocked by a **real, external OQMD service
-outage** (confirmed independently, §6.2) — a different kind of blocker
-than the original MP-key one, and not something this phase can design
-around.
+**Status: all four GO conditions measured; condition 1 result is GO.**
+Phase 21A's GO for Phase 21B was conditioned on four requirements.
+Conditions 2 and 3 completed first (§2, §3). Condition 1 was originally
+scoped against Materials Project, but the owner explicitly redirected it
+to **OQMD** instead (unauthenticated REST API, own data licensed CC BY
+4.0 — verified, §6.1) to avoid blocking this phase on a credential.
+Condition 1's live data pull was blocked by a real, external OQMD
+service outage across most of this document's history (§6.2/§6.2.2); the
+full 795-formula fetch finally completed 2026-08-23 after a live health
+check confirmed OQMD responding and the owner directly authorized
+resuming the pre-registered fetch (§6.6).
 
 | Condition | Status |
 |---|---|
-| 1. Thermodynamic-coverage check against gugen's real data source | **Redirected to OQMD (owner instruction); pre-registered gate and polymorph policy fixed in §6 before any data was fetched. Live pull currently blocked by an OQMD service outage (confirmed, §6.2) — not yet measured.** |
+| 1. Thermodynamic-coverage check against gugen's real data source | **Measured 2026-08-23 — GO. 273 outcome-disagreeing comparable targets (floor: ≥30). Full result: §6.6.** |
 | 2. Manual label audit (mirroring Phase 20D) | **Done — this document, §2.** |
 | 3. Artifact filtering | **Done — this document, §3.** |
 | 4. Carry forward leakage exclusion + DOI independence unit | **Done — both conditions 2 and 3 build directly on Phase 21A's leakage-excluded, DOI-tracked population.** |
 
-**No calibration was run. No correlation was computed. No GO/NO-GO for
-the calibration itself can be given yet** — that decision still needs
-condition 1 to actually measure something, and OQMD's own outage
-prevented that this session. This is the same discipline as Phase 21A's
-own §7 ("not measured in this phase"): an unmet precondition is reported
-as unmet, not quietly worked around, and a real infrastructure outage is
-reported as exactly that, not silently substituted with a cached or
-third-party copy of the data (§6.4). No `src/` change, no version bump.
+**All four Phase 21B GO conditions are now measured, and all four are
+GO.** Per §6.5's own pre-committed procedure, this stops here: **no
+calibration was run, no correlation was computed, and this document
+gives no GO/NO-GO for the calibration itself** — that remains a
+separate, later, explicitly-triggered phase (§6.6, §7). This is the same
+discipline as Phase 21A's own §7 ("not measured in this phase"): a
+result is reported as exactly what it is, not extended one step further
+than what was actually asked for. No `src/` change, no version bump.
 
 ## 1. Recap: what this builds on
 
@@ -652,6 +653,92 @@ not connect any result to `score_plan`, `RankingWeights`, or `Planner`
 ranking, even on a GO. No version bump. Calibration itself remains a
 separate, later, explicitly-triggered phase, same as every prior
 update in this document has required.
+
+### 6.6 Condition 1 result: measured 2026-08-23 — GO
+
+The owner directly authorized resuming the pre-registered fetch after a
+live health check (`.github/scripts/check_oqmd_recovery.py`, run
+manually, not just the daily workflow's cached result) confirmed OQMD
+responding. Two runs were needed, both following the §6.5 runbook
+exactly:
+
+- **Run 1**: resumed from the pre-existing 714-formula cache, reached
+  759/795, then aborted per §6.5 Step 2's designed behavior on a network
+  read-timeout for `ZBS` ("gave up after 4 attempts") — a transient
+  timeout, not the persistent `HTTP 502` seen during the prior two
+  outages (§6.2/§6.2.2). Cache preserved, no manifest written, nothing
+  scored.
+- **Run 2**: a fresh live health check passed again and a direct probe
+  of the failing formula succeeded (slow, ~13s, but `HTTP 200`) before
+  resuming. Resumed from 759/795, completed all 795 without further
+  incident, and wrote `oqmd_coverage_manifest.json` +
+  `oqmd_coverage_snapshot.json`.
+
+**Verified per §6.5 Step 3, all checks pass**: `distinct_formulas_queried
+== 795`; `coverage_snapshot_sha256` in the manifest
+(`1460d11a...86b46f5`) matches a fresh `shasum -a 256` of the actual
+snapshot file; `retrieval` metadata present and sane
+(`first_fetch_at_utc: 2026-08-23T09:52:48Z`,
+`last_fetch_at_utc`/`completed_at_utc: 2026-08-23T10:05:25Z`,
+`resumed_from_cache_count: 759`, `across_multiple_runs: true`,
+`unknown_fetch_timestamp_count: 714` — the original pre-existing cache
+rows, written before per-row timestamps existed); resume cache
+(`.oqmd_fetch_cache.jsonl`/`.meta.json`) deleted on full success, confirmed
+gone. **Committability**: the raw snapshot (2.31 MB) is not comparable
+in size to the `kononova_sample.jsonl` ~500 KB precedent, so it's now
+gitignored (`.gitignore` updated); only the 240 KB manifest and the 5.8
+KB gate result are committed.
+
+**Gate computed per §6.3/Step 4** (`python3
+benchmarks/analyze_oqmd_coverage_gate.py`,
+`benchmarks/data/oqmd_coverage_gate_result.json`):
+
+| Metric | Result |
+|---|---|
+| Distinct species (formula) coverage | 651/795 (81.9%) |
+| Target coverage | 281/381 (73.8%) |
+| Precursor coverage | 392/438 (89.5%) |
+| Fully-computable routes | 1,327 |
+| Targets with ≥2 fully-computable routes | 279 |
+| **Outcome-disagreeing comparable targets (the gate metric)** | **273** |
+| Independent pairwise comparisons | 2,357 |
+| Unmatched species | 144 |
+| Null-energy-excluded / invalid-volume entries | 0 / 0 |
+| Multi-polymorph rate among matched species | 579/651 |
+
+**Gate verdict: GO — 273 outcome-disagreeing comparable targets against
+a ≥30 floor (a 9.1x margin)**, `benchmarks/data/oqmd_coverage_gate_result.json`
+carries the full 273-target passing list. The 81.9% per-formula coverage
+is close to (and consistent with) §6.2.3's smoke-test figure of 81.7%
+over the earlier 714-formula partial cache, computed under the same
+corrected `duplicate_entry_id` policy — no policy change between the
+smoke test and this real result. No other pre-registered gate exists
+beyond this route-pair floor (confirmed in the script's own output).
+Chemical-family breakdown (informal, first-matching-anion heuristic
+only, not a taxonomy — §6.3): Oxide 192, Other 119, Sulfide/chalcogenide
+38, Halide 21, Phosphide/phosphate 5, Nitride 6.
+
+**Remaining label limitations, carried forward from conditions 2/4, not
+resolved by condition 1**: the pure/impure label condition 1's gate
+counts against is the same label condition 2 (§2) found to be noisy and
+unverified-at-scale (real accessibility and route-representation
+caveats found in a 15-item sample) -- any future calibration should
+treat it as such, not as ground truth with an established accuracy
+rate, and should watch for the specific caveat patterns §2/§3 found
+(doped-compound-under-host-formula routes, flux-growth routes,
+duplicated-element and non-standard-separator formula artifacts) if
+they recur systematically in the 273-target gate population, which was
+not itself re-checked for these patterns at scale.
+
+**Per §6.5 Step 5, stopping here.** All four Phase 21B GO conditions are
+now measured (§2 done, §3 done, §4 built on §2/§3, §1/condition 1 GO
+above). **This is not a calibration result.** No correlation between
+`balanced_reaction_delta_ev_per_atom` and any outcome label has been
+computed. No connection to `score_plan`, `RankingWeights`, or `Planner`
+ranking exists or is implied by this GO. Calibration itself remains a
+separate, later, explicitly-triggered phase (§7) -- this document
+records that the *precondition* for attempting it is now met, nothing
+more.
 
 ## 7. Non-goals (unchanged)
 
