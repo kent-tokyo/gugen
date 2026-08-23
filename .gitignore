@@ -9,3 +9,10 @@ CLAUDE.md
 /benchmarks/data/SS_rxns_80806.json.gz
 /benchmarks/data/.oqmd_fetch_cache.jsonl
 /benchmarks/data/.oqmd_fetch_cache.jsonl.meta.json
+# Phase 21B condition 1's raw OQMD coverage snapshot (~2.3MB) -- not
+# comparable in size to the kononova_sample.jsonl ~500KB precedent
+# (docs/thermodynamic_selectivity_calibration.md §6.4/§6.5), so only
+# the derived oqmd_coverage_manifest.json (~240KB) and
+# oqmd_coverage_gate_result.json ship. Raw entries are reproducible
+# from OQMD's own public API.
+/benchmarks/data/oqmd_coverage_snapshot.json
