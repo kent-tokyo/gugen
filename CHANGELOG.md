@@ -91,6 +91,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `cargo semver-checks` reports no new breaking changes from this module
   (the one pre-existing breaking finding is Phase 24C's, above,
   unrelated).
+- Reference-only prior-experiment evidence in `Planner` (Phase 26):
+  surfaces Phase 25's `SynthesisExecutionRecord`s during planning,
+  matched on a plan's exact `(target, precursors, route_family)` --
+  same discipline as the existing literature-evidence integration:
+  display-only, score/ranking unchanged, conflicts never hidden, never
+  described as a success rate. New `SynthesisPlan.prior_experiment_evidence:
+  Option<PriorExperimentEvidence>`, new `PlannerBuilder::prior_experiment_evidence_provider(...)`
+  (the crate's 5th optional provider), new `PriorExperimentEvidenceProvider`
+  trait (`provider.rs`) and its one real implementation,
+  `InMemoryExecutionRecordProvider` (unconditional module
+  `src/prior_experiment_evidence.rs`, no new Cargo feature -- Phase 25's
+  own types carry none either). `PriorExperimentEvidence::outcome_tally()`
+  groups matched records by outcome (e.g. the owner's own example: "2
+  TargetPhaseObtained, 1 CompetingPhaseObserved, 1 Inconclusive") --
+  **explicitly not a success rate**, since matched records are not
+  required to agree on process conditions, grades, or catalogs with each
+  other or with the plan they're attached to; those fields are shown
+  as-is on each record, never compared or averaged. Deliberately **not**
+  restricted to `ConventionalSolidState` (unlike literature evidence,
+  whose one real implementation happens to have no `Mechanochemical`
+  data) -- `route_family` is already part of the exact-match key, so
+  cross-family leakage can't happen regardless.
+  **`SynthesisPlan.prior_experiment_evidence` is a breaking change**,
+  the identical `constructible_struct_adds_field` class `cargo
+  semver-checks` already flagged when `literature_evidence` was added
+  (`report::SCHEMA_VERSION` bumped `2 -> 3` for the same reason it moved
+  `1 -> 2` then). Reinforces, not newly establishes, that the next
+  release must be at least `0.6.0`.
 
 ## [0.5.0] - 2026-08-22
 

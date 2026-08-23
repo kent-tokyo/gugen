@@ -436,6 +436,7 @@ mod tests {
             unresolved: Vec::new(),
             manual_review_required: true,
             literature_evidence: None,
+            prior_experiment_evidence: None,
         }
     }
 

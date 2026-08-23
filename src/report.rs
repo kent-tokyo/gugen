@@ -2,6 +2,7 @@ use crate::composition::Composition;
 use crate::evidence::PlanningEvidence;
 use crate::literature_evidence::LiteratureRouteEvidence;
 use crate::precursor::PrecursorSelection;
+use crate::prior_experiment_evidence::PriorExperimentEvidence;
 use crate::process::{PlannedStep, RouteFamily};
 use crate::provenance::PlanningProvenance;
 use crate::reaction::BalancedReaction;
@@ -14,8 +15,10 @@ use crate::score::{ConfidenceAssessment, PlanScoreBreakdown, PlanningAssumption}
 /// unknown fields) would need to account for. `2` as of v0.4.0: adds
 /// `SynthesisPlan.literature_evidence`, confirmed as a breaking addition
 /// by `cargo semver-checks`'s `constructible_struct_adds_field` lint --
-/// see `docs/literature_evidence_integration.md`.
-pub const SCHEMA_VERSION: u32 = 2;
+/// see `docs/literature_evidence_integration.md`. `3` as of Phase 26:
+/// adds `SynthesisPlan.prior_experiment_evidence`, the identical breaking
+/// class -- see `docs/prior_experiment_evidence.md`.
+pub const SCHEMA_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -115,6 +118,22 @@ pub struct SynthesisPlan {
     /// means more literature coverage was found, not that any specific
     /// value here is correct).
     pub literature_evidence: Option<LiteratureRouteEvidence>,
+    /// Reference-only prior-experiment evidence for this plan's exact
+    /// (target, precursors, route_family) (Phase 26), from a configured
+    /// `PriorExperimentEvidenceProvider`. `None` whenever no provider is
+    /// configured or no exact-identity match was found -- unlike
+    /// `literature_evidence`, this is **not** restricted to
+    /// `ConventionalSolidState`; `route_family` is already part of the
+    /// match key, so cross-family leakage can't happen regardless. Never
+    /// derived from or fed into `score`, `confidence`, `evidence`, or
+    /// `steps`. **Never a success rate**: the matched records' actual
+    /// process conditions, grades, and catalogs are not required to
+    /// agree with each other or with this plan's own (usually
+    /// unresolved) conditions, so grouping their outcomes together
+    /// describes what was recorded, not a probability of what a new
+    /// attempt would produce -- see `PriorExperimentEvidence::outcome_tally`'s
+    /// own doc comment.
+    pub prior_experiment_evidence: Option<PriorExperimentEvidence>,
 }
 
 /// A plan excluded from the recommended list by route-suitability findings

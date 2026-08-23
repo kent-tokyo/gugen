@@ -84,6 +84,7 @@ fn sample_report() -> SynthesisPlanningReport {
             unresolved: assessment.unresolved,
             manual_review_required: assessment.manual_review_required,
             literature_evidence: None,
+            prior_experiment_evidence: None,
         }],
         rejected_candidates: vec![],
         unresolved: vec![],

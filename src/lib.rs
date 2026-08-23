@@ -114,6 +114,7 @@ mod materials_project_adapter;
 mod mikiwame_adapter;
 mod planner;
 mod precursor;
+mod prior_experiment_evidence;
 mod process;
 mod provenance;
 mod provider;
@@ -175,6 +176,7 @@ pub use precursor::{
     AcceptedPrecursorSet, AvailabilityMetadata, InMemoryPrecursorCatalog, PrecursorCandidate,
     PrecursorId, PrecursorSearchOutcome, PrecursorSelection, search_precursor_sets,
 };
+pub use prior_experiment_evidence::{InMemoryExecutionRecordProvider, PriorExperimentEvidence};
 pub use process::{
     Atmosphere, CharacterizationMethod, ConditionConflict, ConditionPrecedent, CoolingMode,
     DurationRange, FormingMethod, GrindingMethod, HeatingPurpose, InertGas, MaterialAmount,
@@ -184,8 +186,8 @@ pub use process::{
 };
 pub use provenance::PlanningProvenance;
 pub use provider::{
-    LiteratureEvidenceProvider, PrecursorCatalog, ProcessEvidenceProvider,
-    RouteSuitabilityProvider, ThermodynamicProvider,
+    LiteratureEvidenceProvider, PrecursorCatalog, PriorExperimentEvidenceProvider,
+    ProcessEvidenceProvider, RouteSuitabilityProvider, ThermodynamicProvider,
 };
 pub use reaction::{
     BalancedReaction, CompetingPhase, ReactionEnergy, ReactionSpecies, ThermodynamicConditions,

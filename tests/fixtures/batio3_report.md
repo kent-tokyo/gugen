@@ -1,4 +1,4 @@
-# Synthesis Planning Report (schema v2)
+# Synthesis Planning Report (schema v3)
 
 **Target:** Ba:1, O:3, Ti:1
 
