@@ -173,7 +173,7 @@ pub fn search_precursor_sets(
         budget.max_precursor_sets,
     );
 
-    let mut accepted = Vec::new();
+    let mut accepted: Vec<AcceptedPrecursorSet> = Vec::new();
     let mut rejected = Vec::new();
 
     for combo in &combos {
@@ -282,26 +282,54 @@ pub fn search_precursor_sets(
 
             // A larger combination can balance with one of its precursors'
             // coefficient solved to zero (`balance()` then drops it), which
-            // collapses to the exact same precursors + reaction a smaller
-            // combination already produced -- e.g. {BaCO3, BaO, TiO2} with
-            // BaCO3 zeroed out equals {BaO, TiO2} outright. This is a real
-            // `DuplicatePlan`, not a new candidate: recording it twice would
-            // let one route silently double up in `Planner`'s ranked output
-            // and consume two slots of `max_plans_returned` for what is
-            // really one plan. `.contains()` is O(n) per check (O(n^2)
-            // overall) -- accepted counts stay small at this crate's
-            // catalog/budget scale, so this is simpler than adding Hash/Ord
-            // to `BalancedReaction` just to use a set.
-            if accepted.contains(&candidate_set) {
-                rejected.push(RejectedCandidate {
-                    precursors: candidate_set.precursors,
-                    reason_codes: vec![RejectionCode::DuplicatePlan],
-                    explanation: "this precursor set and balanced reaction were already \
-                        found via a different combination of candidates (a larger \
-                        combination's extra precursor solved to a zero coefficient, \
-                        collapsing to the same effective reactants)"
-                        .to_string(),
-                });
+            // collapses to the exact same reaction a smaller combination
+            // already produced -- e.g. {BaCO3, BaO, TiO2} with BaCO3 zeroed
+            // out equals {BaO, TiO2} outright. Two catalog entries sharing a
+            // composition under different ids can also collapse to the same
+            // reaction via two different combinations. Either way this is
+            // one real route, not two: recording it twice would let it
+            // silently double up in `Planner`'s ranked output and consume
+            // two slots of `max_plans_returned` for what is really one plan.
+            //
+            // Dedup keys on `reaction` alone (not the full struct), and
+            // keeps whichever colliding `precursors` id list sorts
+            // lexicographically smallest, not whichever arrived first --
+            // this makes the result independent of evaluation order, which
+            // matters once a caller may visit combinations in a priority
+            // order rather than always dictionary order (Phase 29). A
+            // linear scan is O(n) per check (O(n^2) overall) -- accepted
+            // counts stay small at this crate's catalog/budget scale, so
+            // this is simpler than adding Hash/Ord to `BalancedReaction`
+            // just to use a set.
+            if let Some(existing_index) = accepted
+                .iter()
+                .position(|a| a.reaction == candidate_set.reaction)
+            {
+                if candidate_set.precursors < accepted[existing_index].precursors {
+                    let superseded =
+                        std::mem::replace(&mut accepted[existing_index], candidate_set);
+                    rejected.push(RejectedCandidate {
+                        precursors: superseded.precursors,
+                        reason_codes: vec![RejectionCode::DuplicatePlan],
+                        explanation: "this precursor set and balanced reaction were already \
+                            found via a different combination of candidates; a \
+                            lexicographically-smaller equivalent precursor set was found \
+                            and is kept instead, so the result does not depend on which \
+                            combination was evaluated first"
+                            .to_string(),
+                    });
+                } else {
+                    rejected.push(RejectedCandidate {
+                        precursors: candidate_set.precursors,
+                        reason_codes: vec![RejectionCode::DuplicatePlan],
+                        explanation: "this precursor set and balanced reaction were already \
+                            found via a different combination of candidates (a larger \
+                            combination's extra precursor solved to a zero coefficient, \
+                            collapsing to the same effective reactants, or a different \
+                            catalog entry shares this composition)"
+                            .to_string(),
+                    });
+                }
                 continue;
             }
             accepted.push(candidate_set);
@@ -667,6 +695,68 @@ mod tests {
             "the redundant 3-candidate collapse must be explained as DuplicatePlan, not \
             silently dropped or silently double-accepted: {:?}",
             outcome.rejected
+        );
+    }
+
+    /// Two catalog entries can share a composition under different ids
+    /// (e.g. two vendors of the same compound) and independently balance to
+    /// the exact same reaction. Whichever is evaluated first must not
+    /// decide which id list is kept -- the canonical (lexicographically
+    /// smallest) one always wins, so a caller free to visit candidates in
+    /// any order (Phase 29's guided search, not just today's dictionary
+    /// order) gets the same `accepted` output regardless of traversal
+    /// order.
+    #[test]
+    fn duplicate_collapse_keeps_the_lexicographically_smallest_precursor_set_regardless_of_arrival_order()
+     {
+        let target = composition(&[("Ba", 1.0), ("O", 1.0)]);
+        let vendor_a = candidate("BaO-vendorA", &[("Ba", 1.0), ("O", 1.0)]);
+        let vendor_b = candidate("BaO-vendorB", &[("Ba", 1.0), ("O", 1.0)]);
+
+        let forward = search_precursor_sets(
+            &target,
+            &[vendor_a.clone(), vendor_b.clone()],
+            &PlanningConstraints::default(),
+            &generous_budget(),
+        )
+        .unwrap();
+        let reversed = search_precursor_sets(
+            &target,
+            &[vendor_b, vendor_a],
+            &PlanningConstraints::default(),
+            &generous_budget(),
+        )
+        .unwrap();
+
+        let expected = vec![PrecursorId("BaO-vendorA".to_string())];
+        assert_eq!(
+            forward
+                .accepted
+                .iter()
+                .map(|a| a.precursors.clone())
+                .collect::<Vec<_>>(),
+            vec![expected.clone()],
+            "forward order must keep the lexicographically-smaller id: {:?}",
+            forward.accepted
+        );
+        assert_eq!(
+            reversed
+                .accepted
+                .iter()
+                .map(|a| a.precursors.clone())
+                .collect::<Vec<_>>(),
+            vec![expected],
+            "reversed order must keep the same id, not whichever arrived first: {:?}",
+            reversed.accepted
+        );
+        assert!(
+            reversed
+                .rejected
+                .iter()
+                .any(|r| r.reason_codes == vec![RejectionCode::DuplicatePlan]),
+            "the superseded vendorB-first entry must be recorded as DuplicatePlan, not \
+            silently dropped: {:?}",
+            reversed.rejected
         );
     }
 
