@@ -195,9 +195,4 @@ ConfidenceAssessment {
 - Annealing heating step atmosphere: no thermodynamic or literature evidence provider is wired in yet (AGENTS.md §4.1)
 - Annealing heating step ramp rate: no thermodynamic or literature evidence provider is wired in yet (AGENTS.md §4.1)
 
-## Rejected candidates
-
-- ["BaCO3"] [MissingTargetElement]: precursor set does not cover target element(s): Ti
-- ["TiO2"] [MissingTargetElement]: precursor set does not cover target element(s): Ba
-
 _Generated 2026-08-14T00:00:00Z by gugen 0.6.0._
