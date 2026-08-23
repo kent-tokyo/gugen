@@ -1,5 +1,6 @@
 //! CLI for gugen (AGENTS.md §19): `plan`, `balance`, `explain`,
-//! `validate-target`, `doctor`, `batch`.
+//! `validate-target`, `doctor`, `batch`, and (with the `commercial_catalog`
+//! feature) `commercial-plan`.
 //!
 //! This binary is the one place in the crate allowed to read the system
 //! clock (`now_rfc3339`, used for `execution_timestamp`) -- the planning
@@ -10,6 +11,12 @@ use gugen::{
     BalancedReaction, Composition, Element, InMemoryPrecursorCatalog, Planner, PlanningConfig,
     PrecursorCandidate, ProcessStep, RankingWeights, ReactionSpecies, RouteFamily, SynthesisPlan,
     SynthesisPlanningReport, TargetSpecification, TargetSummary, ranking_weights_digest,
+};
+#[cfg(feature = "commercial_catalog")]
+use gugen::{
+    CommercialCatalogLoadMode, CommercialCatalogLoadReport, CommercialPlanAssessment,
+    CommercialPlanningConfig, CommercialPlanningRequest, CommercialPrecursorCatalog, CurrencyCode,
+    Money, PurityFraction, assess_commercial_plans,
 };
 use std::path::{Path, PathBuf};
 
@@ -67,12 +74,93 @@ enum Command {
         #[arg(long)]
         output: Option<PathBuf>,
     },
+    /// Match a target's plans against a commercial precursor catalog
+    /// (price, purity, manufacturer, lead time) -- a strictly read-only,
+    /// post-planning stage that never affects score, confidence, the
+    /// reaction, or process steps (docs/commercial_precursor_catalog.md).
+    #[cfg(feature = "commercial_catalog")]
+    CommercialPlan {
+        /// Path to a `TargetSpecification` JSON file.
+        target: PathBuf,
+        /// Path to a precursor catalog JSON file (a JSON array of
+        /// `PrecursorCandidate`) -- unchanged meaning from `plan`/`batch`.
+        #[arg(long)]
+        catalog: PathBuf,
+        /// Path to a commercial-offers catalog; CSV or JSON, by file extension.
+        #[arg(long = "commercial-catalog")]
+        commercial_catalog: PathBuf,
+        #[arg(
+            long = "commercial-catalog-mode",
+            value_enum,
+            default_value = "lenient"
+        )]
+        commercial_catalog_mode: CommercialCatalogModeArg,
+        /// Narrow to one plan by id (an id from a prior `gugen plan` run --
+        /// plan ids are stable across runs). Default: assess every plan.
+        #[arg(long = "plan-id")]
+        plan_id: Option<String>,
+        #[arg(long = "target-mass-g")]
+        target_mass_g: Option<f64>,
+        #[arg(long = "min-purity")]
+        min_purity: Option<f64>,
+        #[arg(long = "max-lead-time-days")]
+        max_lead_time_days: Option<u32>,
+        /// Integer minor units (e.g. cents); requires --currency.
+        #[arg(long = "max-total-cost")]
+        max_total_cost: Option<u64>,
+        #[arg(long)]
+        currency: Option<String>,
+        #[arg(long = "allowed-manufacturer")]
+        allowed_manufacturers: Vec<String>,
+        #[arg(long = "excluded-manufacturer")]
+        excluded_manufacturers: Vec<String>,
+        #[arg(long)]
+        output: Option<PathBuf>,
+        #[arg(long, value_enum, default_value = "json")]
+        format: CommercialOutputFormat,
+    },
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum OutputFormat {
     Json,
     Markdown,
+}
+
+#[cfg(feature = "commercial_catalog")]
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum CommercialCatalogModeArg {
+    Strict,
+    Lenient,
+}
+
+#[cfg(feature = "commercial_catalog")]
+impl From<CommercialCatalogModeArg> for CommercialCatalogLoadMode {
+    fn from(mode: CommercialCatalogModeArg) -> Self {
+        match mode {
+            CommercialCatalogModeArg::Strict => CommercialCatalogLoadMode::Strict,
+            CommercialCatalogModeArg::Lenient => CommercialCatalogLoadMode::Lenient,
+        }
+    }
+}
+
+#[cfg(feature = "commercial_catalog")]
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum CommercialOutputFormat {
+    Json,
+    Markdown,
+    Csv,
+}
+
+/// One assessed plan within a `commercial-plan` run's JSON output -- pairs
+/// `CommercialPlanAssessment` (which carries `plan_id` but not the plan's
+/// route family) with the context needed to identify it. Kept CLI-local,
+/// same "not added to the public library schema" convention as `BatchEntry`.
+#[cfg(feature = "commercial_catalog")]
+#[derive(serde::Serialize)]
+struct CommercialPlanResult {
+    route_family: RouteFamily,
+    assessment: CommercialPlanAssessment,
 }
 
 #[derive(serde::Deserialize)]
@@ -120,6 +208,38 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             catalog,
             output,
         } => run_batch(&input, &catalog, output.as_deref()),
+        #[cfg(feature = "commercial_catalog")]
+        Command::CommercialPlan {
+            target,
+            catalog,
+            commercial_catalog,
+            commercial_catalog_mode,
+            plan_id,
+            target_mass_g,
+            min_purity,
+            max_lead_time_days,
+            max_total_cost,
+            currency,
+            allowed_manufacturers,
+            excluded_manufacturers,
+            output,
+            format,
+        } => run_commercial_plan(
+            &target,
+            &catalog,
+            &commercial_catalog,
+            commercial_catalog_mode.into(),
+            plan_id.as_deref(),
+            target_mass_g,
+            min_purity,
+            max_lead_time_days,
+            max_total_cost,
+            currency.as_deref(),
+            &allowed_manufacturers,
+            &excluded_manufacturers,
+            output.as_deref(),
+            format,
+        ),
     }
 }
 
@@ -338,6 +458,144 @@ fn run_batch(
 
     let entries = batch_plan(&planner, &targets, &now_rfc3339());
     write_output(output, &serde_json::to_string_pretty(&entries)?)
+}
+
+#[cfg(feature = "commercial_catalog")]
+fn load_commercial_catalog(
+    path: &Path,
+    mode: CommercialCatalogLoadMode,
+) -> Result<(CommercialPrecursorCatalog, CommercialCatalogLoadReport), Box<dyn std::error::Error>> {
+    let text = std::fs::read_to_string(path)?;
+    match path.extension().and_then(|ext| ext.to_str()) {
+        Some("csv") => Ok(CommercialPrecursorCatalog::load_csv(&text, mode)?),
+        Some("json") => Ok(CommercialPrecursorCatalog::load_json(&text, mode)?),
+        other => {
+            Err(format!("commercial catalog path must end in .csv or .json, got {other:?}").into())
+        }
+    }
+}
+
+#[cfg(feature = "commercial_catalog")]
+#[allow(clippy::too_many_arguments)]
+fn build_commercial_planning_request(
+    target_composition: Composition,
+    target_mass_g: Option<f64>,
+    min_purity: Option<f64>,
+    max_lead_time_days: Option<u32>,
+    max_total_cost_minor_units: Option<u64>,
+    currency: Option<&str>,
+    allowed_manufacturers: &[String],
+    excluded_manufacturers: &[String],
+) -> Result<CommercialPlanningRequest, Box<dyn std::error::Error>> {
+    let max_total_cost = match (max_total_cost_minor_units, currency) {
+        (None, None) => None,
+        (Some(minor_units), Some(code)) => Some(Money::new(minor_units, CurrencyCode::new(code)?)),
+        (Some(_), None) => return Err("--max-total-cost requires --currency".into()),
+        (None, Some(_)) => return Err("--currency requires --max-total-cost".into()),
+    };
+    let min_purity = min_purity.map(PurityFraction::new).transpose()?;
+
+    Ok(CommercialPlanningRequest {
+        target_composition: target_mass_g.map(|_| target_composition),
+        target_batch_mass_grams: target_mass_g,
+        allowed_manufacturers: if allowed_manufacturers.is_empty() {
+            None
+        } else {
+            Some(allowed_manufacturers.iter().cloned().collect())
+        },
+        excluded_manufacturers: excluded_manufacturers.iter().cloned().collect(),
+        min_purity,
+        max_lead_time_days,
+        max_total_cost,
+        ..CommercialPlanningRequest::default()
+    })
+}
+
+#[cfg(feature = "commercial_catalog")]
+#[allow(clippy::too_many_arguments)]
+fn run_commercial_plan(
+    target_path: &Path,
+    catalog_path: &Path,
+    commercial_catalog_path: &Path,
+    commercial_catalog_mode: CommercialCatalogLoadMode,
+    plan_id: Option<&str>,
+    target_mass_g: Option<f64>,
+    min_purity: Option<f64>,
+    max_lead_time_days: Option<u32>,
+    max_total_cost_minor_units: Option<u64>,
+    currency: Option<&str>,
+    allowed_manufacturers: &[String],
+    excluded_manufacturers: &[String],
+    output: Option<&Path>,
+    format: CommercialOutputFormat,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let target = load_target(target_path)?;
+    let catalog = load_catalog(catalog_path)?;
+    let planner = Planner::builder(catalog, PlanningConfig::default()).build();
+    let report = planner.plan(&target, &now_rfc3339())?;
+
+    let plans: Vec<SynthesisPlan> = match plan_id {
+        Some(id) => {
+            let plan = report
+                .plans
+                .iter()
+                .find(|p| p.plan_id.0 == id)
+                .cloned()
+                .ok_or_else(|| {
+                    let available: Vec<&str> =
+                        report.plans.iter().map(|p| p.plan_id.0.as_str()).collect();
+                    format!("no plan '{id}' in this report; available: {available:?}")
+                })?;
+            vec![plan]
+        }
+        None => report.plans.clone(),
+    };
+
+    let (commercial_catalog, load_report) =
+        load_commercial_catalog(commercial_catalog_path, commercial_catalog_mode)?;
+    eprintln!(
+        "commercial catalog: {} accepted, {} duplicate offer id(s) collapsed, {} rejected",
+        load_report.accepted,
+        load_report.duplicate_offer_ids_collapsed,
+        load_report.rejected.len()
+    );
+
+    let request = build_commercial_planning_request(
+        target.composition.clone(),
+        target_mass_g,
+        min_purity,
+        max_lead_time_days,
+        max_total_cost_minor_units,
+        currency,
+        allowed_manufacturers,
+        excluded_manufacturers,
+    )?;
+
+    let assessments = assess_commercial_plans(
+        &plans,
+        &commercial_catalog,
+        &request,
+        &CommercialPlanningConfig::default(),
+    )?;
+
+    let rendered = match format {
+        CommercialOutputFormat::Json => {
+            let results: Vec<CommercialPlanResult> = plans
+                .iter()
+                .zip(assessments.iter())
+                .map(|(plan, assessment)| CommercialPlanResult {
+                    route_family: plan.route_family,
+                    assessment: assessment.clone(),
+                })
+                .collect();
+            serde_json::to_string_pretty(&results)?
+        }
+        CommercialOutputFormat::Markdown => {
+            render_commercial_report_markdown(&report.target, &plans, &assessments, &load_report)
+        }
+        CommercialOutputFormat::Csv => render_commercial_report_csv(&assessments)?,
+    };
+    write_output(output, &rendered)
 }
 
 // --- Rendering (JSON output goes through serde directly; the helpers below
@@ -562,6 +820,194 @@ fn render_report_markdown(report: &SynthesisPlanningReport) -> String {
     out
 }
 
+#[cfg(feature = "commercial_catalog")]
+fn render_commercial_report_markdown(
+    target: &TargetSummary,
+    plans: &[SynthesisPlan],
+    assessments: &[CommercialPlanAssessment],
+    load_report: &CommercialCatalogLoadReport,
+) -> String {
+    let mut out = String::new();
+    out.push_str("# Commercial Precursor Assessment\n\n");
+    out.push_str(&format!(
+        "**Target:** {}\n\n",
+        format_composition(&target.composition)
+    ));
+    out.push_str(
+        "_gugen does not certify commercial data: prices are estimates, availability may be \
+        stale, and product suitability for a given synthesis is not certified. Verify vendor \
+        documentation and SDS sheets separately._\n\n",
+    );
+    out.push_str(&format!(
+        "**Commercial catalog load:** {} accepted, {} duplicate offer id(s) collapsed, {} \
+        rejected.\n\n",
+        load_report.accepted,
+        load_report.duplicate_offer_ids_collapsed,
+        load_report.rejected.len()
+    ));
+
+    for (plan, assessment) in plans.iter().zip(assessments.iter()) {
+        out.push_str(&render_commercial_assessment_markdown(plan, assessment));
+    }
+    out
+}
+
+#[cfg(feature = "commercial_catalog")]
+fn render_commercial_assessment_markdown(
+    plan: &SynthesisPlan,
+    assessment: &CommercialPlanAssessment,
+) -> String {
+    let mut out = String::new();
+    out.push_str(&format!(
+        "## Plan {} ({:?})\n\n",
+        assessment.plan_id, plan.route_family
+    ));
+    out.push_str(&format!(
+        "- Every precursor has a catalog match: {}\n\n",
+        assessment.every_precursor_has_a_match
+    ));
+
+    if !assessment.unmatched_precursors.is_empty() {
+        out.push_str("### Unmatched precursors\n\n");
+        for (id, comp) in &assessment.unmatched_precursors {
+            out.push_str(&format!("- {id} ({})\n", format_composition(comp)));
+        }
+        out.push('\n');
+    }
+
+    if assessment.combinations.is_empty() {
+        out.push_str("_No procurement combinations were found._\n\n");
+    } else {
+        out.push_str("### Procurement combinations (ranked)\n\n");
+        for (rank, combo) in assessment.combinations.iter().enumerate() {
+            out.push_str(&format!("{}. `{}`\n", rank + 1, combo.combination_id));
+            for sel in &combo.selections {
+                out.push_str(&format!(
+                    "   - {} <- offer {} ({:.3} g theoretical)\n",
+                    sel.precursor, sel.offer_id, sel.theoretical_pure_mass_required_grams
+                ));
+            }
+            match combo.total_cost {
+                Some(cost) => out.push_str(&format!(
+                    "   - Estimated subtotal: {} {}\n",
+                    cost.minor_units(),
+                    cost.currency()
+                )),
+                None => out.push_str(
+                    "   - Total cost unknown (unresolved price/package size, or the selected \
+                    offers span more than one currency -- gugen never converts currencies).\n",
+                ),
+            }
+        }
+        out.push('\n');
+    }
+
+    if !assessment.rejected_offers.is_empty() {
+        out.push_str("### Rejected offers\n\n");
+        for r in &assessment.rejected_offers {
+            out.push_str(&format!(
+                "- {} {:?}: {}\n",
+                r.precursor, r.reason_codes, r.explanation
+            ));
+        }
+        out.push('\n');
+    }
+
+    if !assessment.unresolved_commercial_fields.is_empty() {
+        out.push_str("### Unresolved fields\n\n");
+        for u in &assessment.unresolved_commercial_fields {
+            out.push_str(&format!(
+                "- {} / offer {}: {}\n",
+                u.precursor, u.offer_id, u.field
+            ));
+        }
+        out.push('\n');
+    }
+
+    if !assessment.warnings.is_empty() {
+        out.push_str("### Warnings\n\n");
+        for w in &assessment.warnings {
+            out.push_str(&format!("- [{:?}] {}\n", w.severity, w.message));
+        }
+        out.push('\n');
+    }
+
+    out.push_str("### Search budget\n\n```\n");
+    out.push_str(&format!("{:#?}\n", assessment.search_budget));
+    out.push_str("```\n\n");
+
+    out
+}
+
+#[cfg(feature = "commercial_catalog")]
+fn render_commercial_report_csv(
+    assessments: &[CommercialPlanAssessment],
+) -> Result<String, Box<dyn std::error::Error>> {
+    let mut writer = csv::Writer::from_writer(vec![]);
+    writer.write_record([
+        "plan_id",
+        "every_precursor_has_a_match",
+        "combination_rank",
+        "combination_id",
+        "total_cost_minor_units",
+        "currency",
+        "all_costs_known",
+        "max_lead_time_days",
+        "all_availability_acceptable",
+        "note",
+    ])?;
+
+    for assessment in assessments {
+        if assessment.combinations.is_empty() {
+            writer.write_record([
+                assessment.plan_id.0.as_str(),
+                &assessment.every_precursor_has_a_match.to_string(),
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "no procurement combination found",
+            ])?;
+            continue;
+        }
+        for (rank, combo) in assessment.combinations.iter().enumerate() {
+            let (cost, currency) = match combo.total_cost {
+                Some(cost) => (cost.minor_units().to_string(), cost.currency().to_string()),
+                None => (String::new(), String::new()),
+            };
+            // `all_costs_known` is per-selection; a combination can still
+            // have no `total_cost` if the selected offers span more than
+            // one currency (gugen never converts currencies) -- state that
+            // here so a blank cost next to `all_costs_known=true` doesn't
+            // read as a bug in this writer.
+            let note = if combo.total_cost.is_none() && combo.all_costs_known {
+                "total unavailable: selected offers span more than one currency"
+            } else {
+                ""
+            };
+            writer.write_record([
+                assessment.plan_id.0.as_str(),
+                &assessment.every_precursor_has_a_match.to_string(),
+                &(rank + 1).to_string(),
+                &combo.combination_id,
+                &cost,
+                &currency,
+                &combo.all_costs_known.to_string(),
+                &combo
+                    .max_lead_time_days
+                    .map_or(String::new(), |d| d.to_string()),
+                &combo.all_availability_acceptable.to_string(),
+                note,
+            ])?;
+        }
+    }
+
+    Ok(String::from_utf8(writer.into_inner()?)?)
+}
+
 /// UTC RFC3339, second precision. The only wall-clock read in this crate
 /// (the planning core is forbidden from doing this itself -- AGENTS.md §25).
 fn now_rfc3339() -> String {
@@ -620,6 +1066,13 @@ mod tests {
 
     fn write_temp(name: &str, contents: &str) -> PathBuf {
         let path = std::env::temp_dir().join(format!("gugen_cli_test_{name}.json"));
+        std::fs::write(&path, contents).unwrap();
+        path
+    }
+
+    #[cfg(feature = "commercial_catalog")]
+    fn write_temp_csv(name: &str, contents: &str) -> PathBuf {
+        let path = std::env::temp_dir().join(format!("gugen_cli_test_{name}.csv"));
         std::fs::write(&path, contents).unwrap();
         path
     }
@@ -842,5 +1295,358 @@ mod tests {
         let now = now_rfc3339();
         assert!(now.starts_with("20"), "unexpected timestamp: {now}");
         assert!(now.ends_with('Z'));
+    }
+
+    #[cfg(feature = "commercial_catalog")]
+    fn golden_commercial_assessment() -> (
+        SynthesisPlanningReport,
+        Vec<CommercialPlanAssessment>,
+        CommercialCatalogLoadReport,
+    ) {
+        let report = golden_report();
+        let (catalog, load_report) = CommercialPrecursorCatalog::load_csv(
+            include_str!("../../tests/fixtures/commercial_catalog_sample.csv"),
+            CommercialCatalogLoadMode::Lenient,
+        )
+        .unwrap();
+        let assessments = assess_commercial_plans(
+            &report.plans,
+            &catalog,
+            &CommercialPlanningRequest::default(),
+            &CommercialPlanningConfig::default(),
+        )
+        .unwrap();
+        (report, assessments, load_report)
+    }
+
+    /// AGENTS.md §21.6: JSON output schema must not change unintentionally.
+    #[cfg(feature = "commercial_catalog")]
+    #[test]
+    fn commercial_plan_json_output_matches_the_golden_snapshot() {
+        let (report, assessments, _) = golden_commercial_assessment();
+        let results: Vec<CommercialPlanResult> = report
+            .plans
+            .iter()
+            .zip(assessments.iter())
+            .map(|(plan, assessment)| CommercialPlanResult {
+                route_family: plan.route_family,
+                assessment: assessment.clone(),
+            })
+            .collect();
+        let rendered = serde_json::to_string_pretty(&results).unwrap();
+        let golden = include_str!("../../tests/fixtures/commercial_plan_report.json");
+        assert_eq!(rendered.trim_end(), golden.trim_end());
+    }
+
+    /// AGENTS.md §21.6: markdown output schema must not change unintentionally.
+    #[cfg(feature = "commercial_catalog")]
+    #[test]
+    fn commercial_plan_markdown_output_matches_the_golden_snapshot() {
+        let (report, assessments, load_report) = golden_commercial_assessment();
+        let rendered = render_commercial_report_markdown(
+            &report.target,
+            &report.plans,
+            &assessments,
+            &load_report,
+        );
+        let golden = include_str!("../../tests/fixtures/commercial_plan_report.md");
+        assert_eq!(rendered.trim_end(), golden.trim_end());
+    }
+
+    #[cfg(feature = "commercial_catalog")]
+    #[test]
+    fn commercial_plan_json_output_is_a_non_empty_array() {
+        let target_path = write_temp("commercial_target", &barium_titanate_target_json());
+        let catalog_path = write_temp("commercial_catalog", &barium_titanate_catalog_json());
+        let commercial_catalog_path = write_temp_csv(
+            "commercial_offers",
+            include_str!("../../tests/fixtures/commercial_catalog_sample.csv"),
+        );
+        let output_path = std::env::temp_dir().join("gugen_cli_test_commercial_plan_output.json");
+
+        run_commercial_plan(
+            &target_path,
+            &catalog_path,
+            &commercial_catalog_path,
+            CommercialCatalogLoadMode::Lenient,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            &[],
+            &[],
+            Some(&output_path),
+            CommercialOutputFormat::Json,
+        )
+        .unwrap();
+
+        let text = std::fs::read_to_string(&output_path).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert!(!value.as_array().unwrap().is_empty());
+    }
+
+    #[cfg(feature = "commercial_catalog")]
+    #[test]
+    fn commercial_plan_accepts_a_json_commercial_catalog() {
+        let target_path = write_temp(
+            "commercial_target_json_catalog",
+            &barium_titanate_target_json(),
+        );
+        let catalog_path = write_temp(
+            "commercial_catalog_for_json_catalog",
+            &barium_titanate_catalog_json(),
+        );
+        let commercial_catalog_path = write_temp(
+            "commercial_offers_json",
+            include_str!("../../tests/fixtures/commercial_catalog_sample.json"),
+        );
+        let output_path =
+            std::env::temp_dir().join("gugen_cli_test_commercial_plan_json_catalog_output.json");
+
+        run_commercial_plan(
+            &target_path,
+            &catalog_path,
+            &commercial_catalog_path,
+            CommercialCatalogLoadMode::Lenient,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            &[],
+            &[],
+            Some(&output_path),
+            CommercialOutputFormat::Json,
+        )
+        .unwrap();
+
+        let text = std::fs::read_to_string(&output_path).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert!(!value.as_array().unwrap().is_empty());
+    }
+
+    #[cfg(feature = "commercial_catalog")]
+    #[test]
+    fn commercial_plan_markdown_format_contains_key_sections() {
+        let target_path = write_temp("commercial_markdown_target", &barium_titanate_target_json());
+        let catalog_path = write_temp(
+            "commercial_markdown_catalog",
+            &barium_titanate_catalog_json(),
+        );
+        let commercial_catalog_path = write_temp_csv(
+            "commercial_markdown_offers",
+            include_str!("../../tests/fixtures/commercial_catalog_sample.csv"),
+        );
+        let output_path =
+            std::env::temp_dir().join("gugen_cli_test_commercial_plan_markdown_output.md");
+
+        run_commercial_plan(
+            &target_path,
+            &catalog_path,
+            &commercial_catalog_path,
+            CommercialCatalogLoadMode::Lenient,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            &[],
+            &[],
+            Some(&output_path),
+            CommercialOutputFormat::Markdown,
+        )
+        .unwrap();
+
+        let text = std::fs::read_to_string(&output_path).unwrap();
+        assert!(text.contains("# Commercial Precursor Assessment"));
+        assert!(text.contains("gugen does not certify commercial data"));
+        assert!(text.contains("## Plan plan-"));
+    }
+
+    #[cfg(feature = "commercial_catalog")]
+    #[test]
+    fn commercial_plan_csv_output_has_the_expected_header() {
+        let target_path = write_temp("commercial_csv_target", &barium_titanate_target_json());
+        let catalog_path = write_temp("commercial_csv_catalog", &barium_titanate_catalog_json());
+        let commercial_catalog_path = write_temp_csv(
+            "commercial_csv_offers",
+            include_str!("../../tests/fixtures/commercial_catalog_sample.csv"),
+        );
+        let output_path = std::env::temp_dir().join("gugen_cli_test_commercial_plan_output.csv");
+
+        run_commercial_plan(
+            &target_path,
+            &catalog_path,
+            &commercial_catalog_path,
+            CommercialCatalogLoadMode::Lenient,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            &[],
+            &[],
+            Some(&output_path),
+            CommercialOutputFormat::Csv,
+        )
+        .unwrap();
+
+        let text = std::fs::read_to_string(&output_path).unwrap();
+        let mut lines = text.lines();
+        assert_eq!(
+            lines.next().unwrap(),
+            "plan_id,every_precursor_has_a_match,combination_rank,combination_id,\
+            total_cost_minor_units,currency,all_costs_known,max_lead_time_days,\
+            all_availability_acceptable,note"
+        );
+        assert!(lines.next().is_some());
+    }
+
+    #[cfg(feature = "commercial_catalog")]
+    #[test]
+    fn commercial_plan_id_narrows_to_one_result_and_errors_on_unknown_id() {
+        let target_path = write_temp("commercial_plan_id_target", &barium_titanate_target_json());
+        let catalog_path = write_temp(
+            "commercial_plan_id_catalog",
+            &barium_titanate_catalog_json(),
+        );
+        let commercial_catalog_path = write_temp_csv(
+            "commercial_plan_id_offers",
+            include_str!("../../tests/fixtures/commercial_catalog_sample.csv"),
+        );
+        let plan_report_path =
+            std::env::temp_dir().join("gugen_cli_test_commercial_plan_id_report.json");
+        run_plan(
+            &target_path,
+            &catalog_path,
+            Some(&plan_report_path),
+            OutputFormat::Json,
+        )
+        .unwrap();
+        let report: SynthesisPlanningReport =
+            serde_json::from_str(&std::fs::read_to_string(&plan_report_path).unwrap()).unwrap();
+        let plan_id = report.plans[0].plan_id.0.clone();
+
+        let output_path =
+            std::env::temp_dir().join("gugen_cli_test_commercial_plan_id_output.json");
+        run_commercial_plan(
+            &target_path,
+            &catalog_path,
+            &commercial_catalog_path,
+            CommercialCatalogLoadMode::Lenient,
+            Some(&plan_id),
+            None,
+            None,
+            None,
+            None,
+            None,
+            &[],
+            &[],
+            Some(&output_path),
+            CommercialOutputFormat::Json,
+        )
+        .unwrap();
+        let value: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&output_path).unwrap()).unwrap();
+        assert_eq!(value.as_array().unwrap().len(), 1);
+
+        assert!(
+            run_commercial_plan(
+                &target_path,
+                &catalog_path,
+                &commercial_catalog_path,
+                CommercialCatalogLoadMode::Lenient,
+                Some("plan-does-not-exist"),
+                None,
+                None,
+                None,
+                None,
+                None,
+                &[],
+                &[],
+                None,
+                CommercialOutputFormat::Json,
+            )
+            .is_err()
+        );
+    }
+
+    #[cfg(feature = "commercial_catalog")]
+    #[test]
+    fn load_commercial_catalog_dispatches_by_extension_and_rejects_unknown_ones() {
+        let csv_path = write_temp_csv(
+            "load_dispatch_csv",
+            include_str!("../../tests/fixtures/commercial_catalog_sample.csv"),
+        );
+        let (_, csv_report) =
+            load_commercial_catalog(&csv_path, CommercialCatalogLoadMode::Lenient).unwrap();
+        assert!(csv_report.accepted > 0);
+
+        let json_path = write_temp(
+            "load_dispatch_json",
+            include_str!("../../tests/fixtures/commercial_catalog_sample.json"),
+        );
+        let (_, json_report) =
+            load_commercial_catalog(&json_path, CommercialCatalogLoadMode::Lenient).unwrap();
+        assert!(json_report.accepted > 0);
+
+        let txt_path = std::env::temp_dir().join("gugen_cli_test_load_dispatch.txt");
+        std::fs::write(&txt_path, "irrelevant").unwrap();
+        assert!(load_commercial_catalog(&txt_path, CommercialCatalogLoadMode::Lenient).is_err());
+    }
+
+    #[cfg(feature = "commercial_catalog")]
+    #[test]
+    fn build_commercial_planning_request_requires_cost_and_currency_together() {
+        let comp = composition(&[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)]);
+
+        assert!(
+            build_commercial_planning_request(
+                comp.clone(),
+                None,
+                None,
+                None,
+                Some(1000),
+                None,
+                &[],
+                &[]
+            )
+            .is_err()
+        );
+        assert!(
+            build_commercial_planning_request(
+                comp.clone(),
+                None,
+                None,
+                None,
+                None,
+                Some("USD"),
+                &[],
+                &[]
+            )
+            .is_err()
+        );
+        assert!(
+            build_commercial_planning_request(comp.clone(), None, None, None, None, None, &[], &[])
+                .is_ok()
+        );
+        assert!(
+            build_commercial_planning_request(
+                comp,
+                None,
+                None,
+                None,
+                Some(1000),
+                Some("USD"),
+                &[],
+                &[]
+            )
+            .is_ok()
+        );
     }
 }

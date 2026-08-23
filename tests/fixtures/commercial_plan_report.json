@@ -1,0 +1,622 @@
+[
+  {
+    "route_family": "ConventionalSolidState",
+    "assessment": {
+      "plan_id": "plan-1677d44bfe4dbdc2",
+      "every_precursor_has_a_match": true,
+      "combinations": [
+        {
+          "combination_id": "EML-BACO3-99|EML-TIO2-995",
+          "selections": [
+            {
+              "precursor": "BaCO3",
+              "precursor_composition": {
+                "Ba": 1.0,
+                "C": 1.0,
+                "O": 3.0
+              },
+              "reaction_coefficient": 1,
+              "offer_id": "EML-BACO3-99",
+              "theoretical_pure_mass_required_grams": 197.33499999999998,
+              "purity_adjusted_purchase_mass_grams": 199.32828282828282,
+              "package_count": 1,
+              "purchased_mass_grams": 500.0,
+              "excess_mass_grams": 300.6717171717172,
+              "subtotal": {
+                "minor_units": 4550,
+                "currency": "USD"
+              },
+              "unresolved_fields": [],
+              "assumptions": [
+                "Purchase mass was adjusted using the catalog purity value. This does not establish that the unspecified impurities are inert or acceptable for the synthesis."
+              ],
+              "warnings": []
+            },
+            {
+              "precursor": "TiO2",
+              "precursor_composition": {
+                "O": 2.0,
+                "Ti": 1.0
+              },
+              "reaction_coefficient": 1,
+              "offer_id": "EML-TIO2-995",
+              "theoretical_pure_mass_required_grams": 79.865,
+              "purity_adjusted_purchase_mass_grams": 80.26633165829145,
+              "package_count": 1,
+              "purchased_mass_grams": 500.0,
+              "excess_mass_grams": 419.73366834170855,
+              "subtotal": {
+                "minor_units": 6200,
+                "currency": "USD"
+              },
+              "unresolved_fields": [],
+              "assumptions": [
+                "Purchase mass was adjusted using the catalog purity value. This does not establish that the unspecified impurities are inert or acceptable for the synthesis."
+              ],
+              "warnings": []
+            }
+          ],
+          "total_cost": {
+            "minor_units": 10750,
+            "currency": "USD"
+          },
+          "all_costs_known": true,
+          "max_lead_time_days": 5,
+          "all_availability_acceptable": true
+        },
+        {
+          "combination_id": "EML-BACO3-99|DCS-TIO2-98",
+          "selections": [
+            {
+              "precursor": "BaCO3",
+              "precursor_composition": {
+                "Ba": 1.0,
+                "C": 1.0,
+                "O": 3.0
+              },
+              "reaction_coefficient": 1,
+              "offer_id": "EML-BACO3-99",
+              "theoretical_pure_mass_required_grams": 197.33499999999998,
+              "purity_adjusted_purchase_mass_grams": 199.32828282828282,
+              "package_count": 1,
+              "purchased_mass_grams": 500.0,
+              "excess_mass_grams": 300.6717171717172,
+              "subtotal": {
+                "minor_units": 4550,
+                "currency": "USD"
+              },
+              "unresolved_fields": [],
+              "assumptions": [
+                "Purchase mass was adjusted using the catalog purity value. This does not establish that the unspecified impurities are inert or acceptable for the synthesis."
+              ],
+              "warnings": []
+            },
+            {
+              "precursor": "TiO2",
+              "precursor_composition": {
+                "O": 2.0,
+                "Ti": 1.0
+              },
+              "reaction_coefficient": 1,
+              "offer_id": "DCS-TIO2-98",
+              "theoretical_pure_mass_required_grams": 79.865,
+              "purity_adjusted_purchase_mass_grams": 81.49489795918367,
+              "package_count": 1,
+              "purchased_mass_grams": 2500.0,
+              "excess_mass_grams": 2418.5051020408164,
+              "subtotal": {
+                "minor_units": 9800,
+                "currency": "USD"
+              },
+              "unresolved_fields": [],
+              "assumptions": [
+                "Purchase mass was adjusted using the catalog purity value. This does not establish that the unspecified impurities are inert or acceptable for the synthesis."
+              ],
+              "warnings": []
+            }
+          ],
+          "total_cost": {
+            "minor_units": 14350,
+            "currency": "USD"
+          },
+          "all_costs_known": true,
+          "max_lead_time_days": 21,
+          "all_availability_acceptable": true
+        },
+        {
+          "combination_id": "DCS-BACO3-995|EML-TIO2-995",
+          "selections": [
+            {
+              "precursor": "BaCO3",
+              "precursor_composition": {
+                "Ba": 1.0,
+                "C": 1.0,
+                "O": 3.0
+              },
+              "reaction_coefficient": 1,
+              "offer_id": "DCS-BACO3-995",
+              "theoretical_pure_mass_required_grams": 197.33499999999998,
+              "purity_adjusted_purchase_mass_grams": 198.32663316582912,
+              "package_count": 1,
+              "purchased_mass_grams": 1000.0,
+              "excess_mass_grams": 801.6733668341709,
+              "subtotal": {
+                "minor_units": 12000,
+                "currency": "USD"
+              },
+              "unresolved_fields": [],
+              "assumptions": [
+                "Purchase mass was adjusted using the catalog purity value. This does not establish that the unspecified impurities are inert or acceptable for the synthesis."
+              ],
+              "warnings": []
+            },
+            {
+              "precursor": "TiO2",
+              "precursor_composition": {
+                "O": 2.0,
+                "Ti": 1.0
+              },
+              "reaction_coefficient": 1,
+              "offer_id": "EML-TIO2-995",
+              "theoretical_pure_mass_required_grams": 79.865,
+              "purity_adjusted_purchase_mass_grams": 80.26633165829145,
+              "package_count": 1,
+              "purchased_mass_grams": 500.0,
+              "excess_mass_grams": 419.73366834170855,
+              "subtotal": {
+                "minor_units": 6200,
+                "currency": "USD"
+              },
+              "unresolved_fields": [],
+              "assumptions": [
+                "Purchase mass was adjusted using the catalog purity value. This does not establish that the unspecified impurities are inert or acceptable for the synthesis."
+              ],
+              "warnings": []
+            }
+          ],
+          "total_cost": {
+            "minor_units": 18200,
+            "currency": "USD"
+          },
+          "all_costs_known": true,
+          "max_lead_time_days": 10,
+          "all_availability_acceptable": true
+        },
+        {
+          "combination_id": "DCS-BACO3-995|DCS-TIO2-98",
+          "selections": [
+            {
+              "precursor": "BaCO3",
+              "precursor_composition": {
+                "Ba": 1.0,
+                "C": 1.0,
+                "O": 3.0
+              },
+              "reaction_coefficient": 1,
+              "offer_id": "DCS-BACO3-995",
+              "theoretical_pure_mass_required_grams": 197.33499999999998,
+              "purity_adjusted_purchase_mass_grams": 198.32663316582912,
+              "package_count": 1,
+              "purchased_mass_grams": 1000.0,
+              "excess_mass_grams": 801.6733668341709,
+              "subtotal": {
+                "minor_units": 12000,
+                "currency": "USD"
+              },
+              "unresolved_fields": [],
+              "assumptions": [
+                "Purchase mass was adjusted using the catalog purity value. This does not establish that the unspecified impurities are inert or acceptable for the synthesis."
+              ],
+              "warnings": []
+            },
+            {
+              "precursor": "TiO2",
+              "precursor_composition": {
+                "O": 2.0,
+                "Ti": 1.0
+              },
+              "reaction_coefficient": 1,
+              "offer_id": "DCS-TIO2-98",
+              "theoretical_pure_mass_required_grams": 79.865,
+              "purity_adjusted_purchase_mass_grams": 81.49489795918367,
+              "package_count": 1,
+              "purchased_mass_grams": 2500.0,
+              "excess_mass_grams": 2418.5051020408164,
+              "subtotal": {
+                "minor_units": 9800,
+                "currency": "USD"
+              },
+              "unresolved_fields": [],
+              "assumptions": [
+                "Purchase mass was adjusted using the catalog purity value. This does not establish that the unspecified impurities are inert or acceptable for the synthesis."
+              ],
+              "warnings": []
+            }
+          ],
+          "total_cost": {
+            "minor_units": 21800,
+            "currency": "USD"
+          },
+          "all_costs_known": true,
+          "max_lead_time_days": 21,
+          "all_availability_acceptable": true
+        },
+        {
+          "combination_id": "OSK-BACO3-EUR|EML-TIO2-995",
+          "selections": [
+            {
+              "precursor": "BaCO3",
+              "precursor_composition": {
+                "Ba": 1.0,
+                "C": 1.0,
+                "O": 3.0
+              },
+              "reaction_coefficient": 1,
+              "offer_id": "OSK-BACO3-EUR",
+              "theoretical_pure_mass_required_grams": 197.33499999999998,
+              "purity_adjusted_purchase_mass_grams": 203.4381443298969,
+              "package_count": 1,
+              "purchased_mass_grams": 1000.0,
+              "excess_mass_grams": 796.5618556701031,
+              "subtotal": {
+                "minor_units": 9500,
+                "currency": "EUR"
+              },
+              "unresolved_fields": [],
+              "assumptions": [
+                "Purchase mass was adjusted using the catalog purity value. This does not establish that the unspecified impurities are inert or acceptable for the synthesis."
+              ],
+              "warnings": []
+            },
+            {
+              "precursor": "TiO2",
+              "precursor_composition": {
+                "O": 2.0,
+                "Ti": 1.0
+              },
+              "reaction_coefficient": 1,
+              "offer_id": "EML-TIO2-995",
+              "theoretical_pure_mass_required_grams": 79.865,
+              "purity_adjusted_purchase_mass_grams": 80.26633165829145,
+              "package_count": 1,
+              "purchased_mass_grams": 500.0,
+              "excess_mass_grams": 419.73366834170855,
+              "subtotal": {
+                "minor_units": 6200,
+                "currency": "USD"
+              },
+              "unresolved_fields": [],
+              "assumptions": [
+                "Purchase mass was adjusted using the catalog purity value. This does not establish that the unspecified impurities are inert or acceptable for the synthesis."
+              ],
+              "warnings": []
+            }
+          ],
+          "total_cost": null,
+          "all_costs_known": true,
+          "max_lead_time_days": 14,
+          "all_availability_acceptable": true
+        }
+      ],
+      "unmatched_precursors": [],
+      "rejected_offers": [],
+      "unresolved_commercial_fields": [],
+      "warnings": [],
+      "search_budget": {
+        "combinations_evaluated": 9,
+        "combinations_omitted": 0,
+        "is_exhaustive": true
+      }
+    }
+  },
+  {
+    "route_family": "Mechanochemical",
+    "assessment": {
+      "plan_id": "plan-ee311be9350b7d8b",
+      "every_precursor_has_a_match": true,
+      "combinations": [
+        {
+          "combination_id": "EML-BACO3-99|EML-TIO2-995",
+          "selections": [
+            {
+              "precursor": "BaCO3",
+              "precursor_composition": {
+                "Ba": 1.0,
+                "C": 1.0,
+                "O": 3.0
+              },
+              "reaction_coefficient": 1,
+              "offer_id": "EML-BACO3-99",
+              "theoretical_pure_mass_required_grams": 197.33499999999998,
+              "purity_adjusted_purchase_mass_grams": 199.32828282828282,
+              "package_count": 1,
+              "purchased_mass_grams": 500.0,
+              "excess_mass_grams": 300.6717171717172,
+              "subtotal": {
+                "minor_units": 4550,
+                "currency": "USD"
+              },
+              "unresolved_fields": [],
+              "assumptions": [
+                "Purchase mass was adjusted using the catalog purity value. This does not establish that the unspecified impurities are inert or acceptable for the synthesis."
+              ],
+              "warnings": []
+            },
+            {
+              "precursor": "TiO2",
+              "precursor_composition": {
+                "O": 2.0,
+                "Ti": 1.0
+              },
+              "reaction_coefficient": 1,
+              "offer_id": "EML-TIO2-995",
+              "theoretical_pure_mass_required_grams": 79.865,
+              "purity_adjusted_purchase_mass_grams": 80.26633165829145,
+              "package_count": 1,
+              "purchased_mass_grams": 500.0,
+              "excess_mass_grams": 419.73366834170855,
+              "subtotal": {
+                "minor_units": 6200,
+                "currency": "USD"
+              },
+              "unresolved_fields": [],
+              "assumptions": [
+                "Purchase mass was adjusted using the catalog purity value. This does not establish that the unspecified impurities are inert or acceptable for the synthesis."
+              ],
+              "warnings": []
+            }
+          ],
+          "total_cost": {
+            "minor_units": 10750,
+            "currency": "USD"
+          },
+          "all_costs_known": true,
+          "max_lead_time_days": 5,
+          "all_availability_acceptable": true
+        },
+        {
+          "combination_id": "EML-BACO3-99|DCS-TIO2-98",
+          "selections": [
+            {
+              "precursor": "BaCO3",
+              "precursor_composition": {
+                "Ba": 1.0,
+                "C": 1.0,
+                "O": 3.0
+              },
+              "reaction_coefficient": 1,
+              "offer_id": "EML-BACO3-99",
+              "theoretical_pure_mass_required_grams": 197.33499999999998,
+              "purity_adjusted_purchase_mass_grams": 199.32828282828282,
+              "package_count": 1,
+              "purchased_mass_grams": 500.0,
+              "excess_mass_grams": 300.6717171717172,
+              "subtotal": {
+                "minor_units": 4550,
+                "currency": "USD"
+              },
+              "unresolved_fields": [],
+              "assumptions": [
+                "Purchase mass was adjusted using the catalog purity value. This does not establish that the unspecified impurities are inert or acceptable for the synthesis."
+              ],
+              "warnings": []
+            },
+            {
+              "precursor": "TiO2",
+              "precursor_composition": {
+                "O": 2.0,
+                "Ti": 1.0
+              },
+              "reaction_coefficient": 1,
+              "offer_id": "DCS-TIO2-98",
+              "theoretical_pure_mass_required_grams": 79.865,
+              "purity_adjusted_purchase_mass_grams": 81.49489795918367,
+              "package_count": 1,
+              "purchased_mass_grams": 2500.0,
+              "excess_mass_grams": 2418.5051020408164,
+              "subtotal": {
+                "minor_units": 9800,
+                "currency": "USD"
+              },
+              "unresolved_fields": [],
+              "assumptions": [
+                "Purchase mass was adjusted using the catalog purity value. This does not establish that the unspecified impurities are inert or acceptable for the synthesis."
+              ],
+              "warnings": []
+            }
+          ],
+          "total_cost": {
+            "minor_units": 14350,
+            "currency": "USD"
+          },
+          "all_costs_known": true,
+          "max_lead_time_days": 21,
+          "all_availability_acceptable": true
+        },
+        {
+          "combination_id": "DCS-BACO3-995|EML-TIO2-995",
+          "selections": [
+            {
+              "precursor": "BaCO3",
+              "precursor_composition": {
+                "Ba": 1.0,
+                "C": 1.0,
+                "O": 3.0
+              },
+              "reaction_coefficient": 1,
+              "offer_id": "DCS-BACO3-995",
+              "theoretical_pure_mass_required_grams": 197.33499999999998,
+              "purity_adjusted_purchase_mass_grams": 198.32663316582912,
+              "package_count": 1,
+              "purchased_mass_grams": 1000.0,
+              "excess_mass_grams": 801.6733668341709,
+              "subtotal": {
+                "minor_units": 12000,
+                "currency": "USD"
+              },
+              "unresolved_fields": [],
+              "assumptions": [
+                "Purchase mass was adjusted using the catalog purity value. This does not establish that the unspecified impurities are inert or acceptable for the synthesis."
+              ],
+              "warnings": []
+            },
+            {
+              "precursor": "TiO2",
+              "precursor_composition": {
+                "O": 2.0,
+                "Ti": 1.0
+              },
+              "reaction_coefficient": 1,
+              "offer_id": "EML-TIO2-995",
+              "theoretical_pure_mass_required_grams": 79.865,
+              "purity_adjusted_purchase_mass_grams": 80.26633165829145,
+              "package_count": 1,
+              "purchased_mass_grams": 500.0,
+              "excess_mass_grams": 419.73366834170855,
+              "subtotal": {
+                "minor_units": 6200,
+                "currency": "USD"
+              },
+              "unresolved_fields": [],
+              "assumptions": [
+                "Purchase mass was adjusted using the catalog purity value. This does not establish that the unspecified impurities are inert or acceptable for the synthesis."
+              ],
+              "warnings": []
+            }
+          ],
+          "total_cost": {
+            "minor_units": 18200,
+            "currency": "USD"
+          },
+          "all_costs_known": true,
+          "max_lead_time_days": 10,
+          "all_availability_acceptable": true
+        },
+        {
+          "combination_id": "DCS-BACO3-995|DCS-TIO2-98",
+          "selections": [
+            {
+              "precursor": "BaCO3",
+              "precursor_composition": {
+                "Ba": 1.0,
+                "C": 1.0,
+                "O": 3.0
+              },
+              "reaction_coefficient": 1,
+              "offer_id": "DCS-BACO3-995",
+              "theoretical_pure_mass_required_grams": 197.33499999999998,
+              "purity_adjusted_purchase_mass_grams": 198.32663316582912,
+              "package_count": 1,
+              "purchased_mass_grams": 1000.0,
+              "excess_mass_grams": 801.6733668341709,
+              "subtotal": {
+                "minor_units": 12000,
+                "currency": "USD"
+              },
+              "unresolved_fields": [],
+              "assumptions": [
+                "Purchase mass was adjusted using the catalog purity value. This does not establish that the unspecified impurities are inert or acceptable for the synthesis."
+              ],
+              "warnings": []
+            },
+            {
+              "precursor": "TiO2",
+              "precursor_composition": {
+                "O": 2.0,
+                "Ti": 1.0
+              },
+              "reaction_coefficient": 1,
+              "offer_id": "DCS-TIO2-98",
+              "theoretical_pure_mass_required_grams": 79.865,
+              "purity_adjusted_purchase_mass_grams": 81.49489795918367,
+              "package_count": 1,
+              "purchased_mass_grams": 2500.0,
+              "excess_mass_grams": 2418.5051020408164,
+              "subtotal": {
+                "minor_units": 9800,
+                "currency": "USD"
+              },
+              "unresolved_fields": [],
+              "assumptions": [
+                "Purchase mass was adjusted using the catalog purity value. This does not establish that the unspecified impurities are inert or acceptable for the synthesis."
+              ],
+              "warnings": []
+            }
+          ],
+          "total_cost": {
+            "minor_units": 21800,
+            "currency": "USD"
+          },
+          "all_costs_known": true,
+          "max_lead_time_days": 21,
+          "all_availability_acceptable": true
+        },
+        {
+          "combination_id": "OSK-BACO3-EUR|EML-TIO2-995",
+          "selections": [
+            {
+              "precursor": "BaCO3",
+              "precursor_composition": {
+                "Ba": 1.0,
+                "C": 1.0,
+                "O": 3.0
+              },
+              "reaction_coefficient": 1,
+              "offer_id": "OSK-BACO3-EUR",
+              "theoretical_pure_mass_required_grams": 197.33499999999998,
+              "purity_adjusted_purchase_mass_grams": 203.4381443298969,
+              "package_count": 1,
+              "purchased_mass_grams": 1000.0,
+              "excess_mass_grams": 796.5618556701031,
+              "subtotal": {
+                "minor_units": 9500,
+                "currency": "EUR"
+              },
+              "unresolved_fields": [],
+              "assumptions": [
+                "Purchase mass was adjusted using the catalog purity value. This does not establish that the unspecified impurities are inert or acceptable for the synthesis."
+              ],
+              "warnings": []
+            },
+            {
+              "precursor": "TiO2",
+              "precursor_composition": {
+                "O": 2.0,
+                "Ti": 1.0
+              },
+              "reaction_coefficient": 1,
+              "offer_id": "EML-TIO2-995",
+              "theoretical_pure_mass_required_grams": 79.865,
+              "purity_adjusted_purchase_mass_grams": 80.26633165829145,
+              "package_count": 1,
+              "purchased_mass_grams": 500.0,
+              "excess_mass_grams": 419.73366834170855,
+              "subtotal": {
+                "minor_units": 6200,
+                "currency": "USD"
+              },
+              "unresolved_fields": [],
+              "assumptions": [
+                "Purchase mass was adjusted using the catalog purity value. This does not establish that the unspecified impurities are inert or acceptable for the synthesis."
+              ],
+              "warnings": []
+            }
+          ],
+          "total_cost": null,
+          "all_costs_known": true,
+          "max_lead_time_days": 14,
+          "all_availability_acceptable": true
+        }
+      ],
+      "unmatched_precursors": [],
+      "rejected_offers": [],
+      "unresolved_commercial_fields": [],
+      "warnings": [],
+      "search_budget": {
+        "combinations_evaluated": 9,
+        "combinations_omitted": 0,
+        "is_exhaustive": true
+      }
+    }
+  }
+]
