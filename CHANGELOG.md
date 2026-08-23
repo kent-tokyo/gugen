@@ -62,6 +62,35 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   pre-1.0 crate means the next release must bump the minor version
   (`0.6.0`), per Cargo's own SemVer compatibility rules for `0.y.z`.
   Not a patch release.
+- `SynthesisExecutionRecord` (Phase 25): records what actually happened
+  when a gugen-proposed plan was attempted in a real lab -- append-only,
+  versioned-schema, local JSON/JSONL persistence, mandatory provenance,
+  outcomes never edited toward "success" after the fact. `outcome` is a
+  7-state enum (`TargetPhaseObtained`/`PartialTargetPhase`/
+  `CompetingPhaseObserved`/`NoReactionObserved`/`ProcessFailed`/
+  `Inconclusive`/`NotMeasured`), never success/failure. New unconditional
+  module `src/execution_record.rs` (no new Cargo feature; the plain
+  struct/enum definitions always compile, `parse_execution_records`/
+  `ExecutionRecordLoadMode`/`ExecutionRecordLoadReport` are gated behind
+  the existing `serde` feature since JSON parsing structurally needs it).
+  **Structurally separate from `Planner`/`score_plan`, by construction**
+  -- nothing in this module is read by, or feeds, a plan's score or
+  ranking (same reference-only boundary `commercial_catalog`/
+  `literature_evidence` already establish); surfacing these records back
+  into planning as reference-only evidence is Phase 26, not this phase.
+  `PlanIdentity` bundles `plan_id`/`route_family`/`target_composition`/
+  `precursor_compositions` so a record is self-describing even without
+  the originating `SynthesisPlanningReport` file still existing (a bare
+  `PlanId` is an opaque hash, not reversible) -- matches Phase 26's own
+  already-stated matching criteria. **No file I/O in this module**
+  (confirmed no library module in this crate does any): `parse_execution_records`
+  takes an in-memory JSONL `&str`; appending to/reading an actual file is
+  the caller's own few-line responsibility (a future CLI, or user code --
+  see the new `examples/execution_record_demo.rs`), the same boundary
+  `CommercialPrecursorCatalog::load_csv` already draws. Purely additive;
+  `cargo semver-checks` reports no new breaking changes from this module
+  (the one pre-existing breaking finding is Phase 24C's, above,
+  unrelated).
 
 ## [0.5.0] - 2026-08-22
 
