@@ -14,10 +14,11 @@
 （evidence）・仮定（assumption）・未確定条件（unresolved）を明示したまま、
 機械可読な形で返します。実験の成功を保証するものではありません。
 
-> **ステータス：v0.6.0 公開準備中**（商用ワークフローsurface +
+> **ステータス：v0.6.0 公開済み**（商用ワークフローsurface +
 > 参照専用の過去実験エビデンス、破壊的変更あり。詳細はCHANGELOG.md参照）。
 > [crates.io](https://crates.io/crates/gugen) /
-> [docs.rs](https://docs.rs/gugen)。
+> [docs.rs](https://docs.rs/gugen) /
+> [v0.6.0リリース](https://github.com/kent-tokyo/gugen/releases/tag/v0.6.0)。
 > v0.6.0では、`gugen commercial-plan` CLIサブコマンド、実世界の
 > サプライヤーCSVヘッダに対応する列名マッピング、命名済みの商用調達
 > ランキング方針（`Balanced`/`CostFirst`/`LeadTimeFirst`/`PurityFirst`/
