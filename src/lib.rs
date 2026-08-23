@@ -102,8 +102,8 @@
 //! `PlannerBuilder::prior_experiment_evidence_provider(...)`) -- same
 //! display-only discipline as the existing literature-evidence
 //! integration: never a success rate, never fed into `score`,
-//! `confidence`, or ranking. **v0.6.0 is pending publication** (crates.io).
-//! See `CHANGELOG.md` for the user-facing summary.
+//! `confidence`, or ranking. **v0.6.0 is published** (crates.io, tagged
+//! `v0.6.0`). See `CHANGELOG.md` for the user-facing summary.
 
 #![forbid(unsafe_code)]
 

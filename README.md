@@ -15,11 +15,11 @@ solid-state process plans — each with its evidence, assumptions, and
 unresolved conditions kept explicit and machine-readable. It does not
 predict experimental success.
 
-> **Status: v0.6.0 pending publication** (commercial workflow surface +
+> **Status: v0.6.0 published** (commercial workflow surface +
 > reference-only prior-experiment evidence, breaking change -- see
 > CHANGELOG.md).
 > [crates.io](https://crates.io/crates/gugen) /
-> [docs.rs](https://docs.rs/gugen).
+> [docs.rs](https://docs.rs/gugen) / [v0.6.0 release](https://github.com/kent-tokyo/gugen/releases/tag/v0.6.0).
 > v0.6.0 adds a `gugen commercial-plan` CLI subcommand, declarative CSV
 > column-name mapping for real-world supplier catalogs, named commercial
 > ranking policies (`Balanced`/`CostFirst`/`LeadTimeFirst`/`PurityFirst`/
