@@ -4,6 +4,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-23
+
+Commercial workflow surface, plus the first surfacing of past lab
+outcomes back into planning -- together the first release closing the
+loop **plan -> commercial precursors -> experiment -> reused result**: a
+`gugen commercial-plan` CLI subcommand (Phase 24A), declarative CSV
+column-name mapping for real-world supplier exports (Phase 24B), named
+procurement ranking policies including a Pareto frontier (Phase 24C), an
+append-only `SynthesisExecutionRecord` for what actually happened in the
+lab (Phase 25), and reference-only prior-experiment evidence surfaced
+during planning (Phase 26). Breaking (hence the minor version bump under
+this crate's pre-1.0 SemVer convention) -- `cargo semver-checks
+--baseline-version 0.5.0 --all-features`, run before this version bump
+landed, flagged exactly one lint rule (`constructible_struct_adds_field`)
+against exactly four fields and nothing else:
+`CommercialCombination::min_purity`,
+`CommercialCombination::total_excess_mass_grams`,
+`CommercialOfferSelection::purity` (Phase 24C), and
+`SynthesisPlan::prior_experiment_evidence` (Phase 26) -- expected
+breaking findings only, no removed items, no signature changes, no
+`#[non_exhaustive]`/trait/feature changes. Re-run after the version bump
+landed (same command, current crate now at `0.6.0`) reports "no semver
+update required," confirming the minor bump to `0.6.0` is exactly
+sufficient. `report::SCHEMA_VERSION` moves `2 -> 3` for the identical
+reason (`SynthesisPlan`'s new field). Full detail in the entries below.
+
 ### Added
 
 - `gugen commercial-plan` (Phase 24A), behind the existing
@@ -119,6 +145,57 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (`report::SCHEMA_VERSION` bumped `2 -> 3` for the same reason it moved
   `1 -> 2` then). Reinforces, not newly establishes, that the next
   release must be at least `0.6.0`.
+
+### Changed
+
+- `report::SCHEMA_VERSION` moved `2 -> 3`: `SynthesisPlan` gained
+  `prior_experiment_evidence: Option<PriorExperimentEvidence>` (Phase
+  26), the same JSON/Markdown-shape-affecting class of change that moved
+  it `1 -> 2` when `literature_evidence` was added.
+
+### Breaking changes
+
+- `CommercialCombination` (Phase 24C) gained two new public fields:
+  `min_purity: Option<PurityFraction>` and
+  `total_excess_mass_grams: Option<f64>`.
+- `CommercialOfferSelection` (Phase 24C) gained one new public field:
+  `purity: Option<PurityFraction>`.
+- `SynthesisPlan` (Phase 26) gained one new public field:
+  `prior_experiment_evidence: Option<PriorExperimentEvidence>`.
+
+  All three structs have every field public and no `#[non_exhaustive]`,
+  so an external caller may already construct them via a full struct
+  literal -- adding a field breaks that construction. `cargo
+  semver-checks` classifies this as `constructible_struct_adds_field`,
+  which requires a new major version in strict SemVer terms; per Cargo's
+  own compatibility rules for a pre-1.0 (`0.y.z`) crate, that maps to a
+  required **minor** version bump, which is what this release is.
+
+### Migration notes
+
+- If you construct `CommercialCombination`, `CommercialOfferSelection`,
+  or `SynthesisPlan` via a struct literal, add the new field(s) above
+  (all three are `Option`, so `None` is always a valid value to add).
+  Where practical, prefer consuming these types from gugen's own
+  constructors/returned values instead of hand-building them, so future
+  additive field growth doesn't require a source change on your side.
+- `SynthesisPlanningReport`/`SynthesisPlan`'s JSON and Markdown report
+  schema version moved `2 -> 3` (`report::SCHEMA_VERSION`). A strict
+  deserializer that rejects unknown fields needs updating to account for
+  `SynthesisPlan.prior_experiment_evidence`.
+- `SynthesisPlan.prior_experiment_evidence` is
+  `Option<PriorExperimentEvidence>` and is `None` whenever no
+  `PriorExperimentEvidenceProvider` is configured on
+  `Planner`/`PlannerBuilder` -- existing callers who don't opt in see no
+  behavior change beyond the new field's presence.
+- Prior-experiment evidence (Phase 26) and commercial-catalog data (Phase
+  22/24) are both reference-only: neither is a synthesis-success
+  probability, neither is learned from past outcomes, and neither
+  changes a plan's `score`, `confidence`, or ranking order. Named
+  commercial ranking policies (`CommercialRankingPolicy`, Phase 24C)
+  change how *commercial offers* are ranked for procurement -- they
+  never change the underlying scientific plan ranking `Planner::plan`
+  produces.
 
 ## [0.5.0] - 2026-08-22
 

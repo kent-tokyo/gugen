@@ -513,7 +513,7 @@
   "unresolved": [],
   "warnings": [],
   "provenance": {
-    "gugen_version": "0.5.0",
+    "gugen_version": "0.6.0",
     "build_identifier": null,
     "schema_version": 3,
     "chematic_crystal_version": null,

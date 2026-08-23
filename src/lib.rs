@@ -86,8 +86,24 @@
 //! and 5 enums are marked `#[non_exhaustive]` where their own doc
 //! comments already anticipated new variants, alongside a new
 //! `docs/api_stability_policy.md` (Phase 23D). **v0.5.0 is published**
-//! (crates.io, tagged `v0.5.0`). See `CHANGELOG.md` for the user-facing
-//! summary.
+//! (crates.io, tagged `v0.5.0`). Phase 24 makes the commercial-catalog
+//! feature (v0.4.2) usable by a researcher directly, not just from Rust
+//! code: a `gugen commercial-plan` CLI subcommand (24A); declarative
+//! CSV column-name mapping for real-world supplier exports via
+//! `CommercialCatalogColumnMap` (24B); and named procurement ranking
+//! policies via `CommercialRankingPolicy` (`Balanced`/`CostFirst`/
+//! `LeadTimeFirst`/`PurityFirst`/`MinimumUnresolvedData`/`Pareto`, 24C).
+//! Phase 25 adds `SynthesisExecutionRecord`: an append-only, versioned-
+//! schema record of what actually happened when a gugen-proposed plan
+//! was attempted in a real lab, structurally separate from `Planner`/
+//! `score_plan` by construction. Phase 26 surfaces those records back
+//! during planning as reference-only `PriorExperimentEvidence` on
+//! `SynthesisPlan` (a new 5th optional provider,
+//! `PlannerBuilder::prior_experiment_evidence_provider(...)`) -- same
+//! display-only discipline as the existing literature-evidence
+//! integration: never a success rate, never fed into `score`,
+//! `confidence`, or ranking. **v0.6.0 is pending publication** (crates.io).
+//! See `CHANGELOG.md` for the user-facing summary.
 
 #![forbid(unsafe_code)]
 

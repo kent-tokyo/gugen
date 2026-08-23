@@ -14,19 +14,19 @@
 （evidence）・仮定（assumption）・未確定条件（unresolved）を明示したまま、
 機械可読な形で返します。実験の成功を保証するものではありません。
 
-> **ステータス：v0.5.0 公開済み**（破壊的変更を含むAPI強化リリース、
-> planningの新機能なし。詳細はCHANGELOG.md参照）。
+> **ステータス：v0.6.0 公開準備中**（商用ワークフローsurface +
+> 参照専用の過去実験エビデンス、破壊的変更あり。詳細はCHANGELOG.md参照）。
 > [crates.io](https://crates.io/crates/gugen) /
-> [docs.rs](https://docs.rs/gugen) /
-> [v0.5.0リリース](https://github.com/kent-tokyo/gugen/releases/tag/v0.5.0)。
-> v0.5.0では、`BalancedReaction`/`ReactionSpecies`の検証バイパスを解消
-> （フィールドをprivate化し、元素保存則チェックを必須化）、4種類の
-> optional providerを任意に組み合わせられる`Planner::builder(...)`を追加、
-> `ProcessEvidenceProvider::precedents`にも既存のprovider呼び出し
-> 重複排除を拡張、5個のenumを`#[non_exhaustive]`化しました。詳細は
-> [`CHANGELOG.md`](CHANGELOG.md)と
-> [`docs/api_stability_policy.md`](docs/api_stability_policy.md)を
-> 参照してください。
+> [docs.rs](https://docs.rs/gugen)。
+> v0.6.0では、`gugen commercial-plan` CLIサブコマンド、実世界の
+> サプライヤーCSVヘッダに対応する列名マッピング、命名済みの商用調達
+> ランキング方針（`Balanced`/`CostFirst`/`LeadTimeFirst`/`PurityFirst`/
+> `MinimumUnresolvedData`/`Pareto`、Paretoフロンティアを含む）、実験室で
+> 実際に起きたことを記録する追記専用の`SynthesisExecutionRecord`、
+> planning時に参照専用として表示される過去実験エビデンスを追加しました
+> ——いずれもplanの`score`・`confidence`・ランキング順位を変更しません。
+> 破壊的変更の全リストと移行手順は
+> [`CHANGELOG.md`](CHANGELOG.md)を参照してください。
 
 ## gugenが保証すること・しないこと
 
@@ -181,8 +181,17 @@ $ gugen balance reaction.json
 ]
 ```
 
-CLIのビルドは `cargo build --features serde,clap --bin gugen`。サブコマンド
-（AGENTS.md §19）：
+`gugen`バイナリ自体が`serde`・`clap`両featureを必須とします（`Cargo.toml`の
+`[[bin]]`）。`--features`を指定しない`cargo install gugen`はバイナリを
+一切installしません（default featuresは`[]`のため、libraryのみinstallされ
+ます）。CLIを得るには：
+
+```
+cargo install gugen --features serde,clap
+```
+
+もしくはチェックアウトから `cargo build --features serde,clap --bin gugen`。
+サブコマンド（AGENTS.md §19）：
 
 ```
 gugen balance reaction.json
@@ -198,6 +207,29 @@ gugen自身の公開JSON形式（`TargetSpecification`、`PrecursorCandidate`の
 JSON配列、`TargetSpecification`のJSON配列）をそのまま再利用しています。
 `gugen batch` は各targetを独立に計画し、一件の失敗が残りを止めることは
 ありません。
+
+`commercial-plan`（商用調達カタログとの照合、価格・純度・納期での比較）は
+さらに`commercial_catalog` featureを必要とします：
+
+```
+cargo install gugen --features serde,clap,commercial_catalog
+```
+
+```
+gugen commercial-plan target.json --catalog precursors.json \
+  --commercial-catalog offers.csv \
+  [--commercial-catalog-column-map column_map.json] \
+  [--ranking-policy balanced|cost-first|lead-time-first|purity-first|minimum-unresolved-data|pareto] \
+  [--min-purity 0.99] [--max-lead-time-days 30] [--max-total-cost 50000 --currency USD] \
+  [--format json|markdown|csv]
+```
+
+`commercial_catalog`を有効にしない場合、`commercial-plan`サブコマンド自体が
+存在しません（実行時エラーではなく、そのfeatureなしでbuildされたバイナリ
+には組み込まれません）。オプション全体は
+`docs/commercial_precursor_catalog.md`を、実世界の非標準ヘッダCSVに対応する
+`--commercial-catalog-column-map`の宣言的な列名マッピングについても同ドキュ
+メントを参照してください。
 
 ### 実例：合成計画レポート全体
 
