@@ -735,6 +735,37 @@ mod tests {
         );
     }
 
+    /// `curated_byproducts()` now includes NO2 (metal-nitrate thermal
+    /// decomposition, `2 Ba(NO3)2 -> 2 BaO + 4 NO2 + O2`) -- a nitrate
+    /// precursor that previously introduced an uncoverable N atom (like
+    /// SrCO3's uncoverable Sr in `rejects_sets_with_unremovable_extra_elements`)
+    /// must now be accepted.
+    #[test]
+    fn accepts_a_nitrate_precursor_via_the_curated_no2_byproduct() {
+        let target = composition(&[("Ba", 1.0), ("O", 1.0)]);
+        let catalog = vec![candidate(
+            "Ba(NO3)2",
+            &[("Ba", 1.0), ("N", 2.0), ("O", 6.0)],
+        )];
+        let outcome = search_precursor_sets(
+            &target,
+            &catalog,
+            &PlanningConstraints::default(),
+            &generous_budget(),
+        )
+        .unwrap();
+
+        let nitrate_route = outcome.accepted.iter().find(|a| {
+            let ids: BTreeSet<&str> = a.precursors.iter().map(|p| p.0.as_str()).collect();
+            ids == BTreeSet::from(["Ba(NO3)2"])
+        });
+        assert!(
+            nitrate_route.is_some(),
+            "Ba(NO3)2 -> BaO + NO2 + O2 must now be accepted: {:?}",
+            outcome
+        );
+    }
+
     /// AGENTS.md §21.2: 最大前駆体数 (max precursor count is respected).
     #[test]
     fn never_generates_a_combination_larger_than_the_configured_maximum() {

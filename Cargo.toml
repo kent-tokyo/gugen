@@ -168,6 +168,11 @@ name = "exploration_recall_result_v0_7_0"
 path = "examples/exploration_recall_result_v0_7_0.rs"
 required-features = ["serde"]
 
+[[example]]
+name = "exploration_result_nitrate_byproduct"
+path = "examples/exploration_result_nitrate_byproduct.rs"
+required-features = ["serde"]
+
 [[bin]]
 name = "gugen"
 path = "src/bin/gugen.rs"
