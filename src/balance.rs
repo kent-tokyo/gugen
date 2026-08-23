@@ -11,30 +11,40 @@ use std::collections::BTreeSet;
 ///
 /// Covers carbonate decomposition (CO2), hydrate/hydroxide decomposition
 /// (H2O), oxidation-state byproducts (O2), metal-nitrate thermal
-/// decomposition (NO2) -- e.g. `2 Ba(NO3)2 -> 2 BaO + 4 NO2 + O2` -- and
-/// metal-oxalate thermal decomposition (CO), e.g.
-/// `FeC2O4 -> FeO + CO2 + CO`, standard cross-metal thermal-analysis
-/// chemistry (metal oxalates decompose to the oxide plus a CO2/CO
-/// mixture). `NO2` (not the `N2O4` dimer) matches this list's existing
-/// single-formula-unit convention (`CO2`, not `C2O4`). CO contributes no
-/// new element beyond what CO2/O2 already cover, so it cannot change
-/// pruning behavior for any target that doesn't involve carbon. Acetate
-/// and chloride byproducts are a known, separate gap (see
+/// decomposition (NO2) -- e.g. `2 Ba(NO3)2 -> 2 BaO + 4 NO2 + O2` -- metal-
+/// oxalate thermal decomposition (CO), e.g. `FeC2O4 -> FeO + CO2 + CO`,
+/// standard cross-metal thermal-analysis chemistry (metal oxalates
+/// decompose to the oxide plus a CO2/CO mixture), and metal-acetate
+/// ketonic decarboxylation (acetone, `(CH3)2CO`/C3H6O), e.g.
+/// `Ba(CH3COO)2 -> BaCO3 + (CH3)2CO` (Friedel, 1858 -- historically the
+/// primary industrial acetone-production method), which combined with
+/// the already-curated CO2 also balances the fully-decomposed form
+/// `Ba(CH3COO)2 -> BaO + (CH3)2CO + CO2`. **Acetone's grounding is
+/// narrower than nitrate/oxalate's**: the clean equation above is
+/// best-documented for alkaline-earth acetates (Ca, Sr, Ba)
+/// specifically -- transition-metal acetates (e.g. Mn) release acetone
+/// too, but as part of a messier mixture (also acetic acid, CO/CO2,
+/// trace acetaldehyde) that this single-species addition won't fully
+/// balance. `NO2`/CO (not `N2O4`/`C2O4`) match this list's existing
+/// single-formula-unit convention. CO and acetone contribute no element
+/// beyond what CO2/H2O/O2 already cover, so neither changes pruning
+/// behavior for a target that doesn't involve carbon or hydrogen.
+/// Chloride byproducts are a known, separate gap (see
 /// `docs/large_scale_benchmark_report.md`) and are intentionally not
-/// covered here -- each has its own distinct risk profile (weaker
-/// cross-metal grounding for acetate; new pruning-relevant elements for
-/// chloride) needing its own decision before being added.
+/// covered here -- its risk (a new pruning-relevant element) is
+/// unrelated to acetate/oxalate/nitrate's and needs its own decision.
 pub fn curated_byproducts() -> Result<Vec<Composition>> {
     let c = Element::new("C")?;
     let h = Element::new("H")?;
     let n = Element::new("N")?;
     let o = Element::new("O")?;
     Ok(vec![
-        Composition::new([(c, 1.0), (o, 2.0)])?, // CO2
-        Composition::new([(h, 2.0), (o, 1.0)])?, // H2O
-        Composition::new([(o, 2.0)])?,           // O2
-        Composition::new([(n, 1.0), (o, 2.0)])?, // NO2
-        Composition::new([(c, 1.0), (o, 1.0)])?, // CO
+        Composition::new([(c, 1.0), (o, 2.0)])?,           // CO2
+        Composition::new([(h, 2.0), (o, 1.0)])?,           // H2O
+        Composition::new([(o, 2.0)])?,                     // O2
+        Composition::new([(n, 1.0), (o, 2.0)])?,           // NO2
+        Composition::new([(c, 1.0), (o, 1.0)])?,           // CO
+        Composition::new([(c, 3.0), (h, 6.0), (o, 1.0)])?, // acetone, (CH3)2CO
     ])
 }
 
@@ -373,6 +383,39 @@ mod tests {
         assert_eq!(coeff_of(&co), 1);
     }
 
+    /// Metal-acetate ketonic decarboxylation -- historically the primary
+    /// industrial acetone-production method (Friedel, 1858), see
+    /// `curated_byproducts()`'s doc comment: fully decomposed,
+    /// `Ba(CH3COO)2 -> BaO + (CH3)2CO + CO2`.
+    #[test]
+    fn acetate_decomposes_to_oxide_plus_acetone_and_co2() {
+        let reactants = vec![composition(&[
+            ("Ba", 1.0),
+            ("C", 4.0),
+            ("H", 6.0),
+            ("O", 4.0),
+        ])];
+        let bao = composition(&[("Ba", 1.0), ("O", 1.0)]);
+        let acetone = composition(&[("C", 3.0), ("H", 6.0), ("O", 1.0)]);
+        let co2 = composition(&[("C", 1.0), ("O", 2.0)]);
+        let products = vec![bao.clone(), acetone.clone(), co2.clone()];
+
+        let results = balance(&reactants, &products).unwrap();
+        assert_eq!(results.len(), 1);
+        let r = &results[0];
+        assert_eq!(r.reactants()[0].coefficient(), 1);
+        let coeff_of = |c: &Composition| {
+            r.products()
+                .iter()
+                .find(|s| s.composition == *c)
+                .unwrap()
+                .coefficient()
+        };
+        assert_eq!(coeff_of(&bao), 1);
+        assert_eq!(coeff_of(&acetone), 1);
+        assert_eq!(coeff_of(&co2), 1);
+    }
+
     /// Checks an assumption precursor search (Phase 3) is built on: does
     /// offering *every* curated byproduct at once (rather than a targeted
     /// subset) risk defeating the single-basis-vector heuristic documented
@@ -405,6 +448,17 @@ mod tests {
     /// `search_finds_exactly_one_batio3_route_even_though_the_full_curated_set_is_ambiguous`
     /// confirms this directly at the real search level, not just by
     /// this argument.
+    ///
+    /// **Acetone does not make this specific case worse, confirmed
+    /// empirically**: this reaction has no hydrogen anywhere in its
+    /// reactants or target, so acetone's own H-column has nothing to
+    /// balance against and its coefficient is forced to zero in every
+    /// solution (the same zero-column mechanism documented for
+    /// unrelated curated species elsewhere). `everything.len()` stays 2
+    /// with acetone included, not 3 -- see
+    /// `offering_every_curated_byproduct_at_once_can_introduce_more_ambiguity_once_hydrogen_and_carbon_coexist_acetone_does_there`
+    /// below for a case where hydrogen *is* present and acetone's
+    /// presence does add a genuinely new spurious solution.
     #[test]
     fn offering_every_curated_byproduct_at_once_can_introduce_real_ambiguity_co_does_here() {
         let reactants = vec![
@@ -421,6 +475,7 @@ mod tests {
         // likely to actually exercise genuine null-space ambiguity, and
         // (per this test's own name) it does.
         let co = composition(&[("C", 1.0), ("O", 1.0)]);
+        let acetone = composition(&[("C", 3.0), ("H", 6.0), ("O", 1.0)]);
 
         let targeted = balance(&reactants, &[target.clone(), co2.clone()]).unwrap();
         assert_eq!(
@@ -429,15 +484,74 @@ mod tests {
             "targeted subset {{target, CO2}} must balance"
         );
 
-        let everything = balance(&reactants, &[target, co2, h2o, o2, no2, co]).unwrap();
+        let everything = balance(&reactants, &[target, co2, h2o, o2, no2, co, acetone]).unwrap();
         assert_eq!(
             everything.len(),
             2,
-            "CO's presence alongside CO2/O2 now creates a second, genuinely valid basis \
-            vector for this specific reaction -- see this test's own doc comment"
+            "CO's presence alongside CO2/O2 creates a second, genuinely valid basis vector \
+            for this specific reaction -- acetone does not add a third, since this reaction \
+            has no hydrogen at all -- see this test's own doc comment"
         );
         assert!(
             everything.contains(&targeted[0]),
+            "the canonical, search-found answer must still be among the results"
+        );
+    }
+
+    /// Acetone's own worst case, confirmed empirically, not
+    /// hypothetically: `Ba(OH)2 + BaCO3 + TiO2 -> Ba2TiO4 + CO2 + H2O`
+    /// is a real reaction with hydrogen (from Ba(OH)2) *and* carbon
+    /// (from BaCO3) both present. Offering every curated byproduct at
+    /// once here admits a *fourth* independently valid balance beyond
+    /// the two "drop one of the two precursors" duplicates and the
+    /// CO-splitting one already seen above:
+    /// `3 Ba(OH)2 + 3 BaCO3 + 3 TiO2 -> 3 Ba2TiO4 + 4 O2 + (CH3)2CO`,
+    /// combining hydrogen from the hydroxide and carbon from the
+    /// carbonate into acetone -- chemically implausible as a real
+    /// reaction path, but formally balanced.
+    ///
+    /// This still does **not** affect real search results, confirmed
+    /// directly here rather than just argued: the size-1 `{CO2}`
+    /// subset alone already balances this 3-reactant combination (with
+    /// `Ba(OH)2`'s coefficient solved to zero, collapsing to the same
+    /// `BaCO3 + TiO2 -> ...` route a smaller 2-candidate combination
+    /// would also find), so `search_precursor_sets`'s smallest-subset-
+    /// first, stop-at-first-success strategy never reaches any
+    /// acetone-inclusive subset for this combination either.
+    #[test]
+    fn offering_every_curated_byproduct_at_once_can_introduce_more_ambiguity_once_hydrogen_and_carbon_coexist_acetone_does_there()
+     {
+        let reactants = vec![
+            composition(&[("Ba", 1.0), ("O", 2.0), ("H", 2.0)]),
+            composition(&[("Ba", 1.0), ("C", 1.0), ("O", 3.0)]),
+            composition(&[("Ti", 1.0), ("O", 2.0)]),
+        ];
+        let target = composition(&[("Ba", 2.0), ("Ti", 1.0), ("O", 4.0)]);
+        let co2 = composition(&[("C", 1.0), ("O", 2.0)]);
+        let h2o = composition(&[("H", 2.0), ("O", 1.0)]);
+        let o2 = composition(&[("O", 2.0)]);
+        let no2 = composition(&[("N", 1.0), ("O", 2.0)]);
+        let co = composition(&[("C", 1.0), ("O", 1.0)]);
+        let acetone = composition(&[("C", 3.0), ("H", 6.0), ("O", 1.0)]);
+
+        let smallest_subset = balance(&reactants, &[target.clone(), co2.clone()]).unwrap();
+        assert_eq!(
+            smallest_subset.len(),
+            1,
+            "the size-1 {{CO2}} subset alone must already balance this combination, \
+            protecting the real search from ever reaching an acetone-inclusive subset"
+        );
+
+        let everything = balance(&reactants, &[target, co2, h2o, o2, no2, co, acetone]).unwrap();
+        assert_eq!(
+            everything.len(),
+            4,
+            "acetone's presence, once both hydrogen and carbon are already present in the \
+            reactants, adds a genuinely new fourth basis vector -- see this test's own doc \
+            comment"
+        );
+        assert!(
+            everything.contains(&smallest_subset[0]),
             "the canonical, search-found answer must still be among the results"
         );
     }

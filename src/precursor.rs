@@ -841,6 +841,88 @@ mod tests {
         );
     }
 
+    /// `curated_byproducts()` now includes acetone (metal-acetate
+    /// ketonic decarboxylation, `Ba(CH3COO)2 -> BaO + (CH3)2CO + CO2`)
+    /// -- an acetate precursor that previously introduced an
+    /// uncoverable hydrogen-and-extra-carbon sink must now be accepted.
+    #[test]
+    fn accepts_an_acetate_precursor_via_the_curated_acetone_byproduct() {
+        let target = composition(&[("Ba", 1.0), ("O", 1.0)]);
+        let catalog = vec![candidate(
+            "Ba(CH3COO)2",
+            &[("Ba", 1.0), ("C", 4.0), ("H", 6.0), ("O", 4.0)],
+        )];
+        let outcome = search_precursor_sets(
+            &target,
+            &catalog,
+            &PlanningConstraints::default(),
+            &generous_budget(),
+        )
+        .unwrap();
+
+        let acetate_route = outcome.accepted.iter().find(|a| {
+            let ids: BTreeSet<&str> = a.precursors.iter().map(|p| p.0.as_str()).collect();
+            ids == BTreeSet::from(["Ba(CH3COO)2"])
+        });
+        assert!(
+            acetate_route.is_some(),
+            "Ba(CH3COO)2 -> BaO + (CH3)2CO + CO2 must now be accepted: {:?}",
+            outcome
+        );
+    }
+
+    /// `src/balance.rs`'s
+    /// `offering_every_curated_byproduct_at_once_can_introduce_more_ambiguity_once_hydrogen_and_carbon_coexist_acetone_does_there`
+    /// found that raw `balance()`, given every curated byproduct at
+    /// once, now returns *four* independently valid solutions for
+    /// `Ba(OH)2 + BaCO3 + TiO2 -> Ba2TiO4` (acetone's presence, once
+    /// both hydrogen and carbon are already present, opens a fourth
+    /// basis vector). This confirms, at the real search level, that
+    /// `search_precursor_sets` is unaffected: the size-1 `{CO2}`
+    /// subset alone already balances this 3-candidate combination
+    /// (with `Ba(OH)2`'s coefficient solved to zero), so the loop
+    /// breaks before ever trying an acetone-inclusive subset.
+    #[test]
+    fn search_finds_exactly_one_ba2tio4_route_even_though_the_full_curated_set_is_ambiguous() {
+        let target = composition(&[("Ba", 2.0), ("Ti", 1.0), ("O", 4.0)]);
+        let catalog = vec![
+            candidate("Ba(OH)2", &[("Ba", 1.0), ("O", 2.0), ("H", 2.0)]),
+            candidate("BaCO3", &[("Ba", 1.0), ("C", 1.0), ("O", 3.0)]),
+            candidate("TiO2", &[("Ti", 1.0), ("O", 2.0)]),
+        ];
+        let outcome = search_precursor_sets(
+            &target,
+            &catalog,
+            &PlanningConstraints::default(),
+            &generous_budget(),
+        )
+        .unwrap();
+
+        let carbonate_routes: Vec<_> = outcome
+            .accepted
+            .iter()
+            .filter(|a| {
+                let ids: BTreeSet<&str> = a.precursors.iter().map(|p| p.0.as_str()).collect();
+                ids == BTreeSet::from(["BaCO3", "TiO2"])
+            })
+            .collect();
+        assert_eq!(
+            carbonate_routes.len(),
+            1,
+            "exactly one BaCO3+TiO2 route must be accepted, not the acetone-inclusive \
+            ambiguous alternative: {:?}",
+            outcome.accepted
+        );
+        assert!(
+            outcome.accepted.iter().all(|a| {
+                let ids: BTreeSet<&str> = a.precursors.iter().map(|p| p.0.as_str()).collect();
+                ids != BTreeSet::from(["Ba(OH)2", "BaCO3", "TiO2"])
+            }),
+            "the 3-candidate acetone-splitting route must never be accepted: {:?}",
+            outcome.accepted
+        );
+    }
+
     /// AGENTS.md §21.2: 最大前駆体数 (max precursor count is respected).
     #[test]
     fn never_generates_a_combination_larger_than_the_configured_maximum() {

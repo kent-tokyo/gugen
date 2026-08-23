@@ -524,20 +524,21 @@ fn main() {
         {coverage_passing} combinations that *did* pass the element-coverage gate (byproduct + \
         no-balance + duplicate + accepted-and-kept): {byproduct_count}/{coverage_passing} \
         ({:.1}%). This isolates genuine byproduct-allow-list gaps from decoy-driven coverage \
-        noise -- acetate/chloride precursors (common in this corpus) still release byproduct \
-        species outside gugen's curated allow-list (CO2/H2O/O2/NO2/CO, \
-        `src/balance.rs::curated_byproducts`); nitrate and oxalate precursors no longer do. \
-        NO2 (nitrate) was added on standard metal-nitrate thermal-decomposition grounds \
-        (`2 Ba(NO3)2 -> 2 BaO + 4 NO2 + O2`); CO (oxalate) was added on standard cross-metal \
-        oxalate thermal-decomposition grounds (`FeC2O4 -> FeO + CO2 + CO`) -- both with explicit \
-        owner sign-off, each scoped to its own single class -- see `curated_byproducts`'s own \
-        doc comment for the citations. Acetate and chloride remain unwidened: each has its own \
-        distinct reason it wasn't bundled into the nitrate/oxalate fixes (acetate's grounding is \
-        real but metal-dependent, not a universal cross-metal claim; chloride's likely byproduct \
-        -- an alkali chloride salt via solid-state metathesis -- introduces new elements to the \
-        search's global pruning set, a different kind of risk needing its own dedicated check) -- \
-        widening either without clearing that same bar would be exactly the benchmark-driven \
-        overfitting AGENTS.md §27 forbids.\n",
+        noise -- chloride precursors (common in this corpus) still release byproduct species \
+        outside gugen's curated allow-list (CO2/H2O/O2/NO2/CO/acetone, \
+        `src/balance.rs::curated_byproducts`); nitrate, oxalate, and acetate precursors no \
+        longer do. NO2 (nitrate) was added on standard metal-nitrate thermal-decomposition \
+        grounds (`2 Ba(NO3)2 -> 2 BaO + 4 NO2 + O2`); CO (oxalate) on standard cross-metal \
+        oxalate thermal-decomposition grounds (`FeC2O4 -> FeO + CO2 + CO`); acetone (acetate) \
+        on the classic ketonic-decarboxylation pathway (`Ba(CH3COO)2 -> BaO + (CH3)2CO + CO2`, \
+        Friedel 1858) -- all three with explicit owner sign-off, each scoped to its own single \
+        class -- see `curated_byproducts`'s own doc comment for the citations and, for \
+        acetone specifically, the narrower (alkaline-earth-focused, not universal cross-metal) \
+        grounding it discloses. Chloride remains unwidened: its likely byproduct -- an alkali \
+        chloride salt via solid-state metathesis -- introduces new elements to the search's \
+        global pruning set, a different kind of risk needing its own dedicated check before \
+        clearing the same bar; widening it without that check would be exactly the \
+        benchmark-driven overfitting AGENTS.md §27 forbids.\n",
         pct(missing_element_count, total_rejected),
         pct(byproduct_count, total_rejected),
         pct(byproduct_count, coverage_passing),
