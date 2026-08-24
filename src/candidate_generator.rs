@@ -1,16 +1,17 @@
 //! Multi-source candidate generation (Phase 30). `CandidateGenerator`
 //! (`src/provider.rs`) is the per-source contract; this module holds every
 //! type built on top of it: the provenance-carrying output shape
-//! (`GeneratedCandidate`), two real generators (`CatalogExactGenerator`,
-//! `FrequencyPriorGenerator`), and the ensemble that combines them
-//! (`CandidateGeneratorEnsemble`). PR 1 ships exactly these two generators
-//! -- `thermodynamic`, `prior-experiment`, and `literature-analog` are
-//! each their own future PR; `chemical-substitution` has no backing data
-//! anywhere in this crate and is deferred indefinitely pending a separate
-//! owner decision on caller-supplied similarity data.
+//! (`GeneratedCandidate`), three real generators (`CatalogExactGenerator`,
+//! `FrequencyPriorGenerator`, `ThermodynamicStabilityGenerator`), and the
+//! ensemble that combines them (`CandidateGeneratorEnsemble`). PR 1 shipped
+//! the first two; PR 2 adds `ThermodynamicStabilityGenerator`.
+//! `prior-experiment` and `literature-analog` are each their own future PR;
+//! `chemical-substitution` has no backing data anywhere in this crate and
+//! is deferred indefinitely pending a separate owner decision on
+//! caller-supplied similarity data.
 
 use crate::composition::{Composition, Element};
-use crate::error::ProviderError;
+use crate::error::{ProviderError, require_finite};
 use crate::precursor::{InMemoryPrecursorCatalog, PrecursorCandidate, PrecursorId};
 use crate::provider::{CandidateGenerator, PrecursorCatalog};
 use crate::target::PlanningConstraints;
@@ -147,6 +148,93 @@ impl CandidateGenerator for FrequencyPriorGenerator {
                 generator: self.id(),
                 rank,
             })
+            .collect())
+    }
+}
+
+/// Ranks caller-supplied precursor candidates by absolute thermodynamic
+/// stability -- most-negative 0 K formation enthalpy per atom first, the
+/// standard materials-informatics cross-compound stability proxy (a
+/// convex-hull y-axis value). Never computed or fetched by this crate
+/// itself, matching the established "caller supplies real data, core
+/// never bundles it" convention (`ThermodynamicProvider`/
+/// `MaterialsProjectSnapshotProvider`'s own precedent, and
+/// [`FrequencyPriorGenerator`]'s own shape).
+///
+/// **This ranks each candidate's own absolute stability, not predicted
+/// favorability of any specific reaction toward the search target.** A
+/// true target-fit signal would need to know the other precursors chosen
+/// and the eventual balanced reaction -- information
+/// `CandidateGenerator::generate`'s signature (target + constraints only)
+/// structurally cannot express, not merely something this generator
+/// doesn't yet compute. `decomposition_margin_ev_per_atom`/
+/// `balanced_reaction_delta_ev_per_atom` (`src/thermodynamics.rs`) are the
+/// reaction-level alternatives; neither is reachable from a
+/// `CandidateGenerator`. `ThermodynamicProvider::competing_phases` was
+/// deliberately not repurposed into a ranking margin here either -- its
+/// own doc comment states it is "context only, never converted into a
+/// selectivity score," and reusing it that way here would violate that
+/// stated contract.
+pub struct ThermodynamicStabilityGenerator {
+    /// Sorted once at construction (ascending by formation energy -- most
+    /// negative/most stable first -- ascending `PrecursorId` as a
+    /// deterministic tie-break) -- mirrors
+    /// `InMemoryPrecursorCatalog::new`/`FrequencyPriorGenerator::new`'s own
+    /// "sort once, not per-query" convention.
+    entries: Vec<(PrecursorCandidate, f64)>,
+}
+
+impl ThermodynamicStabilityGenerator {
+    /// Validates every formation-energy value is finite, matching every
+    /// other f64-formation-energy constructor in this crate
+    /// (`CompetingPhase::new`, `SolidThermodynamicEntry::new`,
+    /// `ReactionEnergy::new` all call `require_finite`) -- prioritized
+    /// over infallibly mirroring `FrequencyPriorGenerator`'s shape (owner's
+    /// explicit choice). `f64::total_cmp`, not `partial_cmp`, for the sort
+    /// -- no silent NaN-ordering surprise (`require_finite` above already
+    /// rules NaN out, but `total_cmp` keeps the ordering total and
+    /// panic-free regardless).
+    pub fn new(mut entries: Vec<(PrecursorCandidate, f64)>) -> crate::error::Result<Self> {
+        for (_candidate, formation_energy) in &entries {
+            require_finite("formation_enthalpy_ev_per_atom", *formation_energy)?;
+        }
+        entries.sort_by(|(a, a_energy), (b, b_energy)| {
+            a_energy
+                .total_cmp(b_energy)
+                .then_with(|| a.id.0.cmp(&b.id.0))
+        });
+        Ok(Self { entries })
+    }
+}
+
+impl CandidateGenerator for ThermodynamicStabilityGenerator {
+    fn id(&self) -> GeneratorId {
+        GeneratorId("thermodynamic-stability")
+    }
+
+    fn generate(
+        &self,
+        target: &Composition,
+        _constraints: &PlanningConstraints,
+    ) -> std::result::Result<Vec<GeneratedCandidate>, ProviderError> {
+        let target_elements: BTreeSet<Element> = target.elements().collect();
+        Ok(self
+            .entries
+            .iter()
+            .filter(|(candidate, _formation_energy)| {
+                candidate
+                    .composition
+                    .elements()
+                    .any(|e| target_elements.contains(&e))
+            })
+            .enumerate()
+            .map(
+                |(rank, (candidate, _formation_energy))| GeneratedCandidate {
+                    candidate: candidate.clone(),
+                    generator: self.id(),
+                    rank,
+                },
+            )
             .collect())
     }
 }
@@ -367,6 +455,67 @@ mod tests {
     }
 
     #[test]
+    fn thermodynamic_stability_generator_rejects_a_non_finite_formation_energy() {
+        assert!(
+            ThermodynamicStabilityGenerator::new(vec![(
+                candidate("BaCO3", &[("Ba", 1.0), ("C", 1.0), ("O", 3.0)]),
+                f64::NAN,
+            )])
+            .is_err()
+        );
+        assert!(
+            ThermodynamicStabilityGenerator::new(vec![(
+                candidate("BaCO3", &[("Ba", 1.0), ("C", 1.0), ("O", 3.0)]),
+                f64::INFINITY,
+            )])
+            .is_err()
+        );
+        assert!(
+            ThermodynamicStabilityGenerator::new(vec![(
+                candidate("BaCO3", &[("Ba", 1.0), ("C", 1.0), ("O", 3.0)]),
+                -3.5,
+            )])
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn thermodynamic_stability_generator_filters_by_element_overlap_and_ranks_most_stable_first() {
+        let generator = ThermodynamicStabilityGenerator::new(vec![
+            (candidate("TiO2", &[("Ti", 1.0), ("O", 2.0)]), -3.0),
+            (
+                candidate("BaCO3", &[("Ba", 1.0), ("C", 1.0), ("O", 3.0)]),
+                -3.5,
+            ),
+            // Irrelevant to the Ba-Ti-O target -- must be filtered out
+            // regardless of how stable it is.
+            (candidate("NaCl", &[("Na", 1.0), ("Cl", 1.0)]), -10.0),
+        ])
+        .unwrap();
+
+        let generated = generator
+            .generate(&barium_titanate_target(), &no_constraints())
+            .unwrap();
+
+        let ids: Vec<&str> = generated
+            .iter()
+            .map(|gc| gc.candidate.id.0.as_str())
+            .collect();
+        assert_eq!(
+            ids,
+            vec!["BaCO3", "TiO2"],
+            "more negative formation energy (-3.5) must rank first"
+        );
+        assert!(
+            generated
+                .iter()
+                .all(|gc| gc.generator == GeneratorId("thermodynamic-stability"))
+        );
+        assert_eq!(generated[0].rank, 0);
+        assert_eq!(generated[1].rank, 1);
+    }
+
+    #[test]
     fn ensemble_min_rank_fuses_candidates_proposed_by_either_generator() {
         // catalog-exact ranks BaCO3 (0), TiO2 (1) -- both sorted by id.
         let catalog_exact = CatalogExactGenerator::new(InMemoryPrecursorCatalog::new(vec![
@@ -403,6 +552,66 @@ mod tests {
             2
         );
         assert_eq!(output.provenance[&PrecursorId("TiO2".to_string())].len(), 2);
+    }
+
+    #[test]
+    fn ensemble_fuses_a_third_generator_including_a_candidate_only_it_proposed() {
+        let catalog_exact = CatalogExactGenerator::new(InMemoryPrecursorCatalog::new(vec![
+            candidate("TiO2", &[("Ti", 1.0), ("O", 2.0)]),
+            candidate("BaCO3", &[("Ba", 1.0), ("C", 1.0), ("O", 3.0)]),
+        ]));
+        let frequency_prior = FrequencyPriorGenerator::new(vec![
+            (candidate("TiO2", &[("Ti", 1.0), ("O", 2.0)]), 100),
+            (
+                candidate("BaCO3", &[("Ba", 1.0), ("C", 1.0), ("O", 3.0)]),
+                1,
+            ),
+        ]);
+        // Proposes BaCO3/TiO2 too, plus BaO -- a candidate neither of the
+        // other two generators knows about at all.
+        let thermodynamic_stability = ThermodynamicStabilityGenerator::new(vec![
+            (candidate("TiO2", &[("Ti", 1.0), ("O", 2.0)]), -3.0),
+            (
+                candidate("BaCO3", &[("Ba", 1.0), ("C", 1.0), ("O", 3.0)]),
+                -3.5,
+            ),
+            (candidate("BaO", &[("Ba", 1.0), ("O", 1.0)]), -2.0),
+        ])
+        .unwrap();
+
+        let ensemble = CandidateGeneratorEnsemble::new(vec![
+            Box::new(catalog_exact),
+            Box::new(frequency_prior),
+            Box::new(thermodynamic_stability),
+        ]);
+        let output =
+            ensemble.generate_with_provenance(&barium_titanate_target(), &no_constraints());
+
+        let ids: std::collections::BTreeSet<&str> =
+            output.candidates.iter().map(|c| c.id.0.as_str()).collect();
+        assert_eq!(
+            ids,
+            std::collections::BTreeSet::from(["BaCO3", "TiO2", "BaO"]),
+            "the union of all three generators' candidates, including the one only \
+            thermodynamic-stability proposed"
+        );
+        assert!(output.generator_errors.is_empty());
+
+        assert_eq!(
+            output.provenance[&PrecursorId("BaCO3".to_string())].len(),
+            3,
+            "all three generators proposed BaCO3"
+        );
+        assert_eq!(
+            output.provenance[&PrecursorId("TiO2".to_string())].len(),
+            3,
+            "all three generators proposed TiO2"
+        );
+        assert_eq!(
+            output.provenance[&PrecursorId("BaO".to_string())].len(),
+            1,
+            "only thermodynamic-stability proposed BaO"
+        );
     }
 
     #[test]

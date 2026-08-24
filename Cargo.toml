@@ -188,6 +188,11 @@ name = "exploration_candidate_generator_pr1_ablation"
 path = "examples/exploration_candidate_generator_pr1_ablation.rs"
 required-features = ["serde"]
 
+[[example]]
+name = "exploration_candidate_generator_pr2_thermodynamic_ablation"
+path = "examples/exploration_candidate_generator_pr2_thermodynamic_ablation.rs"
+required-features = ["serde"]
+
 [[bin]]
 name = "gugen"
 path = "src/bin/gugen.rs"
