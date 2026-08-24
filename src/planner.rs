@@ -1045,6 +1045,32 @@ mod tests {
         );
     }
 
+    /// Phase 30 PR 1: `CandidateGeneratorEnsemble` implements
+    /// `PrecursorCatalog`, so it must be a real, working drop-in for
+    /// `Planner::builder`'s catalog argument -- not just a type that
+    /// happens to compile. Deliberately reuses the same fixtures as
+    /// `offline_minimal_produces_ranked_plans_from_a_catalog_alone` so the
+    /// only variable is the catalog implementation.
+    #[test]
+    fn candidate_generator_ensemble_works_as_a_planner_catalog() {
+        let ensemble = crate::candidate_generator::CandidateGeneratorEnsemble::new(vec![Box::new(
+            crate::candidate_generator::CatalogExactGenerator::new(barium_titanate_catalog()),
+        )]);
+        let planner = Planner::builder(ensemble, generous_config()).build();
+
+        let report = planner
+            .plan(&barium_titanate_target(), "2026-08-14T00:00:00Z")
+            .unwrap();
+
+        assert!(!report.plans.is_empty(), "expected at least one plan");
+        assert!(
+            report
+                .plans
+                .iter()
+                .all(|p| p.balanced_reaction.is_some() && p.manual_review_required),
+        );
+    }
+
     #[test]
     fn self_contradictory_target_abstains_with_no_plans() {
         let mut target = barium_titanate_target();

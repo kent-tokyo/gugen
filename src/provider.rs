@@ -1,3 +1,4 @@
+use crate::candidate_generator::{GeneratedCandidate, GeneratorId};
 use crate::composition::Composition;
 use crate::error::ProviderError;
 use crate::literature_evidence::LiteratureRouteEvidence;
@@ -17,6 +18,37 @@ pub trait PrecursorCatalog {
         target: &Composition,
         constraints: &PlanningConstraints,
     ) -> std::result::Result<Vec<PrecursorCandidate>, ProviderError>;
+}
+
+/// One source in a multi-source candidate-generation ensemble (Phase 30,
+/// PR 1: `catalog-exact` and `frequency-prior`; later PRs add
+/// `thermodynamic`, `prior-experiment`, and `literature-analog`).
+/// Deliberately narrower a contract than [`PrecursorCatalog`]:
+/// `PrecursorCatalog` answers "what's in the catalog for this target,"
+/// unranked; `CandidateGenerator` answers "what does *this specific
+/// signal* propose, in its own preferred order" -- [`GeneratedCandidate::rank`]
+/// carries that order as a plain ordinal, never a score, so a generator's
+/// internal priority can never be read as a success probability
+/// (mirrors `SearchPriority`'s own score/priority separation,
+/// `src/precursor.rs`). `CandidateGeneratorEnsemble`
+/// (`src/candidate_generator.rs`) is the only place multiple generators'
+/// outputs are combined, and it does so by implementing
+/// [`PrecursorCatalog`] itself -- so an ensemble is a drop-in
+/// `Planner::builder` catalog argument, requiring no change to `Planner`/
+/// `PlannerBuilder` at all.
+pub trait CandidateGenerator {
+    /// This generator's stable identity -- stamped onto every
+    /// `GeneratedCandidate` it produces (via `GeneratedCandidate::generator`)
+    /// and used by `CandidateGeneratorEnsemble` to label a failed
+    /// `generate()` call in `EnsembleOutput::generator_errors`, so a
+    /// provider failure stays attributable rather than silently dropped.
+    fn id(&self) -> GeneratorId;
+
+    fn generate(
+        &self,
+        target: &Composition,
+        constraints: &PlanningConstraints,
+    ) -> std::result::Result<Vec<GeneratedCandidate>, ProviderError>;
 }
 
 /// Source of reaction-energy estimates (AGENTS.md §8). Returning `Ok(None)`
