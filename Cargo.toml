@@ -72,6 +72,14 @@ materials_project = []
 # a caller who wants serde for e.g. JSON report output should not also
 # have to compile this substantial, unrelated subsystem in.
 literature_corpus = ["serde"]
+# Phase 30.5: exposes a pluggable-tie-break variant of the real
+# search_precursor_sets frontier (src/precursor.rs) plus a targeted trace
+# type, for the fusion/frontier coupling audit's benchmark harness only.
+# Zero new dependencies -- purely additive new pub items, kept out of the
+# default public API surface the same way materials_project/mikiwame
+# already are. search_precursor_sets itself is completely unaffected
+# regardless of this feature.
+search_diagnostics = []
 
 [[test]]
 name = "json_roundtrip"
@@ -192,6 +200,11 @@ required-features = ["serde"]
 name = "exploration_candidate_generator_pr2_thermodynamic_ablation"
 path = "examples/exploration_candidate_generator_pr2_thermodynamic_ablation.rs"
 required-features = ["serde"]
+
+[[example]]
+name = "exploration_fusion_search_coupling_audit"
+path = "examples/exploration_fusion_search_coupling_audit.rs"
+required-features = ["serde", "search_diagnostics"]
 
 [[bin]]
 name = "gugen"
