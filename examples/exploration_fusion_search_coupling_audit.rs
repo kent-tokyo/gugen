@@ -645,7 +645,8 @@ const PRIMARY_CONVERSION_K: usize = 20;
 /// context and the AUC-style summary below, just never used to *select*.
 const PRIMARY_BUDGET: usize = 20;
 
-type FusedRanksFor<'a> = dyn Fn(&ParsedRow, &RowGeneratorOutputs) -> BTreeMap<PrecursorId, f64> + 'a;
+type FusedRanksFor<'a> =
+    dyn Fn(&ParsedRow, &RowGeneratorOutputs) -> BTreeMap<PrecursorId, f64> + 'a;
 
 fn run_cell(
     rows: &[&ParsedRow],
