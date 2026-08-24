@@ -534,11 +534,15 @@ fn main() {
         Friedel 1858) -- all three with explicit owner sign-off, each scoped to its own single \
         class -- see `curated_byproducts`'s own doc comment for the citations and, for \
         acetone specifically, the narrower (alkaline-earth-focused, not universal cross-metal) \
-        grounding it discloses. Chloride remains unwidened: its likely byproduct -- an alkali \
-        chloride salt via solid-state metathesis -- introduces new elements to the search's \
-        global pruning set, a different kind of risk needing its own dedicated check before \
-        clearing the same bar; widening it without that check would be exactly the \
-        benchmark-driven overfitting AGENTS.md §27 forbids.\n",
+        grounding it discloses. Chloride was investigated and explicitly declined, not merely \
+        deferred: the dedicated check this paragraph's earlier revisions called for found the \
+        chloride precursors in this corpus are overwhelmingly molten-salt-flux usage (an inert, \
+        unreacted medium), not the solid-state-metathesis reaction (`MCl2 + Na2CO3 -> MCO3 + \
+        2 NaCl`) an alkali-chloride byproduct would model, and a direct algorithmic replication \
+        of `balance()`/`search_precursor_sets` found zero real recall gain from adding one \
+        against a pruning-relaxation footprint touching most of the corpus's decoy pools -- \
+        widening it anyway would be exactly the benchmark-driven overfitting AGENTS.md §27 \
+        forbids, now with no offsetting benefit to weigh against it.\n",
         pct(missing_element_count, total_rejected),
         pct(byproduct_count, total_rejected),
         pct(byproduct_count, coverage_passing),
