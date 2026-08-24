@@ -108,6 +108,7 @@
 #![forbid(unsafe_code)]
 
 mod balance;
+mod candidate_generator;
 #[cfg(feature = "chematic_crystal")]
 mod chematic_crystal_adapter;
 #[cfg(feature = "commercial_catalog")]
@@ -143,6 +144,10 @@ mod target;
 mod thermodynamics;
 
 pub use balance::{balance, curated_byproducts};
+pub use candidate_generator::{
+    CandidateGeneratorEnsemble, CatalogExactGenerator, EnsembleOutput, FrequencyPriorGenerator,
+    GeneratedCandidate, GeneratorId,
+};
 #[cfg(feature = "chematic_crystal")]
 pub use chematic_crystal_adapter::to_mikiwame_structure;
 #[cfg(feature = "commercial_catalog")]
@@ -202,8 +207,9 @@ pub use process::{
 };
 pub use provenance::PlanningProvenance;
 pub use provider::{
-    LiteratureEvidenceProvider, PrecursorCatalog, PriorExperimentEvidenceProvider,
-    ProcessEvidenceProvider, RouteSuitabilityProvider, ThermodynamicProvider,
+    CandidateGenerator, LiteratureEvidenceProvider, PrecursorCatalog,
+    PriorExperimentEvidenceProvider, ProcessEvidenceProvider, RouteSuitabilityProvider,
+    ThermodynamicProvider,
 };
 pub use reaction::{
     BalancedReaction, CompetingPhase, ReactionEnergy, ReactionSpecies, ThermodynamicConditions,
