@@ -175,7 +175,159 @@ verdict.
 
 ---
 
-## Results
+## Correction (2026-08-25): the original Results section below is retracted
+
+The owner reviewed the 2026-08-24 results below and identified a
+contradiction the original writeup missed: at `budget=100,000`
+(`exhaustion_rate=0` everywhere — the search never hit the budget cap),
+the docs claimed "every single policy converges to 0.4713," but the
+committed result JSON itself shows `catalog-exact`/`B-reverse`/
+`D-min-rank-ensemble` (and all 6 fusion rules) at exactly 0.471264 while
+`oracle` and all 10 shuffle seeds sit at 0.510–0.515 — genuinely
+different numbers, not a convergence. That contradiction, plus two
+independently-identified Rust `Eq`/`Ord` contract bugs (`TotalF64`,
+`SearchState`) and a methodology gap (the `catalog-anchored` negative
+control was never excluded from policy selection, so the reported
+"confirmation holdout" was comparing catalog-exact's ordering to itself),
+were enough to block the merge and require a full root-cause
+investigation before any conclusion could be trusted.
+
+**Root cause, found via the owner's own mandated sequence (synthetic
+fixture first, then a minimal real-corpus reproduction, then an isolation
+check against the actual committed numbers): `run_cell`'s
+`generator_outputs: BTreeMap<String, RowGeneratorOutputs>` cache
+(`examples/exploration_fusion_search_coupling_audit.rs`, "materialize the
+3 base generators' outputs once per row") is keyed by `target_formula`
+alone, first-row-wins, on the explicit (and false) assumption that "rows
+sharing a `target_formula` also share the exact same candidate pool
+construction in this frozen catalog."** That assumption does not hold:
+1,866 of 2,879 rows (65%) share a `target_formula` with at least one
+other row, and 388 of those 442 duplicate-formula groups have genuinely
+*different* candidate pools attached to different rows (the corpus
+contains repeated targets with different decoy/candidate sets, not
+exact duplicates). For 1,233 non-first rows in such a group the cache
+silently serves a different row's candidate pool; for 803 of those, the
+row's own gold route names a precursor that is entirely absent from the
+served (wrong) pool — a structural, deterministic recovery failure that
+has nothing to do with order, fusion, or tie-break.
+
+`candidate_order()`'s `A-catalog-exact`/`B-reverse`/`D-min-rank-ensemble`
+arms, and every one of the 6 fusion rules, all read from this cache
+(`outputs.catalog_exact`/`outputs.frequency_prior`/
+`outputs.thermodynamic_stability`, all built once per `target_formula`).
+`oracle` and all 10 `shuffle-*` arms read `row.candidates` directly,
+per-row, uncached. That is the entire explanation for the pattern in the
+data: nine nominally-different policies converging to a byte-identical
+0.471264 was never evidence of convergence — it was nine policies
+silently evaluating the *same* (frequently wrong) cached content, while
+oracle/shuffle evaluated the correct, row-specific content and scored
+higher as a direct result.
+
+This was verified, not just inferred from code reading:
+`tests/phase30_5_order_invariance_real_row.rs` and the synthetic fixture
+in `src/precursor.rs` (`duplicate_composition_candidates_keep_canonical_chemistry_order_invariant`)
+confirm `search_precursor_sets` itself recovers the same canonical
+chemistry regardless of candidate array order at a genuinely exhaustive
+budget; a standalone reproduction (`examples/phase30_5_pool_filter_isolation_check.rs`)
+that always uses each row's own correct candidate pool — bypassing the
+cache entirely — found **no recall gap** between catalog-exact-equivalent
+order and shuffled order on a 455-row real sample (0.4901 vs. 0.4901),
+which is the expected result once the cache bug is not present to distort
+the comparison.
+
+**Retracted claims and why:**
+
+| Original claim | Status | Reason |
+|---|---|---|
+| "catalog-exact's own order is 0th percentile among 10 shuffles" / "random ordering beats production order 10/10" | **Retracted** | Artifact of the cache serving mismatched candidate pools to the catalog-exact/reverse/min-rank-ensemble arms; oracle/shuffle read correct per-row pools. Not an order effect. |
+| "H2 confirmed directly and quantitatively" (candidate order is a hidden search policy) | **Untested, not confirmed or refuted** | The order sweep never held content fixed across all its arms, so H2 was never actually tested by this run. |
+| "H4 confirmed directly" (order-sensitivity shrinks as budget grows, "every single policy converges to 0.4713") | **Partially retracted** | True only for the 9 cache-fed policies (which share content, so of course they converge to each other); false as stated for the order sweep as a whole, since oracle/shuffle never converge toward 0.4713 at any budget in the raw data. |
+| "Clean confirmation-holdout NO-GO" for `fusion=catalog-anchored` | **Retracted as independent evidence** | `catalog-anchored` was never excluded from policy selection despite being pre-registered as a negative control expected to tie catalog-exact exactly — it did, and the "holdout confirmation" was mathematically guaranteed to be null (comparing catalog-exact's ordering to itself), not a real test of anything. |
+
+**Two genuine, independent findings survive, both real and both worth
+fixing on their own merits, neither of which explains the observed gap
+above:**
+
+1. **Dedup-hygiene defect (production, `src/precursor.rs`)**:
+   `evaluate_complete_state` dedups accepted plans by `BalancedReaction`'s
+   derived `PartialEq`, which compares `reactants`/`products` as
+   *ordered* vectors — but `balance()` builds those vectors by zipping
+   positionally against its own input order, which tracks candidate
+   array order via `chosen`'s ascending indices. When two candidates
+   share a composition under different `PrecursorId`s (a real, common
+   pattern in this corpus — 440/2,879 rows) and land on opposite sides of
+   a third candidate in the array, the same chemistry gets recorded as
+   two separate `accepted` entries instead of deduping to one. Reproduced
+   directly in a synthetic fixture
+   (`duplicate_composition_candidates_keep_canonical_chemistry_order_invariant`,
+   `src/precursor.rs`). Measured impact on exact-ID recall specifically:
+   small (4 of 464 real rows differ in an isolated test holding content
+   fixed). Real impact: can burn two `SearchBudget::max_plans_returned`
+   slots in `Planner`'s output for what is really one plan. **Not a
+   recall-losing order-invariance violation** — canonical chemistry
+   recovery is unaffected (see the synthetic fixture's own assertions).
+2. **Synonym undercount (methodology, not production code)**: when a row
+   has duplicate-composition candidates, `evaluate_complete_state`'s
+   dedup deterministically keeps whichever `PrecursorId` sorts
+   lexicographically smaller (by design, independent of discovery
+   order — confirmed via `tests/phase30_5_order_invariance_real_row.rs`
+   on a real corpus row). If a row's gold route happens to name the
+   *other* (lexicographically larger) synonym — e.g. gold says
+   `α-Al2O3`, dedup always keeps `Al2O3` — then exact-ID recovery is
+   **permanently false for that row under every policy**, order-
+   independent. This does not create a differential between policies,
+   but it does systematically depress exact-ID recall for ~15% of rows
+   uniformly, and is independent supporting evidence for the route-
+   identity metric redesign (canonical composition/reaction identity as
+   primary, not raw `PrecursorId`-set equality) the owner already
+   requested.
+3. **Two unrelated Rust `Eq`/`Ord` contract bugs** the owner identified
+   independently of the above investigation (`TotalF64`, `SearchState` in
+   `src/precursor.rs`) remain unfixed as of this correction and are
+   tracked separately — real defects, not implicated in the recall gap
+   either, since production `search_precursor_sets` only ever constructs
+   `TieBreakKey::IndexOrder`.
+
+**Bottom line on the question this correction exists to answer: is
+production `search_precursor_sets` implicated in the observed
+catalog-exact-vs-shuffle gap? No.** The dominant cause is a benchmark
+data-wiring bug (a cache keyed on a non-unique field), not a search or
+dedup correctness issue. The dedup-hygiene defect above is real and
+worth fixing, but it is a small, non-differential, plan-count-inflation
+issue — not the mechanism behind the ~4-point recall gap this document
+originally reported and attributed to candidate order.
+
+**Proposed fix scope (not yet implemented, pending owner sign-off — this
+correction stops here per the owner's own explicit process gate: report
+root cause and fix scope before bundling a large fix)**:
+
+- Fix `generator_outputs`'s cache key to something unique per row (row
+  index, or a hash of the row's own candidate id list + target_formula)
+  instead of `target_formula` alone.
+- Exclude `fusion=catalog-anchored` (and any other policy provably
+  byte-identical to the baseline) from `is_selectable_policy`.
+- Lock a canonical route-identity metric (composition-multiset or
+  balanced-reaction identity, not raw `PrecursorId`-set equality) as
+  primary, per the owner's own instruction, before re-running anything.
+- Fix the `TotalF64`/`SearchState` `Eq`/`Ord` contract violations with
+  dedicated tests, independent of this rerun.
+- Fix the dedup-hygiene defect (`evaluate_complete_state`'s
+  `BalancedReaction`-vector-order-sensitive equality) — separate,
+  small, production change.
+- Re-run the full development sweep exactly once with the cache fixed
+  and the metric locked; only if a real, non-control policy beats the
+  corrected baseline, draw a **freshly-unseen** confirmation holdout
+  (the original holdout has now been looked at and cannot serve as an
+  unseen split for any future candidate).
+- Even after all of the above, this PR is not to be merged without the
+  owner's own explicit re-approval.
+
+The original, now-superseded Results section is kept below for the
+audit trail (per this codebase's own discipline of not silently
+rewriting history), with every retracted claim listed above and not to
+be relied upon.
+
+## Results (2026-08-24, superseded — see "Correction" above)
 
 Run 2026-08-24 (`examples/exploration_fusion_search_coupling_audit.rs`).
 **A real bug was found and fixed in this script's own first draft, before

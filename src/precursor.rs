@@ -1021,6 +1021,139 @@ mod tests {
         );
     }
 
+    /// Phase 30.5 order-invariance investigation (owner-mandated synthetic
+    /// fixture, built BEFORE touching the real corpus): two candidates
+    /// share an identical composition under different `PrecursorId`s
+    /// ("Fe2O3" / "AFe2O3", mirroring the real corpus's "Fe2O3" /
+    /// "α-Fe2O3" polymorph-label duplicates found in 440/2879 benchmark
+    /// rows).
+    ///
+    /// Two separate claims, kept separate on purpose:
+    ///
+    /// 1. **The chemistry recovered is order-invariant** (the invariant
+    ///    that actually matters for recall): under canonical
+    ///    composition-multiset identity, both array orderings recover the
+    ///    exact same single route {BaO-comp, Fe-oxide-comp}. This DOES
+    ///    hold and is asserted as a real invariant, not a documented bug.
+    /// 2. **A real, narrower dedup-hygiene defect**: `evaluate_complete_state`
+    ///    dedups on `BalancedReaction`'s derived, reactant-*vector-order*-
+    ///    sensitive `PartialEq` (`src/reaction.rs`), but `balance()` builds
+    ///    `reactants()` by zipping positionally against its *input* order
+    ///    (`vector_to_reaction`, `src/balance.rs`), which tracks `chosen`'s
+    ///    ascending-index order into whichever candidate array the search
+    ///    was given. When the two duplicate-composition candidates land on
+    ///    opposite sides of a third candidate in the array, `balance()` is
+    ///    fed their shared composition in opposite relative order, so the
+    ///    two structurally-identical reactions produce differently-ordered
+    ///    `reactants()` vectors and dedup fails to collapse them: the same
+    ///    one chemistry is recorded as two `accepted` entries. This can
+    ///    burn two `max_plans_returned` slots in `Planner` for one real
+    ///    plan -- worth fixing -- but it is not a recall-losing,
+    ///    order-invariance violation: no route disappears under either
+    ///    ordering.
+    #[test]
+    fn duplicate_composition_candidates_keep_canonical_chemistry_order_invariant() {
+        let target = composition(&[("Ba", 1.0), ("Fe", 2.0), ("O", 4.0)]);
+        let ba_o = candidate("BaO", &[("Ba", 1.0), ("O", 1.0)]);
+        let fe2o3 = candidate("Fe2O3", &[("Fe", 2.0), ("O", 3.0)]);
+        let afe2o3 = candidate("AFe2O3", &[("Fe", 2.0), ("O", 3.0)]);
+        // Genuinely exhaustive: 3 candidates, arity <=2, at most 6 states
+        // total -- nowhere close to `max_precursor_sets`, so
+        // `budget_exhausted` is guaranteed false either way.
+        let budget = SearchBudget {
+            max_precursor_sets: 1_000,
+            max_precursors_per_plan: 2,
+            max_plans_returned: 100,
+        };
+
+        // Order A: the two duplicate-composition candidates fall on
+        // *opposite* sides of `ba_o` in the array -- {fe2o3, ba_o} and
+        // {ba_o, afe2o3} feed `balance()` reactant compositions in
+        // opposite relative order ([Fe,Ba] vs [Ba,Fe]), triggering the
+        // dedup-hygiene gap described above.
+        let order_a = vec![fe2o3.clone(), ba_o.clone(), afe2o3.clone()];
+        let outcome_a =
+            search_precursor_sets(&target, &order_a, &PlanningConstraints::default(), &budget)
+                .unwrap();
+        assert!(
+            !outcome_a.rejected.iter().any(|r| matches!(
+                r.reason_codes.first(),
+                Some(RejectionCode::SearchBudgetExhausted)
+            )),
+            "fixture must be genuinely exhaustive, not budget-limited"
+        );
+
+        // Order B: both duplicate-composition candidates fall on the
+        // *same* side of `ba_o` -- {fe2o3, ba_o} and {afe2o3, ba_o} both
+        // feed `balance()` reactant compositions in the *same* relative
+        // order ([Fe,Ba]), so `balance()` returns structurally identical
+        // `BalancedReaction`s and the dedup correctly collapses them to
+        // one entry (keeping "AFe2O3" < "Fe2O3" lexicographically).
+        let order_b = vec![fe2o3.clone(), afe2o3.clone(), ba_o.clone()];
+        let outcome_b =
+            search_precursor_sets(&target, &order_b, &PlanningConstraints::default(), &budget)
+                .unwrap();
+        assert!(
+            !outcome_b.rejected.iter().any(|r| matches!(
+                r.reason_codes.first(),
+                Some(RejectionCode::SearchBudgetExhausted)
+            )),
+            "fixture must be genuinely exhaustive, not budget-limited"
+        );
+
+        // Canonical composition-multiset per accepted entry: "Fe2O3" and
+        // "AFe2O3" both canonicalize to the same label, since recall
+        // should depend on which chemistry was found, not which
+        // duplicate-composition catalog entry's id happened to be
+        // attributed to it.
+        fn canonical_label(id: &str) -> &'static str {
+            match id {
+                "BaO" => "BaO-comp",
+                "Fe2O3" | "AFe2O3" => "Fe-oxide-comp",
+                other => panic!("unexpected id in fixture: {other}"),
+            }
+        }
+        fn canonical_sets_of(outcome: &PrecursorSearchOutcome) -> BTreeSet<BTreeSet<&'static str>> {
+            outcome
+                .accepted
+                .iter()
+                .map(|a| {
+                    a.precursors
+                        .iter()
+                        .map(|p| canonical_label(p.0.as_str()))
+                        .collect::<BTreeSet<_>>()
+                })
+                .collect()
+        }
+        assert_eq!(
+            canonical_sets_of(&outcome_a),
+            canonical_sets_of(&outcome_b),
+            "the invariant that matters for recall: under canonical \
+            composition-multiset identity, both orderings must recover \
+            the exact same chemistry -- and they do."
+        );
+
+        // The narrower, real defect: raw accepted-entry count differs
+        // (one chemistry recorded twice under Order A) purely because of
+        // candidate array order.
+        assert_eq!(
+            outcome_a.accepted.len(),
+            2,
+            "known dedup-hygiene gap: Order A's split placement causes \
+            evaluate_complete_state's BalancedReaction-vector-order-sensitive \
+            dedup to miss that both entries are the same chemistry. Got: \
+            {:?}",
+            outcome_a.accepted
+        );
+        assert_eq!(
+            outcome_b.accepted.len(),
+            1,
+            "Order B's same-side placement lets dedup collapse correctly. \
+            Got: {:?}",
+            outcome_b.accepted
+        );
+    }
+
     /// AGENTS.md §21.2: 不要元素を含む候補の除外 (candidates introducing
     /// an element with no curated byproduct to remove it are excluded).
     #[test]

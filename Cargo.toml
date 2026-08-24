@@ -112,6 +112,11 @@ path = "tests/literature_observation_planner_invariance.rs"
 required-features = ["literature_corpus"]
 
 [[test]]
+name = "phase30_5_order_invariance_real_row"
+path = "tests/phase30_5_order_invariance_real_row.rs"
+required-features = ["serde"]
+
+[[test]]
 name = "commercial_catalog"
 path = "tests/commercial_catalog.rs"
 required-features = ["commercial_catalog"]
@@ -189,6 +194,11 @@ required-features = ["serde"]
 [[example]]
 name = "exploration_result_acetate_byproduct"
 path = "examples/exploration_result_acetate_byproduct.rs"
+required-features = ["serde"]
+
+[[example]]
+name = "phase30_5_pool_filter_isolation_check"
+path = "examples/phase30_5_pool_filter_isolation_check.rs"
 required-features = ["serde"]
 
 [[example]]
