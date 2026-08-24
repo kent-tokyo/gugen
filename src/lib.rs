@@ -146,7 +146,7 @@ mod thermodynamics;
 pub use balance::{balance, curated_byproducts};
 pub use candidate_generator::{
     CandidateGeneratorEnsemble, CatalogExactGenerator, EnsembleOutput, FrequencyPriorGenerator,
-    GeneratedCandidate, GeneratorId,
+    GeneratedCandidate, GeneratorId, ThermodynamicStabilityGenerator,
 };
 #[cfg(feature = "chematic_crystal")]
 pub use chematic_crystal_adapter::to_mikiwame_structure;
