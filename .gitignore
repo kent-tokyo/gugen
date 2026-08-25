@@ -30,3 +30,7 @@ CLAUDE.md
 # regenerable-plus-checksum indirection here.
 /benchmarks/data/exploration_recall_manifest.json
 /benchmarks/data/exploration_frozen_catalog_manifest.json
+# playground: build output, not source.
+/playground/wasm/target
+/playground/web/pkg
+/playground/web/node_modules

@@ -15,7 +15,12 @@ categories = ["science::computational-chemistry", "command-line-utilities", "alg
 # benchmarks/data/kononova_sample.jsonl (472 KB, committed since Phase 11 /
 # v0.2.0), which `cargo package --list` confirms was shipping in every
 # published tarball through v0.3.0 with no prior exclusion.
-exclude = ["benchmarks/data/*.json", "benchmarks/data/*.jsonl"]
+# playground/ is a standalone browser demo (a separate Cargo crate plus a
+# JS frontend) -- not library code, has no reason to ship inside the
+# published gugen crate. No `include` allowlist exists on this package, so
+# without this, `cargo package`/`cargo publish` would sweep it in by
+# default (same reasoning as the benchmarks/data exclusion below).
+exclude = ["benchmarks/data/*.json", "benchmarks/data/*.jsonl", "playground/"]
 
 [package.metadata.docs.rs]
 # default = [] hides most public types (serde impls, the mikiwame adapter)

@@ -1,0 +1,9 @@
+{
+  "name": "gugen-playground-web",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Static browser demo for gugen, running the crate in-browser via WebAssembly. No build step required — served as-is.",
+  "scripts": {
+    "dev": "python3 -m http.server 8787"
+  }
+}
