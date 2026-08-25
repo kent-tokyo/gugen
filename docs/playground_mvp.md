@@ -22,9 +22,11 @@ with copy. Zero network calls after the page loads.
 **Out (owner's explicit list, all deferred to a later stage)**: OQMD or
 any external API, real supplier catalogs, execution-record writes, user
 accounts, a server, an LLM, Phase 30's diagnostic tie-break machinery, a
-success-probability number, free-form giant candidate catalogs,
-free-form target/catalog input, CSV drag-and-drop, a commercial-catalog
-mini-demo.
+success-probability number, free-form giant candidate catalogs, CSV
+drag-and-drop, a commercial-catalog mini-demo. (Manual free-form target/
+candidate entry, still without a formula-string parser or CSV/JSON
+upload, was added in a later pass — see
+`docs/playground_free_form_input.md`.)
 
 ## Research findings that shaped this build
 

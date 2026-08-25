@@ -29,6 +29,30 @@
         </p>
         <div id="example-list" class="example-list"></div>
         <p id="citation" class="citation"></p>
+
+        <details class="custom-target">
+          <summary>Or, build a custom target</summary>
+          <p class="step-note">
+            Element/amount pairs only — no formula-string parser (gugen
+            has none in its public API). Up to 12 target elements, 60
+            candidates. Nothing here is sent anywhere; validation runs
+            entirely in this browser.
+          </p>
+
+          <h3>Target composition</h3>
+          <div id="custom-target-elements" class="element-rows"></div>
+          <button type="button" id="add-target-element" class="add-row-button">
+            + Add element
+          </button>
+
+          <h3>Precursor candidates</h3>
+          <div id="custom-candidates" class="candidate-rows"></div>
+          <button type="button" id="add-candidate" class="add-row-button">
+            + Add candidate
+          </button>
+
+          <button type="button" id="generate-custom">Generate from custom input</button>
+        </details>
       </section>
 
       <section id="step2">

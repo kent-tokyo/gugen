@@ -103,6 +103,100 @@ h2 {
   padding-left: 0.75rem;
 }
 
+.custom-target {
+  margin-top: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
+}
+
+.custom-target summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.custom-target h3 {
+  font-size: 1rem;
+  margin: 1rem 0 0.5rem;
+}
+
+.element-row,
+.candidate-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.candidate-row {
+  flex-direction: column;
+  align-items: stretch;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.6rem;
+}
+
+.candidate-row .element-rows {
+  margin-left: 1rem;
+}
+
+.candidate-id-label {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.element-symbol {
+  width: 5rem;
+}
+
+.element-amount {
+  width: 6rem;
+}
+
+.element-symbol,
+.element-amount,
+.candidate-id {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 0.3rem 0.5rem;
+  font: inherit;
+}
+
+.add-row-button {
+  background: transparent;
+  border: 1px dashed var(--border);
+  color: var(--muted);
+  border-radius: 4px;
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+  margin-bottom: 0.75rem;
+}
+
+.remove-row-button {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--severe);
+  border-radius: 4px;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+}
+
+#generate-custom {
+  display: block;
+  margin-top: 0.75rem;
+  background: var(--accent);
+  color: #0b0d12;
+  border: none;
+  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
 #generate {
   background: var(--accent);
   color: #0b0d12;
