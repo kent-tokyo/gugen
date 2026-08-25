@@ -297,30 +297,210 @@ worth fixing, but it is a small, non-differential, plan-count-inflation
 issue — not the mechanism behind the ~4-point recall gap this document
 originally reported and attributed to candidate order.
 
-**Proposed fix scope (not yet implemented, pending owner sign-off — this
-correction stops here per the owner's own explicit process gate: report
-root cause and fix scope before bundling a large fix)**:
+**Fix scope, approved by the owner 2026-08-25, split across two PRs**:
+PR #66 (this PR, diagnostic/benchmark-only) fixes the cache bug, the
+canonical metric, the policy-selection gap, and the `Eq`/`Ord` contract
+violations, then re-runs the corrected sweep. The dedup-hygiene defect
+(finding 1 above, a real but small production defect) is deliberately
+**deferred to a separate PR** ("Phase 30.6 — Reaction identity and
+search dedup hygiene", not started) so that fixing the benchmark and
+changing production search behavior never land in the same diff — if
+both changed together, a difference in the corrected numbers couldn't
+be attributed to either change specifically.
 
-- Fix `generator_outputs`'s cache key to something unique per row (row
-  index, or a hash of the row's own candidate id list + target_formula)
-  instead of `target_formula` alone.
-- Exclude `fusion=catalog-anchored` (and any other policy provably
-  byte-identical to the baseline) from `is_selectable_policy`.
-- Lock a canonical route-identity metric (composition-multiset or
-  balanced-reaction identity, not raw `PrecursorId`-set equality) as
-  primary, per the owner's own instruction, before re-running anything.
-- Fix the `TotalF64`/`SearchState` `Eq`/`Ord` contract violations with
-  dedicated tests, independent of this rerun.
-- Fix the dedup-hygiene defect (`evaluate_complete_state`'s
-  `BalancedReaction`-vector-order-sensitive equality) — separate,
-  small, production change.
-- Re-run the full development sweep exactly once with the cache fixed
-  and the metric locked; only if a real, non-control policy beats the
-  corrected baseline, draw a **freshly-unseen** confirmation holdout
-  (the original holdout has now been looked at and cannot serve as an
-  unseen split for any future candidate).
-- Even after all of the above, this PR is not to be merged without the
-  owner's own explicit re-approval.
+### Implementation (2026-08-25, this PR)
+
+- **`TotalF64`/`SearchState` `Eq`/`Ord` contract fixed** (`src/precursor.rs`):
+  both types now define `PartialEq` as `cmp() == Equal` instead of a
+  narrower/derived comparison, making the two impossible to drift apart
+  by construction. New tests cover `0.0`/`-0.0`, NaN (same and differing
+  payloads), `±infinity` for `TotalF64`, and same-chosen-different-
+  priority / same-chosen-different-tie-break-key / all-fields-equal for
+  `SearchState`. `search_precursor_sets_diagnostic` additionally rejects
+  a non-finite `FusionPrioritySum` rank explicitly at its public boundary
+  (`require_finite`) rather than relying on `TotalF64`'s `total_cmp` to
+  absorb it silently. Production `search_precursor_sets` behavior is
+  unaffected (`TotalF64` is only ever constructed by the feature-gated
+  diagnostic path).
+- **Cache bug fixed by elimination, not re-keying** (`examples/exploration_fusion_search_coupling_audit.rs`):
+  the `BTreeMap<String, RowGeneratorOutputs>` cache is gone entirely.
+  `ParsedRow` now carries its own `generator_outputs` and
+  `gold_canonical_composition`, computed directly per row
+  (`attach_generator_outputs`) — no shared key of any kind, so the bug
+  class (a lookup silently returning a different row's data) cannot
+  recur. A new synthetic regression test
+  (`rows_sharing_a_target_formula_with_different_pools_each_keep_their_own_generator_outputs`,
+  in the same file's own `#[cfg(test)]` module) proves this directly:
+  two rows sharing a `target_formula` with different candidates and gold
+  routes each keep their own generator outputs, without needing the real
+  11 MB corpus file.
+- **Candidate-pool identity invariant** (`assert_order_sweep_pool_identity`):
+  runs on the dev sample before any sweep cell executes, asserting that
+  catalog-exact/reverse/oracle/every shuffle seed all receive the
+  identical `PrecursorId` multiset for a given row — the exact check
+  that would have caught the original bug on its first affected row.
+  Panics with a full diagnostic dump (target, expected vs. actual ids)
+  on the first violation rather than proceeding.
+- **Order sweep now genuinely holds content fixed**: `A-catalog-exact`/
+  `B-reverse` sort `row.candidates` directly (the row's own raw pool)
+  instead of reading `outputs.catalog_exact`, which goes through
+  `InMemoryPrecursorCatalog::candidates_for`'s element-overlap filter.
+  `oracle`/`shuffle-*` already read `row.candidates` raw, so this makes
+  every order-sweep arm share one identical multiset — the actual "same
+  content, different order" comparison H2 needs. `D-min-rank-ensemble`
+  deliberately keeps reading the filtered generator path (disclosed,
+  not a bug): it is testing what the real ensemble's own fused order
+  does, filter included. The fusion-rule sweep is unaffected either way
+  — it always exercised the real, filtered `.generate()` path.
+- **Canonical metric B locked as primary**: `CellAccumulator` now tracks
+  metric A (exact `PrecursorId`-set, kept as a secondary, catalog-entry-
+  level diagnostic) and metric B (canonical composition-multiset,
+  computed via `Composition`'s own exact `Ord`/`Eq` over `Frac` amounts
+  — no float tolerance anywhere, no new canonicalization code needed)
+  separately, and reports both per cell. `SearchDiagnosticTrace` gained
+  an `accepted: Vec<AcceptedPrecursorSet>` field (the full accepted set,
+  already computed internally as `core.accepted`) so the harness can
+  compute metric B without a second search call. Metric C (canonical
+  balanced-reaction identity) is **deferred**: metric B already resolves
+  the practical recall question the owner asked about, and building an
+  independent "gold's own canonical reaction" reconstruction would need
+  a new `balance()`-reaching helper for marginal benefit over B — noted
+  as a scope decision, not an oversight.
+- **Synonym-ambiguity diagnostic**: each cell now reports what fraction
+  of its rows have a gold-route member sharing a composition with a
+  *different* candidate in the same pool (the mechanism behind finding 2
+  above) — descriptive, not part of the selection/verdict logic.
+- **Policy selection excludes provable baseline-ties programmatically**:
+  `is_selectable_policy` now also excludes any policy whose per-row
+  canonical-recovered vector at `PRIMARY_BUDGET` is byte-identical to
+  catalog-exact's own — catching `catalog-anchored` (and any future
+  policy that happens to collapse to the baseline) by comparing actual
+  per-row outcomes, not by a hardcoded name list.
+- **`DEV_NO_GO` short-circuit**: the selected policy must strictly beat
+  the corrected baseline's metric-B recall at `PRIMARY_BUDGET`, not
+  merely be the top of a sorted list (which could still be the least-bad
+  loser). If nothing beats the baseline, the confirmation holdout is not
+  run at all.
+- **Fresh confirmation holdout**: if (and only if) a real policy beats
+  the corrected baseline, confirmation runs against dev rows outside the
+  `dev_sample` stride (never inspected in this run or the retracted
+  one) — not the original 2026-08-24 holdout, which is spent and not
+  reused for any new policy candidate.
+- **Result JSON versioned**: `schema_revision`/`supersedes` fields point
+  at the retracted `47496fe` result instead of silently overwriting it.
+
+Full workspace quality gate green after this implementation: `cargo fmt
+--all -- --check`, `cargo clippy --workspace --all-targets --all-features
+-- -D warnings`, `cargo test --workspace` (both `--all-features` and
+`--no-default-features`), `RUSTDOCFLAGS="-D warnings" cargo doc
+--workspace --all-features --no-deps`, `cargo semver-checks
+check-release --baseline-version 0.6.0 --all-features` (no update
+required). A reduced-scale smoke test (`DEV_FACTORIAL_STRIDE` temporarily
+raised to 60, n=37 dev rows) confirmed the corrected harness runs
+cleanly before the full sweep: at `budget=100,000`, catalog-exact,
+reverse, min-rank-ensemble, oracle, and all 10 shuffle seeds genuinely
+converged to the same recall (0.5135) — real convergence this time, not
+the cache-artifact convergence originally reported — and `DEV_NO_GO`
+correctly triggered with `catalog-anchored` correctly excluded as
+byte-identical to baseline.
+
+### Corrected results (2026-08-25, full run)
+
+Full run, not a stride sample of the smoke test: development split 2,175
+rows / 1,133 distinct targets; `dev_sample` (stride 5) 435 rows — the
+same pre-registered sample size and rule as the retracted run, now
+computed correctly. `assert_order_sweep_pool_identity` **passed** across
+all 435 dev-sample rows before the sweep ran (no violations — the
+invariant that would have caught the original bug held throughout).
+Committed as `benchmarks/data/exploration_fusion_search_audit_result.json`
+(`schema_revision: 2`).
+
+**Metric B (canonical composition-multiset recall), `budget=20`, catalog-exact
+baseline: 0.4782 (AUC proxy across the 6 budget points: 0.4916).**
+
+| policy | recall (metric B) | vs. catalog-exact |
+|---|---|---|
+| **catalog-exact (baseline)** | **0.4782** | — |
+| oracle (diagnostic ceiling, gold-informed, never selectable) | 0.4851 | +0.0069 |
+| B-reverse | 0.4391 | −0.0391 |
+| D-min-rank-ensemble (current production ensemble order) | 0.4529 | −0.0253 |
+| shuffle-1 .. shuffle-10 (range) | 0.4529 – 0.4621 | −0.0161 to −0.0253 |
+| fusion=min-rank | 0.4529 | −0.0253 |
+| fusion=reciprocal-rank-fusion | 0.4368 | −0.0414 |
+| fusion=mean-normalized-rank | 0.4345 | −0.0437 |
+| fusion=consensus-first | 0.4368 | −0.0414 |
+| fusion=round-robin | 0.4529 | −0.0253 |
+| fusion=catalog-anchored | 0.4782 | 0.0000 (byte-identical to catalog-exact — correctly detected and excluded from selection) |
+| tie-break T1/T3/T4 (fixed at min-rank-ensemble order) | 0.4529 / 0.4552 / 0.4506 | −0.0230 to −0.0276 |
+
+**Catalog-exact beats every one of the 10 fixed shuffle seeds, `B-reverse`,
+and `D-min-rank-ensemble` at the primary budget — the complete reverse
+of the retracted run's "catalog-exact loses to every shuffle" claim,**
+now measured with every order-sweep arm genuinely sharing the identical
+candidate multiset (verified by the pool-identity invariant, not
+assumed). Only the diagnostic `oracle` order (which is explicitly
+gold-informed and never a selectable policy) scores higher, as expected
+of a ceiling.
+
+**At `budget=100,000` (`exhaustion_rate=0.0000` for every single cell,
+genuinely exhaustive), every order-sweep policy — catalog-exact,
+reverse, min-rank-ensemble, oracle, and all 10 shuffle seeds — converges
+to exactly 0.514943.** This is real convergence this time: every arm
+was verified to share the identical candidate multiset before the sweep
+ran, unlike the retracted run where the "converging" policies were
+silently sharing cached content while the diverging ones weren't. This
+is direct empirical confirmation of Case A from the owner's own
+framework: canonical chemistry recovery is order-invariant at full
+exhaustion; the order-dependence that exists is real but confined to
+tight-budget regimes, exactly as the crate's own architecture would
+predict (`search_matches_brute_force_enumeration_under_an_unlimited_budget`).
+
+Synonym-ambiguity rate (a gold-route member sharing a composition with a
+different candidate in the same pool): **1.15%** of dev-sample rows
+(5/435) — a real but narrow effect, much smaller than this document's
+earlier back-of-envelope estimate (~15% of rows have *some* duplicate
+composition *anywhere* in their pool; only 1.15% have one specifically
+*on the gold route*). Metric A (exact-`PrecursorId`) and metric B track
+each other closely everywhere in this run (e.g. catalog-exact:
+0.4782 vs. 0.4782 at budget=20; oracle: 0.4851 vs. 0.4805 — the one
+policy where they diverge measurably, consistent with oracle
+deliberately prioritizing gold's own literal ids).
+
+**Verdict: DEV_NO_GO.** No genuinely different, deployable policy beats
+`catalog-exact`'s plain order on metric B at the fixed comparison
+budget. Per the owner's own corrected decision framework, this means
+the confirmation holdout is **not run** — there is nothing to confirm.
+The fresh holdout pool (929 dev rows outside the `dev_sample` stride,
+never inspected in this run or the retracted one) remains genuinely
+unseen, available for a future policy candidate.
+
+**What this corrected run actually establishes**: `search_precursor_sets`'s
+real, production candidate order (ascending `PrecursorId`) is not merely
+"not worse than random" — at this budget, on this corpus, it beats every
+tested alternative except the gold-informed diagnostic ceiling. Three
+separate structured-reordering attempts (PR 1 frequency-prior, PR 2
+thermodynamic-stability, and this phase's 6 fusion rules + 3 tie-breaks)
+have now all failed to beat catalog-exact's plain order, on a corrected
+measurement free of the cache bug. The recommendation to the owner is
+unchanged in substance from before this correction, now on solid
+ground: PR 3 (`PriorExperimentGenerator`) and PR 4
+(`LiteratureAnalogGenerator`) remain paused; there is no evidence in
+this phase, corrected or original, that candidate-order or fusion-rule
+engineering is the missing piece. Production `search_precursor_sets`'s
+default tie-break is unchanged either way — this phase never proposed
+changing it and this result gives no reason to.
+
+**Deferred, not started**: the dedup-hygiene defect (`evaluate_complete_state`'s
+`BalancedReaction`-vector-order-sensitive equality) is a real, separate,
+small production defect, tracked for a future "Phase 30.6" PR
+(explicitly not authorized to start yet). The "why does alphabetical-id
+order specifically do well" question this run's own numbers raise is
+noted as a possible future curiosity, not a lead this phase further
+investigated — no causal mechanism is claimed here beyond the measured
+numbers above.
+
+Even after this implementation and the corrected rerun above, **this PR
+is not to be merged without the owner's own explicit re-approval.**
 
 The original, now-superseded Results section is kept below for the
 audit trail (per this codebase's own discipline of not silently
