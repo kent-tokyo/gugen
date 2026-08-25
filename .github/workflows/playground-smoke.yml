@@ -1,0 +1,54 @@
+name: Playground Live Smoke Check
+
+# Lightweight periodic check that the deployed Playground is actually
+# reachable, not a functional/WASM-execution test -- that's already
+# covered by playground-pages.yml's own build job on every push/PR.
+# Deliberately dependency-free (curl only) to keep this cheap to run
+# and maintain; a scheduled run failing shows up in the Actions tab and
+# (per each watcher's own GitHub notification settings) an email --
+# no separate alerting service added.
+#
+# No untrusted event input reaches this workflow (schedule/
+# workflow_dispatch triggers only), so the run: steps below use fixed
+# strings, not interpolated github.event.* values.
+
+on:
+  schedule:
+    - cron: "0 9 * * 1" # every Monday 09:00 UTC
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check live site and asset reachability
+        run: |
+          set -euo pipefail
+          base="https://kent-tokyo.github.io/gugen"
+
+          check() {
+            local path="$1" expect_content_type="${2:-}"
+            local url="${base}${path}"
+            local http_status content_type
+            http_status=$(curl -s -o /dev/null -w "%{http_code}" "$url")
+            content_type=$(curl -sI "$url" | grep -i '^content-type:' | tr -d '\r' || true)
+            echo "GET ${url} -> ${http_status} (${content_type})"
+            if [ "$http_status" != "200" ]; then
+              echo "::error::${url} returned HTTP ${http_status}"
+              exit 1
+            fi
+            if [ -n "$expect_content_type" ] && ! echo "$content_type" | grep -qi "$expect_content_type"; then
+              echo "::error::${url} has unexpected content-type: ${content_type}"
+              exit 1
+            fi
+          }
+
+          check "/" "text/html"
+          check "/src/main.js"
+          check "/src/render.js"
+          check "/src/examples.js"
+          check "/src/catalog.js"
+          check "/src/custom.js"
+          check "/src/styles.css"
+          check "/pkg/gugen_playground_wasm.js"
+          check "/pkg/gugen_playground_wasm_bg.wasm" "application/wasm"
