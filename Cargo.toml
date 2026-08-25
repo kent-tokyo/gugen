@@ -226,6 +226,11 @@ name = "exploration_fusion_search_coupling_audit"
 path = "examples/exploration_fusion_search_coupling_audit.rs"
 required-features = ["serde", "search_diagnostics"]
 
+[[example]]
+name = "exploration_two_step_arity_recall"
+path = "examples/exploration_two_step_arity_recall.rs"
+required-features = ["serde"]
+
 [[bin]]
 name = "gugen"
 path = "src/bin/gugen.rs"
