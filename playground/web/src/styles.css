@@ -1,7 +1,7 @@
 :root {
   --bg: #0f1115;
   --panel: #171a21;
-  --border: #2a2e38;
+  --border: #606a80;
   --text: #e6e8ec;
   --muted: #9aa1ad;
   --accent: #6ea8fe;
@@ -15,11 +15,17 @@
   box-sizing: border-box;
 }
 
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 header,
@@ -218,6 +224,12 @@ h2 {
   cursor: pointer;
 }
 
+.copy-feedback {
+  font-size: 0.8rem;
+  color: var(--ok);
+  margin-left: 0.5rem;
+}
+
 pre {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -236,4 +248,19 @@ footer {
   color: var(--muted);
   font-size: 0.8rem;
   border-top: 1px solid var(--border);
+}
+
+/* Below ~480px the .step row's three fixed-min-width columns (requirement
+   label / step name / fields) get too cramped to read -- stack them
+   instead of squeezing into three narrow columns. */
+@media (max-width: 480px) {
+  .step {
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  .step-requirement,
+  .step-name {
+    min-width: 0;
+  }
 }

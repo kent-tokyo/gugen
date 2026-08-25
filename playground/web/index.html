@@ -34,33 +34,83 @@
       <section id="step2">
         <h2>2. Generate a plan</h2>
         <button id="generate" type="button">Generate synthesis plan</button>
-        <p id="status" class="status"></p>
+        <p id="status" class="status" role="status"></p>
       </section>
 
-      <section id="step3" hidden>
+      <section id="step3">
         <h2>3. Compare</h2>
       </section>
 
       <div id="results" hidden>
-        <nav class="tabs">
-          <button class="tab-button active" data-tab="accepted" type="button">
+        <div class="tabs" role="tablist" aria-label="Result views">
+          <button
+            class="tab-button active"
+            data-tab="accepted"
+            id="tab-accepted"
+            role="tab"
+            aria-selected="true"
+            aria-controls="accepted-panel"
+            type="button"
+          >
             Accepted plans
           </button>
-          <button class="tab-button" data-tab="rejected" type="button">
+          <button
+            class="tab-button"
+            data-tab="rejected"
+            id="tab-rejected"
+            role="tab"
+            aria-selected="false"
+            aria-controls="rejected-panel"
+            tabindex="-1"
+            type="button"
+          >
             Rejected candidates
           </button>
-          <button class="tab-button" data-tab="raw" type="button">
+          <button
+            class="tab-button"
+            data-tab="raw"
+            id="tab-raw"
+            role="tab"
+            aria-selected="false"
+            aria-controls="raw-panel"
+            tabindex="-1"
+            type="button"
+          >
             JSON / Markdown
           </button>
-        </nav>
+        </div>
 
-        <div class="tab-panel" data-tab="accepted" id="accepted-panel"></div>
-        <div class="tab-panel" data-tab="rejected" id="rejected-panel" hidden></div>
-        <div class="tab-panel" data-tab="raw" id="raw-panel" hidden>
+        <div
+          class="tab-panel"
+          data-tab="accepted"
+          id="accepted-panel"
+          role="tabpanel"
+          aria-labelledby="tab-accepted"
+          tabindex="0"
+        ></div>
+        <div
+          class="tab-panel"
+          data-tab="rejected"
+          id="rejected-panel"
+          role="tabpanel"
+          aria-labelledby="tab-rejected"
+          tabindex="0"
+          hidden
+        ></div>
+        <div
+          class="tab-panel"
+          data-tab="raw"
+          id="raw-panel"
+          role="tabpanel"
+          aria-labelledby="tab-raw"
+          tabindex="0"
+          hidden
+        >
           <div class="raw-view">
             <h3>
               JSON
               <button id="copy-json" class="copy-button" type="button">Copy</button>
+              <span id="copy-json-feedback" class="copy-feedback" aria-live="polite"></span>
             </h3>
             <pre id="json-view"></pre>
           </div>
@@ -68,6 +118,7 @@
             <h3>
               Markdown
               <button id="copy-markdown" class="copy-button" type="button">Copy</button>
+              <span id="copy-markdown-feedback" class="copy-feedback" aria-live="polite"></span>
             </h3>
             <pre id="markdown-view"></pre>
           </div>
