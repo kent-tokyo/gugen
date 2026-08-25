@@ -1,6 +1,8 @@
 use crate::balance;
 use crate::composition::{Composition, Element};
-use crate::error::{ProviderError, Result, require_finite};
+#[cfg(feature = "search_diagnostics")]
+use crate::error::require_finite;
+use crate::error::{ProviderError, Result};
 use crate::provider::PrecursorCatalog;
 use crate::rejection::{RejectedCandidate, RejectionCode};
 use crate::target::PlanningConstraints;
@@ -820,6 +822,14 @@ pub struct SearchDiagnosticTrace {
     /// element at all (independent of budget/order/tie-break).
     pub gold_covers_all_target_elements: bool,
     pub gold_accepted: bool,
+    /// The full accepted set this run produced (Phase 30.5 correction,
+    /// 2026-08-25) -- already computed internally as `core.accepted`
+    /// either way; exposing it lets a caller compute its own recovery
+    /// metrics (e.g. canonical composition-multiset identity, not just
+    /// exact-`PrecursorId`-set equality) without a second search call.
+    /// Read-only, benchmark-side use only -- does not change what
+    /// `search_precursor_sets_core` itself computes or accepts.
+    pub accepted: Vec<AcceptedPrecursorSet>,
 }
 
 /// Diagnostic-only (Phase 30.5, `search_diagnostics` feature): runs the
@@ -915,6 +925,7 @@ pub fn search_precursor_sets_diagnostic(
         gold_pop_index: core.gold_pop_index,
         gold_covers_all_target_elements,
         gold_accepted,
+        accepted: core.accepted,
     })
 }
 

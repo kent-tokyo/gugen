@@ -15,10 +15,16 @@
 //! tested the actual real combination `outputs.catalog_exact` uses
 //! (filter, THEN sort ascending by `PrecursorId`, via
 //! `InMemoryPrecursorCatalog::new`). This version reproduces that real
-//! combination directly, on the same dev-sample selection rule the
-//! original harness used (sha256(target_formula) mod 5 != 4 => dev,
-//! stride 5), to settle the discrepancy empirically before writing up
-//! any conclusion.
+//! combination directly, on an arbitrary deterministic ~80% stride
+//! sample of the *full* corpus (this file's own FNV-1a scheme, NOT the
+//! main harness's real `sha256_hex`-based dev/holdout split -- see
+//! `is_arbitrary_80_percent_sample`'s own doc comment), to settle the
+//! discrepancy empirically before writing up any conclusion. This ended
+//! up finding the true root cause (a `target_formula`-keyed cache bug in
+//! the main harness, not filtering or ordering) -- see
+//! `docs/exploration_fusion_search_coupling.md`'s Correction section for
+//! the full story; this file remains as the throwaway diagnostic that
+//! found it, not as part of the locked methodology.
 
 use gugen::{
     Composition, Element, PlanningConstraints, PrecursorCandidate, PrecursorId, SearchBudget,
@@ -96,13 +102,14 @@ fn catalog_exact_equivalent_order(
     filtered
 }
 
-fn is_dev_row(target_formula: &str) -> bool {
-    // Mirrors `split_for` in exploration_fusion_search_coupling_audit.rs,
-    // trimmed to FNV-1a (this file's own scheme) instead of full SHA-256
-    // -- the split *rule itself* (some deterministic hash mod 5) matters
-    // for reproducing "which rows are in the dev sample", not the exact
-    // hash function, since we're re-deriving our own stride sample here
-    // rather than reusing the original's exact split.
+/// NOT the real dev/holdout split (`split_for` in
+/// `exploration_fusion_search_coupling_audit.rs` uses `sha256_hex` mod 5;
+/// this uses this file's own FNV-1a) -- an arbitrary, deterministic ~80%
+/// stride sample of the corpus, sufficient for this file's own purpose
+/// (isolating filtering/ordering effects on a real sample), but not
+/// interchangeable with the main harness's actual split for any
+/// dev/holdout-membership question.
+fn is_arbitrary_80_percent_sample(target_formula: &str) -> bool {
     fnv1a_hex(target_formula) % 5 != 4
 }
 
@@ -116,12 +123,12 @@ fn main() {
         ..SearchBudget::default()
     };
 
-    let dev_rows: Vec<&CatalogRow> = catalog
+    let sampled_rows: Vec<&CatalogRow> = catalog
         .rows
         .iter()
-        .filter(|r| is_dev_row(&r.target_formula))
+        .filter(|r| is_arbitrary_80_percent_sample(&r.target_formula))
         .collect();
-    let sample: Vec<&&CatalogRow> = dev_rows.iter().step_by(5).collect();
+    let sample: Vec<&&CatalogRow> = sampled_rows.iter().step_by(5).collect();
 
     let policies = [
         "catalog-exact-equivalent",
