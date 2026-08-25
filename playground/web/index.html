@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>gugen playground</title>
+    <link rel="stylesheet" href="src/styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>gugen playground</h1>
+      <p class="tagline">
+        Explainable inorganic materials synthesis planning — runs entirely in your
+        browser via WebAssembly. No server, no network calls, nothing sent
+        anywhere. <a href="https://github.com/kent-tokyo/gugen">gugen on GitHub</a>
+      </p>
+    </header>
+
+    <main>
+      <section id="step1">
+        <h2>1. Pick a target</h2>
+        <p class="step-note">
+          Every example below is a real, cited literature route, not a made-up
+          demo — see the citation for the selected target below the list.
+        </p>
+        <div id="example-list" class="example-list"></div>
+        <p id="citation" class="citation"></p>
+      </section>
+
+      <section id="step2">
+        <h2>2. Generate a plan</h2>
+        <button id="generate" type="button">Generate synthesis plan</button>
+        <p id="status" class="status"></p>
+      </section>
+
+      <section id="step3" hidden>
+        <h2>3. Compare</h2>
+      </section>
+
+      <div id="results" hidden>
+        <nav class="tabs">
+          <button class="tab-button active" data-tab="accepted" type="button">
+            Accepted plans
+          </button>
+          <button class="tab-button" data-tab="rejected" type="button">
+            Rejected candidates
+          </button>
+          <button class="tab-button" data-tab="raw" type="button">
+            JSON / Markdown
+          </button>
+        </nav>
+
+        <div class="tab-panel" data-tab="accepted" id="accepted-panel"></div>
+        <div class="tab-panel" data-tab="rejected" id="rejected-panel" hidden></div>
+        <div class="tab-panel" data-tab="raw" id="raw-panel" hidden>
+          <div class="raw-view">
+            <h3>
+              JSON
+              <button id="copy-json" class="copy-button" type="button">Copy</button>
+            </h3>
+            <pre id="json-view"></pre>
+          </div>
+          <div class="raw-view">
+            <h3>
+              Markdown
+              <button id="copy-markdown" class="copy-button" type="button">Copy</button>
+            </h3>
+            <pre id="markdown-view"></pre>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <footer>
+      <p>
+        Fully client-side: no OQMD/external API calls, no data leaves your
+        browser, no account, no execution-record writes. Commercial catalog
+        matching and free-form target input are not part of this MVP.
+      </p>
+    </footer>
+
+    <script type="module" src="src/main.js"></script>
+  </body>
+</html>
