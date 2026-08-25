@@ -1,11 +1,13 @@
 use crate::balance;
 use crate::composition::{Composition, Element};
+#[cfg(feature = "search_diagnostics")]
+use crate::error::require_finite;
 use crate::error::{ProviderError, Result};
 use crate::provider::PrecursorCatalog;
 use crate::rejection::{RejectedCandidate, RejectionCode};
 use crate::target::PlanningConstraints;
 use std::cmp::Ordering;
-use std::collections::{BTreeSet, BinaryHeap};
+use std::collections::{BTreeMap, BTreeSet, BinaryHeap};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -120,6 +122,85 @@ pub struct PrecursorSearchOutcome {
     pub rejected: Vec<RejectedCandidate>,
 }
 
+/// Wraps `f64` for use inside [`TieBreakKey`], ordered via `f64::total_cmp`
+/// (never `partial_cmp`) so the frontier's ordering stays total and
+/// panic-free even if a diagnostic-only fused-rank value were ever
+/// non-finite -- mirrors `ThermodynamicStabilityGenerator`'s own
+/// `total_cmp` convention (`src/candidate_generator.rs`). Diagnostic-only
+/// (Phase 30.5): only ever constructed by [`TieBreakMode::FusionPrioritySum`].
+///
+/// `PartialEq` is defined as `cmp() == Equal`, not derived from `f64`'s own
+/// `==` -- a derived `PartialEq` would disagree with `total_cmp` on `-0.0`
+/// vs `0.0` (equal under `==`, distinct under `total_cmp`) and on NaN
+/// (never equal under `==`, self-equal and totally ordered under
+/// `total_cmp`), violating `Eq`/`Ord`'s contract that `Ord`-equal values
+/// must be `PartialEq`-equal and vice versa. Defining `eq` in terms of
+/// `cmp` makes the two impossible to drift apart again.
+#[derive(Debug, Clone, Copy)]
+struct TotalF64(f64);
+impl PartialEq for TotalF64 {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+impl Eq for TotalF64 {}
+impl PartialOrd for TotalF64 {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for TotalF64 {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.total_cmp(&other.0)
+    }
+}
+
+/// The frontier's final tie-break value for one [`SearchState`], computed
+/// once at construction (`try_extend_state`) under whichever
+/// [`TieBreakMode`] the search was called with. Every variant follows the
+/// same convention: **a smaller `TieBreakKey` value pops first** (matches
+/// `elements_missing`/`depth`'s own "fewer/shallower pops first"
+/// convention above it) -- `MarginalCoverage` bakes its own "more
+/// coverage pops first" intent into `Reverse` so the outer comparison in
+/// `SearchState::cmp` never needs a variant-specific direction check.
+/// `search_precursor_sets` (production, unconditionally compiled) only
+/// ever constructs `IndexOrder` -- the other two variants exist solely
+/// for Phase 30.5's diagnostic harness to A/B test against the exact same
+/// frontier mechanism, never reachable from `search_precursor_sets`
+/// itself.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum TieBreakKey {
+    /// Production's own real tie-break: a lexicographically smaller
+    /// `chosen` index-vector pops first. Byte-identical to the pre-Phase-
+    /// 30.5 behavior (previously compared directly on `SearchState.chosen`
+    /// inside `Ord for SearchState`, not via this key at all).
+    IndexOrder(Vec<usize>),
+    /// Diagnostic-only (Phase 30.5, tie-break T3): smaller summed fused
+    /// rank (rank 0 = a generator's own top pick) pops first -- rewards
+    /// combinations more consensus-supported across generators.
+    FusionPrioritySum(TotalF64),
+    /// Diagnostic-only (Phase 30.5, tie-break T4): `Reverse` so that a
+    /// *larger* raw marginal-coverage value (how many new target elements
+    /// the most-recently-added candidate alone covered) pops first.
+    MarginalCoverage(std::cmp::Reverse<usize>),
+}
+
+/// Diagnostic-only (Phase 30.5): selects which [`TieBreakKey`] `try_extend_state`
+/// computes for a new state. Always compiled (unconditionally, not
+/// feature-gated) because production's own `search_precursor_sets` must
+/// be able to select `IndexOrder` regardless of which Cargo features are
+/// enabled -- only the *other* two variants, and the public
+/// [`TieBreakPolicy`] callers use to select them, are feature-gated.
+/// `#[allow(dead_code)]`: without `search_diagnostics`, nothing ever
+/// constructs `FusionPrioritySum`/`MarginalCoverage` -- expected, not a
+/// real dead branch left behind by mistake.
+#[allow(dead_code)]
+enum TieBreakMode<'a> {
+    IndexOrder,
+    FusionPrioritySum(&'a BTreeMap<PrecursorId, f64>),
+    MarginalCoverage,
+}
+
 /// One partial precursor selection under construction, explored by
 /// `search_precursor_sets`'s guided best-first frontier (Phase 29).
 /// `chosen` holds ascending indices into the search's own `candidates`
@@ -132,6 +213,12 @@ struct SearchState {
     chosen: Vec<usize>,
     missing: BTreeSet<Element>,
     priority: SearchPriority,
+    /// Diagnostic-only field (Phase 30.5): production's own frontier
+    /// behavior is unchanged, since `search_precursor_sets` only ever
+    /// constructs `TieBreakKey::IndexOrder(chosen.clone())` here, which
+    /// `SearchState::cmp` compares exactly as the pre-Phase-30.5 code
+    /// compared `chosen` directly.
+    tie_break_key: TieBreakKey,
 }
 
 /// Ordering signal only -- deliberately not `Score01`/`PlanScoreBreakdown`-
@@ -156,9 +243,18 @@ struct SearchPriority {
     depth: usize,
 }
 
+/// `eq` is defined as `cmp() == Equal`, not as a `chosen`-only comparison
+/// -- a `chosen`-only `PartialEq` would disagree with `Ord` (which also
+/// compares `priority` and `tie_break_key`) whenever two states share a
+/// `chosen` vector but differ in those other fields, violating `Eq`/`Ord`'s
+/// contract. `chosen`-only identity is not needed anywhere outside this
+/// impl (confirmed: `SearchState` is used only inside `BinaryHeap`, which
+/// needs `Ord`; no call site compares two states for `chosen`-equality
+/// directly) -- defining `eq` from `cmp` keeps the two impossible to drift
+/// apart, rather than introducing a second identity notion no caller uses.
 impl PartialEq for SearchState {
     fn eq(&self, other: &Self) -> bool {
-        self.chosen == other.chosen
+        self.cmp(other) == Ordering::Equal
     }
 }
 impl Eq for SearchState {}
@@ -167,17 +263,16 @@ impl Ord for SearchState {
     fn cmp(&self, other: &Self) -> Ordering {
         // BinaryHeap is a max-heap, so "greater" must mean "explore
         // first": fewer missing elements, then fewer chosen candidates,
-        // then a lexicographically smaller `chosen` as a final,
-        // always-decisive, deterministic tie-break -- needs no extra
-        // data, unlike e.g. commercial_catalog::search's PolicyEntry,
-        // whose rows don't carry an equivalent natural index-vector
-        // identity and so need a name-based tiebreak instead.
+        // then a smaller `tie_break_key` as a final, always-decisive,
+        // deterministic tie-break (production always uses `IndexOrder`,
+        // an exact byte-identical stand-in for the pre-Phase-30.5 direct
+        // `chosen` comparison -- see `TieBreakKey`'s own doc comment).
         other
             .priority
             .elements_missing
             .cmp(&self.priority.elements_missing)
             .then_with(|| other.priority.depth.cmp(&self.priority.depth))
-            .then_with(|| other.chosen.cmp(&self.chosen))
+            .then_with(|| other.tie_break_key.cmp(&self.tie_break_key))
     }
 }
 impl PartialOrd for SearchState {
@@ -201,11 +296,13 @@ impl PartialOrd for SearchState {
 #[allow(clippy::too_many_arguments)]
 fn try_extend_state(
     parent_chosen: &[usize],
+    parent_missing_len: usize,
     next: usize,
     candidates: &[PrecursorCandidate],
     target_elements: &BTreeSet<Element>,
     byproduct_elements: &BTreeSet<Element>,
     forbidden_elements: &BTreeSet<Element>,
+    tie_break_mode: &TieBreakMode<'_>,
     rejected: &mut Vec<RejectedCandidate>,
 ) -> Option<SearchState> {
     let mut chosen = Vec::with_capacity(parent_chosen.len() + 1);
@@ -259,10 +356,29 @@ fn try_extend_state(
         elements_missing: missing.len(),
         depth: chosen.len(),
     };
+    let tie_break_key = match tie_break_mode {
+        TieBreakMode::IndexOrder => TieBreakKey::IndexOrder(chosen.clone()),
+        TieBreakMode::FusionPrioritySum(ranks) => {
+            let sum: f64 = chosen
+                .iter()
+                .map(|&i| ranks.get(&candidates[i].id).copied().unwrap_or(f64::MAX))
+                .sum();
+            TieBreakKey::FusionPrioritySum(TotalF64(sum))
+        }
+        TieBreakMode::MarginalCoverage => {
+            // How many target elements did *only* the just-added `next`
+            // candidate newly cover, relative to the parent state --
+            // derivable from the two `missing` set sizes alone, no new
+            // per-state data needed.
+            let marginal = parent_missing_len.saturating_sub(missing.len());
+            TieBreakKey::MarginalCoverage(std::cmp::Reverse(marginal))
+        }
+    };
     Some(SearchState {
         chosen,
         missing,
         priority,
+        tie_break_key,
     })
 }
 
@@ -450,6 +566,55 @@ pub fn search_precursor_sets(
     constraints: &PlanningConstraints,
     budget: &crate::config::SearchBudget,
 ) -> Result<PrecursorSearchOutcome> {
+    let core = search_precursor_sets_core(
+        target,
+        candidates,
+        constraints,
+        budget,
+        &TieBreakMode::IndexOrder,
+        None,
+    )?;
+    Ok(PrecursorSearchOutcome {
+        accepted: core.accepted,
+        rejected: core.rejected,
+    })
+}
+
+/// Returned by `search_precursor_sets_core`, the function shared by both
+/// `search_precursor_sets` and (feature `search_diagnostics`)
+/// `search_precursor_sets_diagnostic`. `accepted`/`rejected` become
+/// `search_precursor_sets`'s own `PrecursorSearchOutcome`; every other
+/// field is read only by the feature-gated diagnostic wrapper.
+/// `#[allow(dead_code)]`: without `search_diagnostics`, those fields are
+/// computed (cheaply) but never read -- expected, not a real dead branch.
+#[allow(dead_code)]
+struct CoreOutcome {
+    accepted: Vec<AcceptedPrecursorSet>,
+    rejected: Vec<RejectedCandidate>,
+    considered: usize,
+    balance_calls: usize,
+    children_generated: usize,
+    complete_states_evaluated: usize,
+    budget_exhausted: bool,
+    gold_pushed_to_frontier: bool,
+    gold_pop_index: Option<usize>,
+}
+
+/// The real, shared frontier search -- `search_precursor_sets` (always
+/// `TieBreakMode::IndexOrder`, `gold_indices: None`, byte-identical to
+/// this function's pre-Phase-30.5 body) and
+/// `search_precursor_sets_diagnostic` (feature-gated) both call this
+/// directly; every pruning rule, budget-accounting rule, and dedup rule
+/// is one single code path for both.
+#[allow(clippy::too_many_arguments)]
+fn search_precursor_sets_core(
+    target: &Composition,
+    candidates: &[PrecursorCandidate],
+    constraints: &PlanningConstraints,
+    budget: &crate::config::SearchBudget,
+    tie_break_mode: &TieBreakMode<'_>,
+    gold_indices: Option<&[usize]>,
+) -> Result<CoreOutcome> {
     let target_elements: BTreeSet<Element> = target.elements().collect();
     let byproducts = balance::curated_byproducts()?;
     let byproduct_elements: BTreeSet<Element> =
@@ -459,24 +624,34 @@ pub fn search_precursor_sets(
     let mut accepted: Vec<AcceptedPrecursorSet> = Vec::new();
     let mut rejected = Vec::new();
     let mut frontier: BinaryHeap<SearchState> = BinaryHeap::new();
+    let mut children_generated = 0usize;
+    let mut gold_pushed_to_frontier = false;
 
     for next in 0..candidates.len() {
         if let Some(state) = try_extend_state(
             &[],
+            target_elements.len(),
             next,
             candidates,
             &target_elements,
             &byproduct_elements,
             &constraints.forbidden_elements,
+            tie_break_mode,
             &mut rejected,
         ) {
+            children_generated += 1;
+            if gold_indices == Some(state.chosen.as_slice()) {
+                gold_pushed_to_frontier = true;
+            }
             frontier.push(state);
         }
     }
 
     let mut considered = 0usize;
     let mut balance_calls = 0usize;
+    let mut complete_states_evaluated = 0usize;
     let mut budget_exhausted = false;
+    let mut gold_pop_index: Option<usize> = None;
 
     while let Some(state) = frontier.pop() {
         if considered >= budget.max_precursor_sets {
@@ -485,7 +660,12 @@ pub fn search_precursor_sets(
         }
         considered += 1;
 
+        if gold_indices == Some(state.chosen.as_slice()) {
+            gold_pop_index = Some(considered);
+        }
+
         if state.missing.is_empty() {
+            complete_states_evaluated += 1;
             balance_calls += evaluate_complete_state(
                 &state.chosen,
                 candidates,
@@ -520,13 +700,19 @@ pub fn search_precursor_sets(
         for next in start..candidates.len() {
             if let Some(child) = try_extend_state(
                 &state.chosen,
+                state.missing.len(),
                 next,
                 candidates,
                 &target_elements,
                 &byproduct_elements,
                 &constraints.forbidden_elements,
+                tie_break_mode,
                 &mut rejected,
             ) {
+                children_generated += 1;
+                if gold_indices == Some(child.chosen.as_slice()) {
+                    gold_pushed_to_frontier = true;
+                }
                 frontier.push(child);
             }
         }
@@ -544,7 +730,203 @@ pub fn search_precursor_sets(
         });
     }
 
-    Ok(PrecursorSearchOutcome { accepted, rejected })
+    Ok(CoreOutcome {
+        accepted,
+        rejected,
+        considered,
+        balance_calls,
+        children_generated,
+        complete_states_evaluated,
+        budget_exhausted,
+        gold_pushed_to_frontier,
+        gold_pop_index,
+    })
+}
+
+/// Diagnostic-only, public tie-break selector (Phase 30.5,
+/// `search_diagnostics` feature) for [`search_precursor_sets_diagnostic`].
+/// Never accepted by `search_precursor_sets` itself, which always behaves
+/// exactly as it did before this type existed.
+#[cfg(feature = "search_diagnostics")]
+#[derive(Debug, Clone)]
+pub enum TieBreakPolicy {
+    /// T1: production's own real tie-break, unchanged.
+    IndexOrder,
+    /// T3: fused-rank-sum tie-break (`rank[id]` per generator, summed
+    /// across a state's chosen candidates -- smaller sum pops first).
+    FusionPrioritySum(BTreeMap<PrecursorId, f64>),
+    /// T4: marginal-target-element-coverage tie-break.
+    MarginalCoverage,
+}
+
+#[cfg(feature = "search_diagnostics")]
+impl TieBreakPolicy {
+    fn as_mode(&self) -> TieBreakMode<'_> {
+        match self {
+            TieBreakPolicy::IndexOrder => TieBreakMode::IndexOrder,
+            TieBreakPolicy::FusionPrioritySum(ranks) => TieBreakMode::FusionPrioritySum(ranks),
+            TieBreakPolicy::MarginalCoverage => TieBreakMode::MarginalCoverage,
+        }
+    }
+}
+
+/// Every currently-defined `RejectionCode` variant (`src/rejection.rs`).
+/// `RejectionCode` derives neither `Ord` nor `Hash`, so
+/// `search_precursor_sets_diagnostic`'s prune-count tally uses this fixed
+/// list plus `Vec::contains` rather than a `BTreeMap`/`HashMap` key --
+/// deliberately avoids adding a derive to an existing public type this
+/// phase does not otherwise touch.
+#[cfg(feature = "search_diagnostics")]
+const ALL_REJECTION_CODES: &[RejectionCode] = &[
+    RejectionCode::NoStoichiometricBalance,
+    RejectionCode::MissingTargetElement,
+    RejectionCode::ForbiddenElementPresent,
+    RejectionCode::PrecursorCountExceeded,
+    RejectionCode::UnsupportedByproductRequired,
+    RejectionCode::AtmosphereConflict,
+    RejectionCode::UserConstraintViolation,
+    RejectionCode::HazardPolicyBlocked,
+    RejectionCode::ThermodynamicDataUnavailable,
+    RejectionCode::SearchBudgetExhausted,
+    RejectionCode::DuplicatePlan,
+];
+
+/// Diagnostic-only result (Phase 30.5, `search_diagnostics` feature) --
+/// see `search_precursor_sets_diagnostic`'s own doc comment. Targeted at
+/// one caller-known "gold" precursor set rather than a general per-state
+/// pop log, which would be unboundedly large across a full factorial
+/// sweep over a real corpus.
+#[cfg(feature = "search_diagnostics")]
+#[derive(Debug, Clone)]
+pub struct SearchDiagnosticTrace {
+    pub recovered: bool,
+    pub budget_exhausted: bool,
+    pub states_popped: usize,
+    pub children_generated: usize,
+    pub complete_states_evaluated: usize,
+    pub balance_calls: usize,
+    /// `(RejectionCode, count)`, only codes that occurred at least once.
+    pub prune_counts: Vec<(RejectionCode, usize)>,
+    /// `false` only if `gold` names a `PrecursorId` not present anywhere
+    /// in `candidates` at all -- a benchmark-harness input error, not a
+    /// search-mechanism finding.
+    pub gold_present_in_candidates: bool,
+    pub gold_pushed_to_frontier: bool,
+    /// The `considered` value (1-indexed: "this was the Nth state
+    /// processed") at the moment gold's exact combination was popped and
+    /// survived the budget check. `None` if gold was never popped, or was
+    /// popped only after the budget was already exhausted.
+    pub gold_pop_index: Option<usize>,
+    /// Computed directly from `candidates`/`target`, not from the search
+    /// -- whether gold's own chosen candidates cover every target
+    /// element at all (independent of budget/order/tie-break).
+    pub gold_covers_all_target_elements: bool,
+    pub gold_accepted: bool,
+    /// The full accepted set this run produced (Phase 30.5 correction,
+    /// 2026-08-25) -- already computed internally as `core.accepted`
+    /// either way; exposing it lets a caller compute its own recovery
+    /// metrics (e.g. canonical composition-multiset identity, not just
+    /// exact-`PrecursorId`-set equality) without a second search call.
+    /// Read-only, benchmark-side use only -- does not change what
+    /// `search_precursor_sets_core` itself computes or accepts.
+    pub accepted: Vec<AcceptedPrecursorSet>,
+}
+
+/// Diagnostic-only (Phase 30.5, `search_diagnostics` feature): runs the
+/// exact same frontier mechanism `search_precursor_sets` uses
+/// (`search_precursor_sets_core`, shared, unchanged pruning/budget/dedup
+/// rules), under a caller-selected [`TieBreakPolicy`], tracing only what
+/// this phase's pre-registered questions need about one specific
+/// known-correct ("gold") precursor set.
+#[cfg(feature = "search_diagnostics")]
+pub fn search_precursor_sets_diagnostic(
+    target: &Composition,
+    candidates: &[PrecursorCandidate],
+    constraints: &PlanningConstraints,
+    budget: &crate::config::SearchBudget,
+    tie_break: &TieBreakPolicy,
+    gold: &[PrecursorId],
+) -> Result<SearchDiagnosticTrace> {
+    // Reject a non-finite fused rank explicitly at the public boundary,
+    // rather than relying on `TotalF64`'s `total_cmp`-based ordering to
+    // handle NaN/infinity gracefully inside the frontier. `TotalF64`
+    // remains sound either way (its `Eq`/`Ord` contract holds for any
+    // `f64` value, see its own doc comment) -- this check exists so a
+    // caller-supplied bad rank map fails loudly here instead of silently
+    // producing an unusual-but-technically-valid tie-break ordering deep
+    // inside the search.
+    if let TieBreakPolicy::FusionPrioritySum(ranks) = tie_break {
+        for &rank in ranks.values() {
+            require_finite("FusionPrioritySum rank", rank)?;
+        }
+    }
+
+    let gold_indices: Option<Vec<usize>> = {
+        let mut indices: Vec<usize> = candidates
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| gold.contains(&c.id))
+            .map(|(i, _)| i)
+            .collect();
+        indices.sort_unstable();
+        if indices.len() == gold.len() {
+            Some(indices)
+        } else {
+            None
+        }
+    };
+
+    let target_elements: BTreeSet<Element> = target.elements().collect();
+    let gold_covers_all_target_elements = gold_indices.as_ref().is_some_and(|indices| {
+        let covered: BTreeSet<Element> = indices
+            .iter()
+            .flat_map(|&i| candidates[i].composition.elements())
+            .collect();
+        target_elements.iter().all(|e| covered.contains(e))
+    });
+
+    let core = search_precursor_sets_core(
+        target,
+        candidates,
+        constraints,
+        budget,
+        &tie_break.as_mode(),
+        gold_indices.as_deref(),
+    )?;
+
+    let gold_id_set: BTreeSet<&PrecursorId> = gold.iter().collect();
+    let gold_accepted = core.accepted.iter().any(|a| {
+        a.precursors.len() == gold.len() && a.precursors.iter().all(|id| gold_id_set.contains(id))
+    });
+
+    let prune_counts: Vec<(RejectionCode, usize)> = ALL_REJECTION_CODES
+        .iter()
+        .map(|&code| {
+            let count = core
+                .rejected
+                .iter()
+                .filter(|r| r.reason_codes.contains(&code))
+                .count();
+            (code, count)
+        })
+        .filter(|&(_, count)| count > 0)
+        .collect();
+
+    Ok(SearchDiagnosticTrace {
+        recovered: gold_accepted,
+        budget_exhausted: core.budget_exhausted,
+        states_popped: core.considered,
+        children_generated: core.children_generated,
+        complete_states_evaluated: core.complete_states_evaluated,
+        balance_calls: core.balance_calls,
+        prune_counts,
+        gold_present_in_candidates: gold_indices.is_some(),
+        gold_pushed_to_frontier: core.gold_pushed_to_frontier,
+        gold_pop_index: core.gold_pop_index,
+        gold_covers_all_target_elements,
+        gold_accepted,
+        accepted: core.accepted,
+    })
 }
 
 fn join_symbols(elements: &[Element]) -> String {
@@ -683,6 +1065,139 @@ mod tests {
             ba_ti.is_some(),
             "BaCO3 + TiO2 must be accepted: {:?}",
             outcome.accepted
+        );
+    }
+
+    /// Phase 30.5 order-invariance investigation (owner-mandated synthetic
+    /// fixture, built BEFORE touching the real corpus): two candidates
+    /// share an identical composition under different `PrecursorId`s
+    /// ("Fe2O3" / "AFe2O3", mirroring the real corpus's "Fe2O3" /
+    /// "α-Fe2O3" polymorph-label duplicates found in 440/2879 benchmark
+    /// rows).
+    ///
+    /// Two separate claims, kept separate on purpose:
+    ///
+    /// 1. **The chemistry recovered is order-invariant** (the invariant
+    ///    that actually matters for recall): under canonical
+    ///    composition-multiset identity, both array orderings recover the
+    ///    exact same single route {BaO-comp, Fe-oxide-comp}. This DOES
+    ///    hold and is asserted as a real invariant, not a documented bug.
+    /// 2. **A real, narrower dedup-hygiene defect**: `evaluate_complete_state`
+    ///    dedups on `BalancedReaction`'s derived, reactant-*vector-order*-
+    ///    sensitive `PartialEq` (`src/reaction.rs`), but `balance()` builds
+    ///    `reactants()` by zipping positionally against its *input* order
+    ///    (`vector_to_reaction`, `src/balance.rs`), which tracks `chosen`'s
+    ///    ascending-index order into whichever candidate array the search
+    ///    was given. When the two duplicate-composition candidates land on
+    ///    opposite sides of a third candidate in the array, `balance()` is
+    ///    fed their shared composition in opposite relative order, so the
+    ///    two structurally-identical reactions produce differently-ordered
+    ///    `reactants()` vectors and dedup fails to collapse them: the same
+    ///    one chemistry is recorded as two `accepted` entries. This can
+    ///    burn two `max_plans_returned` slots in `Planner` for one real
+    ///    plan -- worth fixing -- but it is not a recall-losing,
+    ///    order-invariance violation: no route disappears under either
+    ///    ordering.
+    #[test]
+    fn duplicate_composition_candidates_keep_canonical_chemistry_order_invariant() {
+        let target = composition(&[("Ba", 1.0), ("Fe", 2.0), ("O", 4.0)]);
+        let ba_o = candidate("BaO", &[("Ba", 1.0), ("O", 1.0)]);
+        let fe2o3 = candidate("Fe2O3", &[("Fe", 2.0), ("O", 3.0)]);
+        let afe2o3 = candidate("AFe2O3", &[("Fe", 2.0), ("O", 3.0)]);
+        // Genuinely exhaustive: 3 candidates, arity <=2, at most 6 states
+        // total -- nowhere close to `max_precursor_sets`, so
+        // `budget_exhausted` is guaranteed false either way.
+        let budget = SearchBudget {
+            max_precursor_sets: 1_000,
+            max_precursors_per_plan: 2,
+            max_plans_returned: 100,
+        };
+
+        // Order A: the two duplicate-composition candidates fall on
+        // *opposite* sides of `ba_o` in the array -- {fe2o3, ba_o} and
+        // {ba_o, afe2o3} feed `balance()` reactant compositions in
+        // opposite relative order ([Fe,Ba] vs [Ba,Fe]), triggering the
+        // dedup-hygiene gap described above.
+        let order_a = vec![fe2o3.clone(), ba_o.clone(), afe2o3.clone()];
+        let outcome_a =
+            search_precursor_sets(&target, &order_a, &PlanningConstraints::default(), &budget)
+                .unwrap();
+        assert!(
+            !outcome_a.rejected.iter().any(|r| matches!(
+                r.reason_codes.first(),
+                Some(RejectionCode::SearchBudgetExhausted)
+            )),
+            "fixture must be genuinely exhaustive, not budget-limited"
+        );
+
+        // Order B: both duplicate-composition candidates fall on the
+        // *same* side of `ba_o` -- {fe2o3, ba_o} and {afe2o3, ba_o} both
+        // feed `balance()` reactant compositions in the *same* relative
+        // order ([Fe,Ba]), so `balance()` returns structurally identical
+        // `BalancedReaction`s and the dedup correctly collapses them to
+        // one entry (keeping "AFe2O3" < "Fe2O3" lexicographically).
+        let order_b = vec![fe2o3.clone(), afe2o3.clone(), ba_o.clone()];
+        let outcome_b =
+            search_precursor_sets(&target, &order_b, &PlanningConstraints::default(), &budget)
+                .unwrap();
+        assert!(
+            !outcome_b.rejected.iter().any(|r| matches!(
+                r.reason_codes.first(),
+                Some(RejectionCode::SearchBudgetExhausted)
+            )),
+            "fixture must be genuinely exhaustive, not budget-limited"
+        );
+
+        // Canonical composition-multiset per accepted entry: "Fe2O3" and
+        // "AFe2O3" both canonicalize to the same label, since recall
+        // should depend on which chemistry was found, not which
+        // duplicate-composition catalog entry's id happened to be
+        // attributed to it.
+        fn canonical_label(id: &str) -> &'static str {
+            match id {
+                "BaO" => "BaO-comp",
+                "Fe2O3" | "AFe2O3" => "Fe-oxide-comp",
+                other => panic!("unexpected id in fixture: {other}"),
+            }
+        }
+        fn canonical_sets_of(outcome: &PrecursorSearchOutcome) -> BTreeSet<BTreeSet<&'static str>> {
+            outcome
+                .accepted
+                .iter()
+                .map(|a| {
+                    a.precursors
+                        .iter()
+                        .map(|p| canonical_label(p.0.as_str()))
+                        .collect::<BTreeSet<_>>()
+                })
+                .collect()
+        }
+        assert_eq!(
+            canonical_sets_of(&outcome_a),
+            canonical_sets_of(&outcome_b),
+            "the invariant that matters for recall: under canonical \
+            composition-multiset identity, both orderings must recover \
+            the exact same chemistry -- and they do."
+        );
+
+        // The narrower, real defect: raw accepted-entry count differs
+        // (one chemistry recorded twice under Order A) purely because of
+        // candidate array order.
+        assert_eq!(
+            outcome_a.accepted.len(),
+            2,
+            "known dedup-hygiene gap: Order A's split placement causes \
+            evaluate_complete_state's BalancedReaction-vector-order-sensitive \
+            dedup to miss that both entries are the same chemistry. Got: \
+            {:?}",
+            outcome_a.accepted
+        );
+        assert_eq!(
+            outcome_b.accepted.len(),
+            1,
+            "Order B's same-side placement lets dedup collapse correctly. \
+            Got: {:?}",
+            outcome_b.accepted
         );
     }
 
@@ -1439,5 +1954,252 @@ mod tests {
                 "an unlimited budget must never report SearchBudgetExhausted"
             );
         }
+    }
+
+    // Phase 30.5: low-level TieBreakKey::Ord checks -- construct states
+    // directly (same module, full access to the private types) rather
+    // than coaxing the full search loop into demonstrating a tie, which
+    // would need a much larger hand-built fixture. The real
+    // tie-break-direction *behavior* at corpus scale is what the
+    // examples/exploration_fusion_search_coupling_audit.rs harness
+    // measures; these confirm the mechanism itself is wired correctly.
+
+    fn state_with_key(tie_break_key: TieBreakKey) -> SearchState {
+        SearchState {
+            chosen: vec![0],
+            missing: BTreeSet::new(),
+            priority: SearchPriority {
+                elements_missing: 0,
+                depth: 1,
+            },
+            tie_break_key,
+        }
+    }
+
+    #[test]
+    fn index_order_tie_break_prefers_lexicographically_smaller_chosen() {
+        let smaller = state_with_key(TieBreakKey::IndexOrder(vec![0, 1]));
+        let larger = state_with_key(TieBreakKey::IndexOrder(vec![0, 2]));
+        assert!(
+            smaller > larger,
+            "a lexicographically smaller chosen vector must pop first (compare Greater)"
+        );
+    }
+
+    #[test]
+    fn fusion_priority_sum_tie_break_prefers_lower_summed_rank() {
+        let better = state_with_key(TieBreakKey::FusionPrioritySum(TotalF64(1.0)));
+        let worse = state_with_key(TieBreakKey::FusionPrioritySum(TotalF64(5.0)));
+        assert!(
+            better > worse,
+            "a lower summed fused rank (more consensus-supported) must pop first"
+        );
+    }
+
+    #[test]
+    fn marginal_coverage_tie_break_prefers_higher_raw_coverage() {
+        let covers_more = state_with_key(TieBreakKey::MarginalCoverage(std::cmp::Reverse(3)));
+        let covers_less = state_with_key(TieBreakKey::MarginalCoverage(std::cmp::Reverse(1)));
+        assert!(
+            covers_more > covers_less,
+            "a larger raw marginal-coverage value must pop first"
+        );
+    }
+
+    // Owner-mandated `Eq`/`Ord` contract tests (2026-08-25 correction):
+    // `TotalF64::eq` and `SearchState::eq` are now both defined as
+    // `cmp() == Equal`, which makes the contract hold by construction --
+    // these tests exist to pin that down explicitly and catch any future
+    // regression back to a field-subset or derived `PartialEq`.
+
+    #[test]
+    fn total_f64_eq_agrees_with_cmp_on_zero_and_negative_zero() {
+        // `0.0 == -0.0` under `f64`'s own `==`, but `total_cmp` orders
+        // them as distinct (`-0.0 < 0.0`) -- a derived `PartialEq` would
+        // report `eq() == true` while `cmp() != Equal`, violating the
+        // contract this fix exists to restore.
+        let zero = TotalF64(0.0);
+        let neg_zero = TotalF64(-0.0);
+        assert_eq!(zero.cmp(&neg_zero), Ordering::Greater);
+        assert_ne!(zero, neg_zero, "eq must agree with cmp() != Equal here");
+    }
+
+    #[test]
+    fn total_f64_eq_agrees_with_cmp_on_nan() {
+        // `f64::NAN == f64::NAN` is `false` under `==`, but `total_cmp`
+        // gives NaN a definite, self-equal place in the total order.
+        let nan_a = TotalF64(f64::NAN);
+        let nan_b = TotalF64(f64::NAN);
+        assert_eq!(nan_a.cmp(&nan_b), Ordering::Equal);
+        assert_eq!(nan_a, nan_b, "eq must agree with cmp() == Equal here");
+    }
+
+    #[test]
+    fn total_f64_eq_agrees_with_cmp_on_different_nan_payloads() {
+        // Two NaN bit patterns with different payloads: `total_cmp`
+        // still orders them (payload participates in the total order),
+        // so they are not necessarily cmp-equal to each other even
+        // though both are "NaN".
+        let nan_a = TotalF64(f64::from_bits(0x7ff8_0000_0000_0001));
+        let nan_b = TotalF64(f64::from_bits(0x7ff8_0000_0000_0002));
+        assert_eq!(nan_a.eq(&nan_b), nan_a.cmp(&nan_b) == Ordering::Equal);
+    }
+
+    #[test]
+    fn total_f64_eq_agrees_with_cmp_on_infinities() {
+        let pos_inf = TotalF64(f64::INFINITY);
+        let neg_inf = TotalF64(f64::NEG_INFINITY);
+        assert_eq!(pos_inf.cmp(&neg_inf), Ordering::Greater);
+        assert_ne!(pos_inf, neg_inf);
+        assert_eq!(TotalF64(f64::INFINITY), TotalF64(f64::INFINITY));
+    }
+
+    #[test]
+    fn search_state_eq_iff_cmp_equal_same_chosen_different_priority() {
+        let base = state_with_key(TieBreakKey::IndexOrder(vec![0]));
+        let mut different_priority = base.clone();
+        different_priority.priority.elements_missing = 1;
+        assert_eq!(base.chosen, different_priority.chosen);
+        assert_ne!(
+            base.cmp(&different_priority),
+            Ordering::Equal,
+            "differing priority must make cmp non-Equal"
+        );
+        assert_ne!(
+            base, different_priority,
+            "eq must agree with cmp() != Equal: a chosen-only PartialEq would \
+            wrongly report these as equal"
+        );
+    }
+
+    #[test]
+    fn search_state_eq_iff_cmp_equal_same_chosen_different_tie_break_key() {
+        let a = state_with_key(TieBreakKey::IndexOrder(vec![0]));
+        let b = state_with_key(TieBreakKey::IndexOrder(vec![1]));
+        // Deliberately give both the same `chosen` field value despite
+        // different tie_break_key content, to isolate this from the
+        // index-order tie-break's own chosen-vector comparison.
+        let mut a = a;
+        let mut b = b;
+        a.chosen = vec![0];
+        b.chosen = vec![0];
+        assert_eq!(a.chosen, b.chosen);
+        assert_ne!(
+            a.cmp(&b),
+            Ordering::Equal,
+            "differing tie_break_key must make cmp non-Equal"
+        );
+        assert_ne!(
+            a, b,
+            "eq must agree with cmp() != Equal: a chosen-only PartialEq would \
+            wrongly report these as equal"
+        );
+    }
+
+    #[test]
+    fn search_state_eq_iff_cmp_equal_when_every_ordering_field_matches() {
+        let a = state_with_key(TieBreakKey::IndexOrder(vec![0, 1]));
+        let b = state_with_key(TieBreakKey::IndexOrder(vec![0, 1]));
+        assert_eq!(a.cmp(&b), Ordering::Equal);
+        assert_eq!(a, b, "eq must agree with cmp() == Equal");
+    }
+
+    #[cfg(feature = "search_diagnostics")]
+    #[test]
+    fn diagnostic_search_under_index_order_matches_plain_search_precursor_sets() {
+        let target = composition(&[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)]);
+        let catalog = barium_titanate_catalog();
+        let budget = generous_budget();
+
+        let plain =
+            search_precursor_sets(&target, &catalog, &PlanningConstraints::default(), &budget)
+                .unwrap();
+        let gold = vec![
+            PrecursorId("BaCO3".to_string()),
+            PrecursorId("TiO2".to_string()),
+        ];
+        let trace = search_precursor_sets_diagnostic(
+            &target,
+            &catalog,
+            &PlanningConstraints::default(),
+            &budget,
+            &TieBreakPolicy::IndexOrder,
+            &gold,
+        )
+        .unwrap();
+
+        let plain_found_gold = plain.accepted.iter().any(|a| {
+            let mut got: Vec<&str> = a.precursors.iter().map(|p| p.0.as_str()).collect();
+            got.sort_unstable();
+            got == vec!["BaCO3", "TiO2"]
+        });
+        assert_eq!(
+            plain_found_gold, trace.recovered,
+            "the diagnostic wrapper under IndexOrder must agree with plain \
+            search_precursor_sets on whether this exact route is accepted"
+        );
+        assert!(trace.gold_present_in_candidates);
+        assert!(trace.gold_covers_all_target_elements);
+        assert!(trace.gold_pushed_to_frontier);
+        assert!(trace.gold_pop_index.is_some());
+        assert!(!trace.budget_exhausted);
+    }
+
+    #[cfg(feature = "search_diagnostics")]
+    #[test]
+    fn diagnostic_search_reports_gold_absent_when_gold_references_an_unknown_precursor() {
+        let target = composition(&[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)]);
+        let catalog = barium_titanate_catalog();
+        let gold = vec![PrecursorId("NotInCatalog".to_string())];
+
+        let trace = search_precursor_sets_diagnostic(
+            &target,
+            &catalog,
+            &PlanningConstraints::default(),
+            &generous_budget(),
+            &TieBreakPolicy::IndexOrder,
+            &gold,
+        )
+        .unwrap();
+
+        assert!(!trace.gold_present_in_candidates);
+        assert!(!trace.gold_covers_all_target_elements);
+        assert!(!trace.gold_pushed_to_frontier);
+        assert_eq!(trace.gold_pop_index, None);
+        assert!(!trace.recovered);
+    }
+
+    #[cfg(feature = "search_diagnostics")]
+    #[test]
+    fn diagnostic_search_marginal_coverage_policy_runs_and_agrees_on_recall_ceiling() {
+        // Not a tie-break-direction claim (see the low-level TieBreakKey
+        // tests above for that) -- just confirms the MarginalCoverage
+        // policy runs end-to-end without changing which routes are
+        // *reachable* under a generous budget, only their exploration
+        // order (mirrors search_matches_brute_force_enumeration_under_an_
+        // unlimited_budget's own "order differs, result set doesn't"
+        // discipline for IndexOrder).
+        let target = composition(&[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)]);
+        let catalog = barium_titanate_catalog();
+        let gold = vec![
+            PrecursorId("BaCO3".to_string()),
+            PrecursorId("TiO2".to_string()),
+        ];
+
+        let trace = search_precursor_sets_diagnostic(
+            &target,
+            &catalog,
+            &PlanningConstraints::default(),
+            &generous_budget(),
+            &TieBreakPolicy::MarginalCoverage,
+            &gold,
+        )
+        .unwrap();
+
+        assert!(
+            trace.recovered,
+            "a generous budget must still recover this route"
+        );
+        assert!(!trace.budget_exhausted);
     }
 }

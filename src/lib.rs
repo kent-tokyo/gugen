@@ -197,6 +197,8 @@ pub use precursor::{
     AcceptedPrecursorSet, AvailabilityMetadata, InMemoryPrecursorCatalog, PrecursorCandidate,
     PrecursorId, PrecursorSearchOutcome, PrecursorSelection, search_precursor_sets,
 };
+#[cfg(feature = "search_diagnostics")]
+pub use precursor::{SearchDiagnosticTrace, TieBreakPolicy, search_precursor_sets_diagnostic};
 pub use prior_experiment_evidence::{InMemoryExecutionRecordProvider, PriorExperimentEvidence};
 pub use process::{
     Atmosphere, CharacterizationMethod, ConditionConflict, ConditionPrecedent, CoolingMode,

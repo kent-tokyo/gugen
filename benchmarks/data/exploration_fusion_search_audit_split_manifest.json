@@ -1,0 +1,11 @@
+{
+  "description": "Phase 30.5 dev/confirmation-holdout split -- deterministic, target-level, sha256_hex(target_formula) first byte mod 5 (0..=3 development, 4 confirmation holdout). Pre-registered in docs/exploration_fusion_search_coupling.md before any factorial cell was run. 2026-08-25: the 'confirmation_holdout' split below is the ORIGINAL, now-spent holdout; 'fresh_confirmation_holdout' is the new, never-yet-inspected pool (dev rows outside the dev_sample stride) used for any corrected policy candidate instead.",
+  "catalog_path": "benchmarks/data/exploration_frozen_catalog_manifest.json",
+  "catalog_sha256": "8b48f8eead3c40bad1d98579354796f7c1bd658b04d11ea515923fcde9a92243",
+  "total_rows": 2798,
+  "skipped_unrepresentable_rows": 81,
+  "development": {"rows": 2175, "targets": 1133},
+  "confirmation_holdout": {"rows": 623, "targets": 294},
+  "development_dev_sample": {"rows": 435, "stride": 5},
+  "fresh_confirmation_holdout": {"rows": 929}
+}
