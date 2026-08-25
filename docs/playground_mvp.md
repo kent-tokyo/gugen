@@ -166,9 +166,67 @@ crate already uses for its own `every_literature_route_is_recovered_exactly`
 test, chosen because they're already verified and cited, not because
 they're the only interesting cases.
 
+## Deployment (GitHub Pages, owner's explicit "gugen PlaygroundをGitHub
+Pagesへ公開してください" instruction)
+
+- **Production URL**: `https://kent-tokyo.github.io/gugen/` (a GitHub
+  Pages *project* site — no custom domain, no CNAME). The workflow's
+  own `page_url` output is the actual source of truth if it ever
+  differs from this expected URL.
+- **Build/deploy workflow**: `.github/workflows/playground-pages.yml`.
+  Triggers on push to `main` (paths: `playground/**`, `src/**`,
+  `Cargo.toml`, `Cargo.lock`, the workflow file itself),
+  `workflow_dispatch`, and `pull_request` (same paths) — PR runs only
+  execute the `build` job (wasm32 check, wrapper fmt/clippy/test,
+  `wasm-pack build`, generated-asset presence check); the `deploy` job
+  (`actions/deploy-pages`) only runs on `push`/`workflow_dispatch`,
+  never on a PR. Official GitHub Pages artifact-deployment actions only
+  (`actions/configure-pages`, `actions/upload-pages-artifact`,
+  `actions/deploy-pages`) — no `gh-pages` branch, no committed `pkg/`
+  build output anywhere in git history.
+- **`wasm-pack` pinned at `0.15.0`** (`cargo install wasm-pack
+  --version 0.15.0 --locked` in CI) — not auto-fetched latest; the
+  exact version this MVP was built and manually verified against
+  (`wasm-pack build` locally warned "newer version available: 0.15.0,
+  you are using: 0.13.1" during this session's own manual build, so
+  0.15.0 was confirmed to exist and work before pinning it in CI).
+- **Artifact source**: `playground/web` only (the static site directory
+  — HTML/CSS/JS plus the freshly-built `pkg/`), never the whole repo.
+  `pkg/` is not a source of truth: it's regenerated from the Rust/JS
+  source under `playground/` on every deploy, and stays gitignored.
+- **Subpath-safe by construction**: every asset reference in
+  `index.html`/`main.js` is relative (`src/styles.css`, `src/main.js`,
+  `../pkg/gugen_playground_wasm.js`, `./examples.js`, `./render.js`) —
+  no absolute `/src/...`/`/pkg/...` paths, no `<base href>` — so the
+  same files work unmodified whether served from `/` (local dev) or
+  `/gugen/` (the Pages project path). Confirmed by construction, not
+  just assumed.
+- **Content-Security-Policy**: a `<meta http-equiv="Content-Security-
+  Policy">` tag in `index.html` (`default-src 'self'; script-src 'self'
+  'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data:;
+  connect-src 'self'; font-src 'self'; object-src 'none'; base-uri
+  'none'; frame-ancestors 'none'; form-action 'none'`) — `'wasm-unsafe-
+  eval'` is the modern, narrower directive for WASM instantiation
+  (not the broader `'unsafe-eval'`). Verified empirically before
+  shipping, not assumed: served locally under this exact CSP, ran a
+  full generate-a-plan cycle in a real Chrome tab, confirmed zero CSP
+  violation messages in the console and a correct result rendered.
+- **No analytics, no telemetry, no cookies, no external fonts/CDN-hosted
+  JS or CSS, no runtime `fetch` beyond the page's own same-origin
+  assets** — deliberately, since adding any of these would weaken the
+  "no network calls, nothing sent anywhere" claim this playground's
+  whole design rests on. Ordinary outbound links a user clicks
+  themselves (the GitHub repo link, DOI citation links) are fine and
+  unrelated to this.
+- **Rollback**: revert the offending commit on `main`; the next push
+  re-runs the same workflow, which rebuilds `playground/web` fresh from
+  source and redeploys via the same official Pages artifact flow — no
+  manual artifact surgery, no separate branch to reset.
+
 ## Status
 
 Implemented, tested (native unit tests + a real in-browser run), root
 quality gate green, `playground/` confirmed excluded from the published
-package. README/README_ja not touched — the owner asked for the link
-only once this is live, as a separate, later step.
+package, CSP verified in a real browser. README/README_ja not touched
+— the owner asked for the link only once the live deployment is
+verified, as a separate, later step/PR.
