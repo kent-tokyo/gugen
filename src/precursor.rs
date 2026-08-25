@@ -4,6 +4,7 @@ use crate::composition::{Composition, Element};
 use crate::error::require_finite;
 use crate::error::{ProviderError, Result};
 use crate::provider::PrecursorCatalog;
+use crate::reaction::{BalancedReaction, ReactionSpecies};
 use crate::rejection::{RejectedCandidate, RejectionCode};
 use crate::target::PlanningConstraints;
 use std::cmp::Ordering;
@@ -382,6 +383,66 @@ fn try_extend_state(
     })
 }
 
+fn gcd_u64(a: u64, b: u64) -> u64 {
+    if b == 0 { a } else { gcd_u64(b, a % b) }
+}
+
+/// Order-invariant, composition-based, coefficient-scale-invariant
+/// identity for a solved [`BalancedReaction`] -- used only by
+/// `evaluate_complete_state`'s dedup, never a public type. Deliberately
+/// *not* a replacement for `BalancedReaction`'s own derived `PartialEq`
+/// (Phase 30.6, `src/reaction.rs`), which stays reactant/product
+/// *vector-order*-sensitive: that type is public, and this crate makes
+/// no promise about how any other caller might rely on its `==` today.
+///
+/// Two `BalancedReaction`s canonicalize to the same key exactly when
+/// they represent the same chemical equation:
+/// - reactant side and product side are kept in **separate** sets, never
+///   merged -- a reaction is never equal to itself with reactants and
+///   products swapped.
+/// - keyed on [`Composition`] (not `PrecursorId`), so two candidates
+///   sharing a composition under different ids (e.g. a corpus's
+///   "Fe2O3" / "α-Fe2O3" polymorph-label duplicate, Phase 30.5) resolve
+///   to the same reactant slot.
+/// - coefficients are reduced by their own GCD across both sides
+///   together, independent of whatever scale `balance()` happened to
+///   return them at -- computed here explicitly, not assumed from
+///   `scale_to_integers`'s own (already-GCD-reduced) output, so this
+///   type's own invariant doesn't silently depend on an upstream detail.
+///
+/// `Composition` has no `Hash` impl (only `Ord`/`Eq`, `src/composition.rs`),
+/// so this uses `BTreeSet`, matching the crate's existing convention for
+/// avoiding a `Hash` requirement on `BalancedReaction` (see this
+/// function's own history: it previously used a linear `Vec` scan for
+/// exactly this reason).
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CanonicalReactionKey {
+    reactants: BTreeSet<(Composition, u64)>,
+    products: BTreeSet<(Composition, u64)>,
+}
+
+impl CanonicalReactionKey {
+    fn from_reaction(reaction: &BalancedReaction) -> Self {
+        let g = reaction
+            .reactants()
+            .iter()
+            .chain(reaction.products().iter())
+            .map(ReactionSpecies::coefficient)
+            .fold(0u64, gcd_u64)
+            .max(1);
+        let side = |species: &[ReactionSpecies]| -> BTreeSet<(Composition, u64)> {
+            species
+                .iter()
+                .map(|s| (s.composition.clone(), s.coefficient() / g))
+                .collect()
+        };
+        Self {
+            reactants: side(reaction.reactants()),
+            products: side(reaction.products()),
+        }
+    }
+}
+
 /// Attempts a stoichiometric balance for a state whose chosen candidates
 /// already cover every target element, recording an accept or a
 /// `NoStoichiometricBalance`/`DuplicatePlan` rejection. Unchanged
@@ -469,19 +530,36 @@ fn evaluate_complete_state(
         // silently double up in `Planner`'s ranked output and consume
         // two slots of `max_plans_returned` for what is really one plan.
         //
-        // Dedup keys on `reaction` alone (not the full struct), and
-        // keeps whichever colliding `precursors` id list sorts
+        // Dedup keys on `reaction`'s *canonical* identity (Phase 30.6,
+        // `CanonicalReactionKey`) -- order-invariant, composition-based,
+        // coefficient-scale-invariant -- not `BalancedReaction`'s own
+        // derived, reactant/product-*vector-order*-sensitive `PartialEq`.
+        // `balance()` builds a reaction's `reactants()`/`products()`
+        // vectors by zipping positionally against its own input order,
+        // which itself tracks `chosen`'s ascending indices into whichever
+        // candidate array the search was given -- so the exact same
+        // chemistry, discovered via two different combinations (a larger
+        // combination's extra precursor solving to a zero coefficient
+        // and collapsing to a smaller one already found; or two catalog
+        // entries sharing a composition under different ids), could
+        // previously fail to dedup if the two solves happened to order
+        // their reactants differently (Phase 30.5's own investigation
+        // found and reproduced this: 2 accepted entries for 1 real
+        // chemistry, depending purely on candidate array order -- see
+        // `duplicate_composition_candidates_keep_canonical_chemistry_order_invariant`).
+        // Keeps whichever colliding `precursors` id list sorts
         // lexicographically smallest, not whichever arrived first --
         // this makes the result independent of evaluation order, which
         // matters now that the frontier visits combinations in priority
-        // order rather than always dictionary order (Phase 29). A
-        // linear scan is O(n) per check (O(n^2) overall) -- accepted
-        // counts stay small at this crate's catalog/budget scale, so
-        // this is simpler than adding Hash/Ord to `BalancedReaction`
-        // just to use a set.
+        // order rather than always dictionary order (Phase 29). A linear
+        // scan is O(n) per check (O(n^2) overall) -- accepted counts
+        // stay small at this crate's catalog/budget scale, so this is
+        // simpler than adding Hash/Ord to `BalancedReaction` itself just
+        // to use a set.
+        let candidate_key = CanonicalReactionKey::from_reaction(&candidate_set.reaction);
         if let Some(existing_index) = accepted
             .iter()
-            .position(|a| a.reaction == candidate_set.reaction)
+            .position(|a| CanonicalReactionKey::from_reaction(&a.reaction) == candidate_key)
         {
             if candidate_set.precursors < accepted[existing_index].precursors {
                 let superseded = std::mem::replace(&mut accepted[existing_index], candidate_set);
@@ -1073,31 +1151,17 @@ mod tests {
     /// share an identical composition under different `PrecursorId`s
     /// ("Fe2O3" / "AFe2O3", mirroring the real corpus's "Fe2O3" /
     /// "α-Fe2O3" polymorph-label duplicates found in 440/2879 benchmark
-    /// rows).
-    ///
-    /// Two separate claims, kept separate on purpose:
-    ///
-    /// 1. **The chemistry recovered is order-invariant** (the invariant
-    ///    that actually matters for recall): under canonical
-    ///    composition-multiset identity, both array orderings recover the
-    ///    exact same single route {BaO-comp, Fe-oxide-comp}. This DOES
-    ///    hold and is asserted as a real invariant, not a documented bug.
-    /// 2. **A real, narrower dedup-hygiene defect**: `evaluate_complete_state`
-    ///    dedups on `BalancedReaction`'s derived, reactant-*vector-order*-
-    ///    sensitive `PartialEq` (`src/reaction.rs`), but `balance()` builds
-    ///    `reactants()` by zipping positionally against its *input* order
-    ///    (`vector_to_reaction`, `src/balance.rs`), which tracks `chosen`'s
-    ///    ascending-index order into whichever candidate array the search
-    ///    was given. When the two duplicate-composition candidates land on
-    ///    opposite sides of a third candidate in the array, `balance()` is
-    ///    fed their shared composition in opposite relative order, so the
-    ///    two structurally-identical reactions produce differently-ordered
-    ///    `reactants()` vectors and dedup fails to collapse them: the same
-    ///    one chemistry is recorded as two `accepted` entries. This can
-    ///    burn two `max_plans_returned` slots in `Planner` for one real
-    ///    plan -- worth fixing -- but it is not a recall-losing,
-    ///    order-invariance violation: no route disappears under either
-    ///    ordering.
+    /// rows). Originally documented a real dedup-hygiene defect
+    /// (Order A recorded the same chemistry as two `accepted` entries,
+    /// depending purely on candidate array order); **fixed in Phase 30.6**
+    /// via `CanonicalReactionKey` (order-invariant, composition-based,
+    /// coefficient-scale-invariant dedup identity, used only inside
+    /// `evaluate_complete_state` -- `BalancedReaction`'s own public
+    /// `PartialEq` is unchanged). This test now asserts the *fixed*
+    /// behavior directly: both orderings collapse to exactly one accepted
+    /// entry, with the same canonical chemistry and the same
+    /// lexicographically-smallest id list, regardless of which side of
+    /// `ba_o` the two duplicate-composition candidates land on.
     #[test]
     fn duplicate_composition_candidates_keep_canonical_chemistry_order_invariant() {
         let target = composition(&[("Ba", 1.0), ("Fe", 2.0), ("O", 4.0)]);
@@ -1116,8 +1180,10 @@ mod tests {
         // Order A: the two duplicate-composition candidates fall on
         // *opposite* sides of `ba_o` in the array -- {fe2o3, ba_o} and
         // {ba_o, afe2o3} feed `balance()` reactant compositions in
-        // opposite relative order ([Fe,Ba] vs [Ba,Fe]), triggering the
-        // dedup-hygiene gap described above.
+        // opposite relative order ([Fe,Ba] vs [Ba,Fe]). Before Phase
+        // 30.6 this split placement made dedup miss the collision
+        // entirely (2 accepted entries for 1 real chemistry); with
+        // `CanonicalReactionKey`, it no longer matters.
         let order_a = vec![fe2o3.clone(), ba_o.clone(), afe2o3.clone()];
         let outcome_a =
             search_precursor_sets(&target, &order_a, &PlanningConstraints::default(), &budget)
@@ -1180,24 +1246,163 @@ mod tests {
             the exact same chemistry -- and they do."
         );
 
-        // The narrower, real defect: raw accepted-entry count differs
-        // (one chemistry recorded twice under Order A) purely because of
-        // candidate array order.
+        // Phase 30.6 regression guard: raw accepted-entry count must now
+        // be exactly 1 under BOTH orderings -- `CanonicalReactionKey`
+        // dedups the same chemistry regardless of which side of `ba_o`
+        // the duplicate-composition candidates land on. Before this fix,
+        // Order A produced 2 entries here (the bug this test used to
+        // document); a regression back to that would fail this
+        // assertion.
         assert_eq!(
             outcome_a.accepted.len(),
-            2,
-            "known dedup-hygiene gap: Order A's split placement causes \
-            evaluate_complete_state's BalancedReaction-vector-order-sensitive \
-            dedup to miss that both entries are the same chemistry. Got: \
-            {:?}",
+            1,
+            "Order A must collapse to exactly one accepted entry (Phase 30.6 fix). Got: {:?}",
             outcome_a.accepted
         );
         assert_eq!(
             outcome_b.accepted.len(),
             1,
-            "Order B's same-side placement lets dedup collapse correctly. \
-            Got: {:?}",
+            "Order B must collapse to exactly one accepted entry. Got: {:?}",
             outcome_b.accepted
+        );
+
+        // Both orderings must keep the same, lexicographically-smallest
+        // id list ("AFe2O3" < "Fe2O3"), matching the crate's existing
+        // "keep the canonical winner regardless of arrival order"
+        // dedup convention.
+        fn ids_of(outcome: &PrecursorSearchOutcome) -> BTreeSet<&str> {
+            outcome.accepted[0]
+                .precursors
+                .iter()
+                .map(|p| p.0.as_str())
+                .collect()
+        }
+        let expected = BTreeSet::from(["BaO", "AFe2O3"]);
+        assert_eq!(
+            ids_of(&outcome_a),
+            expected,
+            "got: {:?}",
+            outcome_a.accepted
+        );
+        assert_eq!(
+            ids_of(&outcome_b),
+            expected,
+            "got: {:?}",
+            outcome_b.accepted
+        );
+    }
+
+    /// Phase 30.6 unit-level test of `CanonicalReactionKey` itself,
+    /// independent of the full search: two `BalancedReaction`s built
+    /// from candidates sharing a composition under different ids, with
+    /// their reactant vectors constructed in deliberately opposite
+    /// order (mirroring what `balance()`'s positional zip would produce
+    /// under two different candidate array orderings), must canonicalize
+    /// to the same key.
+    #[test]
+    fn canonical_reaction_key_ignores_reactant_vector_order_and_composition_synonym() {
+        use crate::reaction::{BalancedReaction, ReactionSpecies};
+
+        let ba_o = composition(&[("Ba", 1.0), ("O", 1.0)]);
+        let fe2o3 = composition(&[("Fe", 2.0), ("O", 3.0)]);
+        let product = composition(&[("Ba", 1.0), ("Fe", 2.0), ("O", 4.0)]);
+
+        let forward = BalancedReaction::new(
+            vec![
+                ReactionSpecies::new(fe2o3.clone(), 1).unwrap(),
+                ReactionSpecies::new(ba_o.clone(), 1).unwrap(),
+            ],
+            vec![ReactionSpecies::new(product.clone(), 1).unwrap()],
+        )
+        .unwrap();
+        let reversed = BalancedReaction::new(
+            vec![
+                ReactionSpecies::new(ba_o, 1).unwrap(),
+                ReactionSpecies::new(fe2o3, 1).unwrap(),
+            ],
+            vec![ReactionSpecies::new(product, 1).unwrap()],
+        )
+        .unwrap();
+
+        // `BalancedReaction`'s own derived `PartialEq` IS still
+        // vector-order-sensitive (unchanged public behavior, Phase 30.6
+        // deliberately does not touch it).
+        assert_ne!(forward, reversed);
+        // But their canonical keys, which is all `evaluate_complete_state`'s
+        // dedup actually looks at, must agree.
+        assert_eq!(
+            CanonicalReactionKey::from_reaction(&forward),
+            CanonicalReactionKey::from_reaction(&reversed)
+        );
+    }
+
+    /// Phase 30.6 negative control: two genuinely different reactions
+    /// (different product) must NOT canonicalize to the same key.
+    #[test]
+    fn canonical_reaction_key_does_not_conflate_different_reactions() {
+        use crate::reaction::{BalancedReaction, ReactionSpecies};
+
+        let ba_o = composition(&[("Ba", 1.0), ("O", 1.0)]);
+        let sr_o = composition(&[("Sr", 1.0), ("O", 1.0)]);
+        let product_a = composition(&[("Ba", 1.0), ("O", 1.0)]);
+        let product_b = composition(&[("Sr", 1.0), ("O", 1.0)]);
+
+        let a = BalancedReaction::new(
+            vec![ReactionSpecies::new(ba_o, 1).unwrap()],
+            vec![ReactionSpecies::new(product_a, 1).unwrap()],
+        )
+        .unwrap();
+        let b = BalancedReaction::new(
+            vec![ReactionSpecies::new(sr_o, 1).unwrap()],
+            vec![ReactionSpecies::new(product_b, 1).unwrap()],
+        )
+        .unwrap();
+
+        assert_ne!(
+            CanonicalReactionKey::from_reaction(&a),
+            CanonicalReactionKey::from_reaction(&b)
+        );
+    }
+
+    /// Phase 30.6: coefficient-scale invariance -- the same reaction
+    /// solved at two different absolute integer scales (e.g. 1x vs 2x
+    /// every coefficient) must canonicalize to the same key. This
+    /// shouldn't arise from `balance()`'s own output in practice (its
+    /// `scale_to_integers` already GCD-reduces), but `CanonicalReactionKey`
+    /// computes its own reduction explicitly rather than depending on
+    /// that as an unstated upstream invariant.
+    #[test]
+    fn canonical_reaction_key_is_coefficient_scale_invariant() {
+        use crate::reaction::{BalancedReaction, ReactionSpecies};
+
+        let ba_co3 = composition(&[("Ba", 1.0), ("C", 1.0), ("O", 3.0)]);
+        let ba_o = composition(&[("Ba", 1.0), ("O", 1.0)]);
+        let co2 = composition(&[("C", 1.0), ("O", 2.0)]);
+
+        let scale_1 = BalancedReaction::new(
+            vec![ReactionSpecies::new(ba_co3.clone(), 1).unwrap()],
+            vec![
+                ReactionSpecies::new(ba_o.clone(), 1).unwrap(),
+                ReactionSpecies::new(co2.clone(), 1).unwrap(),
+            ],
+        )
+        .unwrap();
+        let scale_2 = BalancedReaction::new(
+            vec![ReactionSpecies::new(ba_co3, 2).unwrap()],
+            vec![
+                ReactionSpecies::new(ba_o, 2).unwrap(),
+                ReactionSpecies::new(co2, 2).unwrap(),
+            ],
+        )
+        .unwrap();
+
+        assert_ne!(
+            scale_1, scale_2,
+            "sanity check: BalancedReaction's own PartialEq IS scale-sensitive"
+        );
+        assert_eq!(
+            CanonicalReactionKey::from_reaction(&scale_1),
+            CanonicalReactionKey::from_reaction(&scale_2)
         );
     }
 
