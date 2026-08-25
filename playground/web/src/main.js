@@ -1,6 +1,7 @@
 import init, { plan_synthesis } from "../pkg/gugen_playground_wasm.js";
 import { EXAMPLES } from "./examples.js";
 import { renderAccepted, renderRejected, renderJsonAndMarkdown } from "./render.js";
+import { initCustomTarget, readCustomRequest } from "./custom.js";
 
 const state = { selected: EXAMPLES[0], report: null };
 
@@ -126,11 +127,10 @@ function wireCopyButtons() {
   });
 }
 
-function runPlan() {
-  const example = state.selected;
+function runPlan(target_elements, candidates) {
   const request = {
-    target_elements: example.target_elements,
-    candidates: example.candidates,
+    target_elements,
+    candidates,
     execution_timestamp: new Date().toISOString(),
   };
 
@@ -163,13 +163,31 @@ function runPlan() {
   showTab("accepted");
 }
 
+function runExamplePlan() {
+  runPlan(state.selected.target_elements, state.selected.candidates);
+}
+
+function runCustomPlan() {
+  let request;
+  try {
+    request = readCustomRequest();
+  } catch (error) {
+    document.getElementById("status").textContent = `Error: ${error.message}`;
+    document.getElementById("results").hidden = true;
+    return;
+  }
+  runPlan(request.target_elements, request.candidates);
+}
+
 async function main() {
   await init();
   renderExampleList();
   renderCitation();
   wireTabs();
   wireCopyButtons();
-  document.getElementById("generate").addEventListener("click", runPlan);
+  initCustomTarget();
+  document.getElementById("generate").addEventListener("click", runExamplePlan);
+  document.getElementById("generate-custom").addEventListener("click", runCustomPlan);
 }
 
 main();
