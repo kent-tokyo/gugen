@@ -1,0 +1,87 @@
+name: Deploy Playground to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "playground/**"
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/playground-pages.yml"
+  pull_request:
+    paths:
+      - "playground/**"
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/playground-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "gugen-playground-pages"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --version 0.15.0 --locked
+
+      - name: Check gugen for wasm32
+        run: cargo check --target wasm32-unknown-unknown --features serde
+
+      - name: Test playground wrapper
+        working-directory: playground/wasm
+        run: |
+          cargo fmt -- --check
+          cargo clippy --all-targets -- -D warnings
+          cargo test
+
+      - name: Build playground
+        working-directory: playground/wasm
+        run: wasm-pack build --release --target web --out-dir ../web/pkg
+
+      - name: Verify generated assets
+        run: |
+          test -f playground/web/index.html
+          test -f playground/web/pkg/gugen_playground_wasm.js
+          test -f playground/web/pkg/gugen_playground_wasm_bg.wasm
+          test -f playground/web/src/main.js
+          test -f playground/web/src/styles.css
+
+      - name: Configure Pages
+        if: github.event_name != 'pull_request'
+        uses: actions/configure-pages@v6
+
+      - name: Upload Pages artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: playground/web
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
