@@ -225,8 +225,26 @@ Pagesへ公開してください" instruction)
 
 ## Status
 
-Implemented, tested (native unit tests + a real in-browser run), root
-quality gate green, `playground/` confirmed excluded from the published
-package, CSP verified in a real browser. README/README_ja not touched
-— the owner asked for the link only once the live deployment is
-verified, as a separate, later step/PR.
+**Live**: `https://kent-tokyo.github.io/gugen/`. PR #71 (workflow +
+CSP) merged `main@bbb09d9`. The first push-triggered run's `build` job
+passed cleanly but `Configure Pages` failed ("Get Pages site failed" —
+Pages had never been enabled on the repo, confirmed independently via
+`gh api repos/.../pages` returning 404). This was a real, anticipated
+one-time owner action, not a workflow bug: the owner set Settings →
+Pages → Build and deployment → Source → GitHub Actions; the same run
+was then re-run (`gh run rerun`, no code changes) and both `build` and
+`deploy` completed successfully.
+
+Verified live, not just deployed: `curl -I` confirmed HTTP 200 and
+correct MIME types (`application/wasm` for the `.wasm` binary,
+`application/javascript` for JS); a real Chrome session at the live
+URL ran the full BaTiO3 flow (accepted plans, rejected candidates —
+the same real `DuplicatePlan` case as the local run, JSON view, copy
+button) with zero console errors and zero network requests beyond the
+page's own `kent-tokyo.github.io/gugen/*` assets (checked via devtools
+Network tab, same as the local verification). A deliberately-broken
+path request confirmed real 404 handling, not a catch-all 200.
+
+Root quality gate green throughout, `playground/` confirmed excluded
+from the published package. README/README_ja link added in a separate
+PR after live verification, per the owner's own sequencing.
