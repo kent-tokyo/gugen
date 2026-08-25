@@ -202,6 +202,11 @@ path = "examples/phase30_5_pool_filter_isolation_check.rs"
 required-features = ["serde"]
 
 [[example]]
+name = "phase30_6_dedup_impact_measurement"
+path = "examples/phase30_6_dedup_impact_measurement.rs"
+required-features = ["serde"]
+
+[[example]]
 name = "exploration_candidate_generator_pr1_ablation"
 path = "examples/exploration_candidate_generator_pr1_ablation.rs"
 required-features = ["serde"]
