@@ -132,8 +132,11 @@ available proxy in this environment.
 
 ## Status
 
-Implemented and tested locally. `playground/wasm` (new export +
+Implemented, tested, merged (`main@35e1a36`, PR #75), deployed, and
+re-verified on the live production site
+(`https://kent-tokyo.github.io/gugen/`) — a real BaTiO3 generation on
+the deployed page shows the fully-matched BaCO3+TiO2 combination with
+correct price/lead-time/purity/package-count numbers, console clean,
+zero non-page-asset network requests. `playground/wasm` (new export +
 `commercial_catalog` feature) and `playground/web` only — no changes
-to `src/`. Deployment and live re-verification tracked separately,
-same process as every prior playground phase (merge → auto-deploy via
-GitHub Actions → real-browser check against the production URL).
+to `src/`.
