@@ -102,6 +102,18 @@
           >
             JSON / Markdown
           </button>
+          <button
+            class="tab-button"
+            data-tab="commercial"
+            id="tab-commercial"
+            role="tab"
+            aria-selected="false"
+            aria-controls="commercial-panel"
+            tabindex="-1"
+            type="button"
+          >
+            Commercial (demo)
+          </button>
         </div>
 
         <div
@@ -147,14 +159,24 @@
             <pre id="markdown-view"></pre>
           </div>
         </div>
+        <div
+          class="tab-panel"
+          data-tab="commercial"
+          id="commercial-panel"
+          role="tabpanel"
+          aria-labelledby="tab-commercial"
+          tabindex="0"
+          hidden
+        ></div>
       </div>
     </main>
 
     <footer>
       <p>
         Fully client-side: no OQMD/external API calls, no data leaves your
-        browser, no account, no execution-record writes. Commercial catalog
-        matching and free-form target input are not part of this MVP.
+        browser, no account, no execution-record writes. The "Commercial
+        (demo)" tab matches against a small fictional catalog, not real
+        supplier data — see the tab itself for details.
       </p>
     </footer>
 

@@ -1,6 +1,12 @@
-import init, { plan_synthesis } from "../pkg/gugen_playground_wasm.js";
+import init, { plan_synthesis, assess_commercial } from "../pkg/gugen_playground_wasm.js";
 import { EXAMPLES } from "./examples.js";
-import { renderAccepted, renderRejected, renderJsonAndMarkdown } from "./render.js";
+import { CATALOG_JSON } from "./catalog.js";
+import {
+  renderAccepted,
+  renderRejected,
+  renderJsonAndMarkdown,
+  renderCommercial,
+} from "./render.js";
 import { initCustomTarget, readCustomRequest } from "./custom.js";
 
 const state = { selected: EXAMPLES[0], report: null };
@@ -160,7 +166,25 @@ function runPlan(target_elements, candidates) {
     document.getElementById("json-view"),
     document.getElementById("markdown-view")
   );
+  renderCommercialTab(result.plans);
   showTab("accepted");
+}
+
+// Separate wasm call from plan_synthesis -- commercial assessment is a
+// distinct post-processing stage over an already-produced plan, not part
+// of planning itself. Runs against a small fictional demo catalog
+// (see catalog.js), so most targets other than the BaTiO3 example will
+// show "no match" here, which is rendered, not hidden.
+function renderCommercialTab(plans) {
+  const commercialJson = assess_commercial(JSON.stringify(plans), CATALOG_JSON);
+  const commercial = JSON.parse(commercialJson);
+  const panel = document.getElementById("commercial-panel");
+  if (commercial.error) {
+    panel.replaceChildren();
+    panel.textContent = `Error: ${commercial.error}`;
+    return;
+  }
+  renderCommercial(commercial, panel);
 }
 
 function runExamplePlan() {

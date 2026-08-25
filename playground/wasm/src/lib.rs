@@ -10,8 +10,10 @@
 //! crate or the web frontend that calls it.
 
 use gugen::{
-    Composition, Element, InMemoryPrecursorCatalog, Planner, PlanningConfig, PlanningConstraints,
-    PrecursorCandidate, PrecursorId, SearchBudget, TargetSpecification,
+    CommercialCatalogLoadMode, CommercialPlanningConfig, CommercialPlanningRequest,
+    CommercialPrecursorCatalog, Composition, Element, InMemoryPrecursorCatalog, Planner,
+    PlanningConfig, PlanningConstraints, PrecursorCandidate, PrecursorId, SearchBudget,
+    SynthesisPlan, TargetSpecification, assess_commercial_plans,
 };
 use serde::Deserialize;
 use std::collections::BTreeMap;
@@ -24,6 +26,7 @@ const MAX_PRECURSORS_PER_PLAN: usize = 6;
 const MAX_PRECURSOR_SETS: usize = 50_000;
 const MAX_PLANS_RETURNED: usize = 50;
 const MAX_SYMBOL_LEN: usize = 40;
+const MAX_CATALOG_OFFERS: usize = 200;
 
 #[wasm_bindgen(start)]
 pub fn init() {
@@ -36,6 +39,48 @@ pub fn plan_synthesis(input_json: &str) -> String {
         Ok(report_json) => report_json,
         Err(message) => serde_json::json!({ "error": message }).to_string(),
     }
+}
+
+/// Separate boundary function, same string-in/string-out shape as
+/// `plan_synthesis`. Takes `plan_synthesis`'s own `plans` output back in --
+/// commercial assessment is a distinct post-processing stage over an
+/// already-produced `SynthesisPlan`, never threaded into planning itself
+/// (mirrors gugen's own `assess_commercial_plans` boundary).
+#[wasm_bindgen]
+pub fn assess_commercial(plans_json: &str, catalog_json: &str) -> String {
+    match run_commercial(plans_json, catalog_json) {
+        Ok(assessment_json) => assessment_json,
+        Err(message) => serde_json::json!({ "error": message }).to_string(),
+    }
+}
+
+fn run_commercial(plans_json: &str, catalog_json: &str) -> Result<String, String> {
+    if plans_json.len() > MAX_INPUT_BYTES || catalog_json.len() > MAX_INPUT_BYTES {
+        return Err(format!("input exceeds the {MAX_INPUT_BYTES}-byte limit"));
+    }
+
+    let plans: Vec<SynthesisPlan> =
+        serde_json::from_str(plans_json).map_err(|e| format!("malformed plans: {e}"))?;
+
+    let (catalog, _load_report) =
+        CommercialPrecursorCatalog::load_json(catalog_json, CommercialCatalogLoadMode::Lenient)
+            .map_err(|e| format!("malformed catalog: {e}"))?;
+    if catalog.offers().len() > MAX_CATALOG_OFFERS {
+        return Err(format!(
+            "catalog has {} offers, exceeding the {MAX_CATALOG_OFFERS}-offer limit",
+            catalog.offers().len()
+        ));
+    }
+
+    let assessments = assess_commercial_plans(
+        &plans,
+        &catalog,
+        &CommercialPlanningRequest::default(),
+        &CommercialPlanningConfig::default(),
+    )
+    .map_err(|e| e.to_string())?;
+
+    serde_json::to_string(&assessments).map_err(|e| format!("failed to serialize assessment: {e}"))
 }
 
 #[derive(Deserialize)]
@@ -280,5 +325,47 @@ mod tests {
         .to_string();
         let err = run(&request).unwrap_err();
         assert!(!err.is_empty());
+    }
+
+    fn sample_catalog_json() -> &'static str {
+        include_str!("../../../tests/fixtures/commercial_catalog_sample.json")
+    }
+
+    #[test]
+    fn a_batio3_plan_matches_the_sample_catalog() {
+        let plans_json = run(&batio3_request()).expect("must succeed");
+        let plans_json: serde_json::Value = serde_json::from_str(&plans_json).unwrap();
+        let plans = serde_json::to_string(&plans_json["plans"]).unwrap();
+
+        let result = assess_commercial(&plans, sample_catalog_json());
+        let assessments: serde_json::Value = serde_json::from_str(&result).unwrap();
+        let assessments = assessments.as_array().expect("assessment array");
+        assert!(
+            assessments
+                .iter()
+                .any(|a| a["every_precursor_has_a_match"] == true),
+            "expected at least one fully-matched plan in {assessments:#?}"
+        );
+    }
+
+    #[test]
+    fn assess_commercial_returns_a_structured_error_not_a_panic_on_malformed_plans() {
+        let result = assess_commercial("not json", sample_catalog_json());
+        let value: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert!(value["error"].is_string());
+    }
+
+    #[test]
+    fn assess_commercial_returns_a_structured_error_not_a_panic_on_malformed_catalog() {
+        let result = assess_commercial("[]", "not json");
+        let value: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert!(value["error"].is_string());
+    }
+
+    #[test]
+    fn an_empty_plan_list_is_not_an_error() {
+        let result = assess_commercial("[]", sample_catalog_json());
+        let value: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(value.as_array().expect("assessment array").len(), 0);
     }
 }

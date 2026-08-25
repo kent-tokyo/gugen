@@ -338,6 +338,39 @@ pre {
   color: var(--muted);
 }
 
+.commercial-disclosure {
+  color: var(--muted);
+  font-size: 0.85rem;
+  border-left: 2px solid var(--border);
+  padding-left: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.combination-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+  margin-bottom: 0.6rem;
+}
+
+.combination-card h4 {
+  margin: 0 0 0.4rem;
+  font-size: 0.95rem;
+}
+
+.selection-row {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.85rem;
+  padding: 0.25rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.selection-offer {
+  font-weight: 600;
+}
+
 footer {
   color: var(--muted);
   font-size: 0.8rem;

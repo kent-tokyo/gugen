@@ -164,6 +164,96 @@ export function renderRejected(report, container) {
   }
 }
 
+// minor_units is always integer cents for the currencies gugen validates
+// today (ISO 4217 3-letter codes) -- fine for this fixture-only demo.
+function formatMoney(money) {
+  if (!money) return "unknown";
+  return `${(money.minor_units / 100).toFixed(2)} ${money.currency}`;
+}
+
+function renderSelection(selection) {
+  const row = el("div", { className: "selection-row" });
+  row.appendChild(
+    el("span", {
+      className: "selection-offer",
+      text: `${selection.precursor}: ${selection.offer_id}`,
+    })
+  );
+  row.appendChild(
+    el("span", {
+      text:
+        `purity ${selection.purity !== null ? (selection.purity * 100).toFixed(1) + "%" : "unknown"}` +
+        ` · packages needed ${selection.package_count ?? "unknown"}` +
+        ` · surplus ${selection.excess_mass_grams !== null ? selection.excess_mass_grams.toFixed(2) + " g" : "unknown"}` +
+        ` · price ${formatMoney(selection.subtotal)}`,
+    })
+  );
+  return row;
+}
+
+function renderCombination(combination) {
+  const card = el("div", { className: "combination-card" });
+  card.appendChild(
+    el("h4", {
+      text:
+        `${formatMoney(combination.total_cost)} total` +
+        (combination.max_lead_time_days !== null
+          ? ` · ${combination.max_lead_time_days}d lead time`
+          : " · lead time unknown") +
+        (combination.min_purity !== null
+          ? ` · min purity ${(combination.min_purity * 100).toFixed(1)}%`
+          : ""),
+    })
+  );
+  for (const selection of combination.selections) {
+    card.appendChild(renderSelection(selection));
+  }
+  return card;
+}
+
+export function renderCommercial(assessments, container) {
+  container.replaceChildren();
+  container.appendChild(
+    el("p", {
+      className: "commercial-disclosure",
+      text:
+        "Fictional demo catalog (see tests/fixtures/commercial_catalog_sample.json), not real supplier data. " +
+        "Commercial ranking is a separate post-processing stage over an already-produced plan — price and lead " +
+        "time never feed back into the scientific plan ranking above.",
+    })
+  );
+  if (assessments.length === 0) {
+    container.appendChild(
+      el("p", { className: "empty", text: "No accepted plan to match against the demo catalog." })
+    );
+    return;
+  }
+  for (const assessment of assessments) {
+    const card = el("div", { className: "plan-card" });
+    card.appendChild(el("h3", { text: `Plan ${assessment.plan_id}` }));
+    if (assessment.combinations.length === 0) {
+      card.appendChild(
+        el("p", { className: "empty", text: "No fully-matched purchasing option in the demo catalog." })
+      );
+    } else {
+      for (const combination of assessment.combinations) {
+        card.appendChild(renderCombination(combination));
+      }
+    }
+    if (assessment.unmatched_precursors.length > 0) {
+      card.appendChild(
+        el("p", {
+          className: "unresolved",
+          text:
+            "No demo catalog offer for: " +
+            assessment.unmatched_precursors.map(([id]) => id).join(", "),
+        })
+      );
+    }
+    container.appendChild(card);
+  }
+}
+
 function toMarkdown(report) {
   const lines = [`# Synthesis Planning Report (schema v${report.schema_version})`, ""];
   lines.push(`**Target:** ${formatComposition(report.target.composition)}`, "");
