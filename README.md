@@ -30,6 +30,16 @@ predict experimental success.
 > See [`CHANGELOG.md`](CHANGELOG.md) for the full breaking-change list
 > and migration notes.
 
+## Try it in your browser
+
+Explore real, cited inorganic synthesis examples in the
+[gugen Playground](https://kent-tokyo.github.io/gugen/).
+
+It runs entirely in your browser via WebAssembly. No account,
+server, external API, or uploaded data is required. The playground
+shows accepted plans, rejected candidates, and unresolved conditions;
+it does not predict experimental success.
+
 ## What gugen does and doesn't guarantee
 
 gugen's output is a set of candidate plans, not a validated SOP. It does
