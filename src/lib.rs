@@ -129,6 +129,7 @@ mod literature_observations;
 mod materials_project_adapter;
 #[cfg(feature = "mikiwame")]
 mod mikiwame_adapter;
+mod multi_step;
 mod planner;
 mod precursor;
 mod prior_experiment_evidence;
@@ -192,6 +193,7 @@ pub use literature_observations::{
 pub use materials_project_adapter::MaterialsProjectSnapshotProvider;
 #[cfg(feature = "mikiwame")]
 pub use mikiwame_adapter::{StructuralDiagnosticEffects, structural_effects};
+pub use multi_step::{RouteError, SynthesisRoute, search_two_step_routes};
 pub use planner::{Planner, PlannerBuilder};
 pub use precursor::{
     AcceptedPrecursorSet, AvailabilityMetadata, InMemoryPrecursorCatalog, PrecursorCandidate,
