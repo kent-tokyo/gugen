@@ -1,6 +1,6 @@
 use crate::balance;
 use crate::composition::{Composition, Element};
-use crate::error::{ProviderError, Result};
+use crate::error::{ProviderError, Result, require_finite};
 use crate::provider::PrecursorCatalog;
 use crate::rejection::{RejectedCandidate, RejectionCode};
 use crate::target::PlanningConstraints;
@@ -126,8 +126,21 @@ pub struct PrecursorSearchOutcome {
 /// non-finite -- mirrors `ThermodynamicStabilityGenerator`'s own
 /// `total_cmp` convention (`src/candidate_generator.rs`). Diagnostic-only
 /// (Phase 30.5): only ever constructed by [`TieBreakMode::FusionPrioritySum`].
-#[derive(Debug, Clone, Copy, PartialEq)]
+///
+/// `PartialEq` is defined as `cmp() == Equal`, not derived from `f64`'s own
+/// `==` -- a derived `PartialEq` would disagree with `total_cmp` on `-0.0`
+/// vs `0.0` (equal under `==`, distinct under `total_cmp`) and on NaN
+/// (never equal under `==`, self-equal and totally ordered under
+/// `total_cmp`), violating `Eq`/`Ord`'s contract that `Ord`-equal values
+/// must be `PartialEq`-equal and vice versa. Defining `eq` in terms of
+/// `cmp` makes the two impossible to drift apart again.
+#[derive(Debug, Clone, Copy)]
 struct TotalF64(f64);
+impl PartialEq for TotalF64 {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
 impl Eq for TotalF64 {}
 impl PartialOrd for TotalF64 {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -228,9 +241,18 @@ struct SearchPriority {
     depth: usize,
 }
 
+/// `eq` is defined as `cmp() == Equal`, not as a `chosen`-only comparison
+/// -- a `chosen`-only `PartialEq` would disagree with `Ord` (which also
+/// compares `priority` and `tie_break_key`) whenever two states share a
+/// `chosen` vector but differ in those other fields, violating `Eq`/`Ord`'s
+/// contract. `chosen`-only identity is not needed anywhere outside this
+/// impl (confirmed: `SearchState` is used only inside `BinaryHeap`, which
+/// needs `Ord`; no call site compares two states for `chosen`-equality
+/// directly) -- defining `eq` from `cmp` keeps the two impossible to drift
+/// apart, rather than introducing a second identity notion no caller uses.
 impl PartialEq for SearchState {
     fn eq(&self, other: &Self) -> bool {
-        self.chosen == other.chosen
+        self.cmp(other) == Ordering::Equal
     }
 }
 impl Eq for SearchState {}
@@ -815,6 +837,20 @@ pub fn search_precursor_sets_diagnostic(
     tie_break: &TieBreakPolicy,
     gold: &[PrecursorId],
 ) -> Result<SearchDiagnosticTrace> {
+    // Reject a non-finite fused rank explicitly at the public boundary,
+    // rather than relying on `TotalF64`'s `total_cmp`-based ordering to
+    // handle NaN/infinity gracefully inside the frontier. `TotalF64`
+    // remains sound either way (its `Eq`/`Ord` contract holds for any
+    // `f64` value, see its own doc comment) -- this check exists so a
+    // caller-supplied bad rank map fails loudly here instead of silently
+    // producing an unusual-but-technically-valid tie-break ordering deep
+    // inside the search.
+    if let TieBreakPolicy::FusionPrioritySum(ranks) = tie_break {
+        for &rank in ranks.values() {
+            require_finite("FusionPrioritySum rank", rank)?;
+        }
+    }
+
     let gold_indices: Option<Vec<usize>> = {
         let mut indices: Vec<usize> = candidates
             .iter()
@@ -1957,6 +1993,104 @@ mod tests {
             covers_more > covers_less,
             "a larger raw marginal-coverage value must pop first"
         );
+    }
+
+    // Owner-mandated `Eq`/`Ord` contract tests (2026-08-25 correction):
+    // `TotalF64::eq` and `SearchState::eq` are now both defined as
+    // `cmp() == Equal`, which makes the contract hold by construction --
+    // these tests exist to pin that down explicitly and catch any future
+    // regression back to a field-subset or derived `PartialEq`.
+
+    #[test]
+    fn total_f64_eq_agrees_with_cmp_on_zero_and_negative_zero() {
+        // `0.0 == -0.0` under `f64`'s own `==`, but `total_cmp` orders
+        // them as distinct (`-0.0 < 0.0`) -- a derived `PartialEq` would
+        // report `eq() == true` while `cmp() != Equal`, violating the
+        // contract this fix exists to restore.
+        let zero = TotalF64(0.0);
+        let neg_zero = TotalF64(-0.0);
+        assert_eq!(zero.cmp(&neg_zero), Ordering::Greater);
+        assert_ne!(zero, neg_zero, "eq must agree with cmp() != Equal here");
+    }
+
+    #[test]
+    fn total_f64_eq_agrees_with_cmp_on_nan() {
+        // `f64::NAN == f64::NAN` is `false` under `==`, but `total_cmp`
+        // gives NaN a definite, self-equal place in the total order.
+        let nan_a = TotalF64(f64::NAN);
+        let nan_b = TotalF64(f64::NAN);
+        assert_eq!(nan_a.cmp(&nan_b), Ordering::Equal);
+        assert_eq!(nan_a, nan_b, "eq must agree with cmp() == Equal here");
+    }
+
+    #[test]
+    fn total_f64_eq_agrees_with_cmp_on_different_nan_payloads() {
+        // Two NaN bit patterns with different payloads: `total_cmp`
+        // still orders them (payload participates in the total order),
+        // so they are not necessarily cmp-equal to each other even
+        // though both are "NaN".
+        let nan_a = TotalF64(f64::from_bits(0x7ff8_0000_0000_0001));
+        let nan_b = TotalF64(f64::from_bits(0x7ff8_0000_0000_0002));
+        assert_eq!(nan_a.eq(&nan_b), nan_a.cmp(&nan_b) == Ordering::Equal);
+    }
+
+    #[test]
+    fn total_f64_eq_agrees_with_cmp_on_infinities() {
+        let pos_inf = TotalF64(f64::INFINITY);
+        let neg_inf = TotalF64(f64::NEG_INFINITY);
+        assert_eq!(pos_inf.cmp(&neg_inf), Ordering::Greater);
+        assert_ne!(pos_inf, neg_inf);
+        assert_eq!(TotalF64(f64::INFINITY), TotalF64(f64::INFINITY));
+    }
+
+    #[test]
+    fn search_state_eq_iff_cmp_equal_same_chosen_different_priority() {
+        let base = state_with_key(TieBreakKey::IndexOrder(vec![0]));
+        let mut different_priority = base.clone();
+        different_priority.priority.elements_missing = 1;
+        assert_eq!(base.chosen, different_priority.chosen);
+        assert_ne!(
+            base.cmp(&different_priority),
+            Ordering::Equal,
+            "differing priority must make cmp non-Equal"
+        );
+        assert_ne!(
+            base, different_priority,
+            "eq must agree with cmp() != Equal: a chosen-only PartialEq would \
+            wrongly report these as equal"
+        );
+    }
+
+    #[test]
+    fn search_state_eq_iff_cmp_equal_same_chosen_different_tie_break_key() {
+        let a = state_with_key(TieBreakKey::IndexOrder(vec![0]));
+        let b = state_with_key(TieBreakKey::IndexOrder(vec![1]));
+        // Deliberately give both the same `chosen` field value despite
+        // different tie_break_key content, to isolate this from the
+        // index-order tie-break's own chosen-vector comparison.
+        let mut a = a;
+        let mut b = b;
+        a.chosen = vec![0];
+        b.chosen = vec![0];
+        assert_eq!(a.chosen, b.chosen);
+        assert_ne!(
+            a.cmp(&b),
+            Ordering::Equal,
+            "differing tie_break_key must make cmp non-Equal"
+        );
+        assert_ne!(
+            a, b,
+            "eq must agree with cmp() != Equal: a chosen-only PartialEq would \
+            wrongly report these as equal"
+        );
+    }
+
+    #[test]
+    fn search_state_eq_iff_cmp_equal_when_every_ordering_field_matches() {
+        let a = state_with_key(TieBreakKey::IndexOrder(vec![0, 1]));
+        let b = state_with_key(TieBreakKey::IndexOrder(vec![0, 1]));
+        assert_eq!(a.cmp(&b), Ordering::Equal);
+        assert_eq!(a, b, "eq must agree with cmp() == Equal");
     }
 
     #[cfg(feature = "search_diagnostics")]
