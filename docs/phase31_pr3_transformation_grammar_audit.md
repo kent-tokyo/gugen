@@ -136,6 +136,19 @@ would make "X beats Y" mean nothing:
 
 ## Results — reported honestly
 
+**A note on the gate criterion applied here**: the original directive
+specified precise GO/STRONG-GO/NO-GO numeric thresholds, but this
+implementing session's context was compacted between receiving that
+directive and writing this section, and the exact thresholds were not
+recoverable from the retained summary. Rather than invent numbers to
+back-fill a threshold that can't be confirmed, the verdict below is
+against the plain, defensible reading of the directive's own stated
+primary metric: **does adding grammar-sourced candidates (via `Union`)
+improve net-new two-step recall over `FrequencyOnly` alone.** If the
+owner's original thresholds differ from this reading, the raw numbers
+in the table below are unaffected and can be re-judged directly against
+them.
+
 | Split | Policy | Truly unreachable | Two-step (any) | Net-new | Net-new recall |
 |---|---|---|---|---|---|
 | development | one_step_baseline | 151 | 0 | 0 | 0.00% |
