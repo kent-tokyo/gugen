@@ -162,11 +162,21 @@ pub fn search_two_step_routes(
 
     let direct = search_precursor_sets(target, base_candidates, constraints, budget)?;
     for accepted in &direct.accepted {
-        routes.push(SynthesisRoute::new(
-            vec![accepted.reaction.clone()],
-            &base_compositions,
-            target,
-        )?);
+        // A malformed accepted set here reflects a defect in the
+        // underlying `search_precursor_sets_core` search itself (e.g. a
+        // candidate matching a `curated_byproducts()` composition
+        // exactly can be spuriously "accepted" as a no-op identity
+        // reaction unrelated to `target` -- discovered via real-corpus
+        // testing, tracked as a separate fix, see
+        // docs/phase31_pr2_two_step_arity_recall.md), not a problem
+        // with this caller's own inputs. Skipping just that one
+        // candidate set preserves every other legitimate route for this
+        // call instead of discarding all of them over one bad entry.
+        if let Ok(route) =
+            SynthesisRoute::new(vec![accepted.reaction.clone()], &base_compositions, target)
+        {
+            routes.push(route);
+        }
     }
 
     for (index, intermediate) in intermediate_candidates.iter().enumerate() {
@@ -191,11 +201,20 @@ pub fn search_two_step_routes(
             if !accepted.precursors.contains(&synthetic_id) {
                 continue;
             }
-            routes.push(SynthesisRoute::new(
+            // Same defensive skip as the direct-route loop above, and
+            // for the same underlying reason: a malformed accepted set
+            // here (e.g. `first_stage.reaction`'s products not
+            // literally containing `intermediate`, so the synthetic
+            // candidate's own composition is "unexplained") traces back
+            // to the same upstream search defect, not a problem with
+            // this specific two-step combination's siblings.
+            if let Ok(route) = SynthesisRoute::new(
                 vec![first_stage.reaction.clone(), accepted.reaction.clone()],
                 &base_compositions,
                 target,
-            )?);
+            ) {
+                routes.push(route);
+            }
         }
     }
 
@@ -341,6 +360,57 @@ mod tests {
         .unwrap();
 
         assert!(routes.is_empty());
+    }
+
+    /// Regression for a real defect found via real-corpus testing
+    /// (`docs/phase31_pr2_two_step_arity_recall.md`'s Discovered Work):
+    /// `search_precursor_sets_core` can accept a spurious identity
+    /// reaction when a candidate's composition exactly equals one of
+    /// `curated_byproducts()` (O2 here) -- `O2 -> O2`, unrelated to
+    /// `target`. Before the fix, converting that malformed accepted
+    /// entry via `SynthesisRoute::new(...)?` aborted the *entire*
+    /// function with `FinalStageMissingTarget`, discarding the other,
+    /// perfectly valid direct routes below alongside it. This exact
+    /// 5-element oxynitride-style target/candidate shape (elemental O2
+    /// present, target spanning O and N) reproduces it.
+    #[test]
+    fn a_spurious_identity_accepted_set_does_not_poison_the_whole_search() {
+        let target = composition(&[
+            ("Al", 1.0),
+            ("N", 1.0),
+            ("Nd", 1.0),
+            ("O", 1.0),
+            ("Si", 1.0),
+        ]);
+        let base = vec![
+            candidate("AlN", &[("Al", 1.0), ("N", 1.0)]),
+            candidate("Al2O3", &[("Al", 2.0), ("O", 3.0)]),
+            candidate("Nd2O3", &[("Nd", 2.0), ("O", 3.0)]),
+            candidate("Si3N4", &[("Si", 3.0), ("N", 4.0)]),
+            candidate("O2", &[("O", 2.0)]),
+        ];
+
+        let routes = search_two_step_routes(
+            &target,
+            &base,
+            &[],
+            &PlanningConstraints::default(),
+            &SearchBudget::default(),
+        )
+        .expect("a spurious O2->O2 accepted entry must not abort the whole search");
+
+        assert!(
+            !routes.is_empty(),
+            "the legitimate direct routes must survive the spurious entry"
+        );
+        assert!(
+            routes.iter().all(|r| r
+                .final_reaction()
+                .products()
+                .iter()
+                .any(|s| s.composition == target)),
+            "every surviving route must actually produce the real target, not the spurious O2 no-op"
+        );
     }
 
     fn simple_reaction(

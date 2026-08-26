@@ -158,6 +158,37 @@ excluded from every recall figure above and listed by name in
 follow-up**, given finding #1 affects real `Planner` usage, not only
 this benchmark.
 
+**Update (2026-08-26, same-day `/greenlane` follow-up, both fixed):**
+Both defects are now fixed. Root cause: `balance()`'s own documented
+contract ("all-positive-coefficient" among the species it *keeps*)
+means it silently drops zero-coefficient species from **either** side,
+including `target` itself, whenever the linear system admits a smaller
+independent sub-solution not involving it at all (e.g. a candidate
+identical to a byproduct balances trivially against itself, `O2 ->
+O2`, with the target and every other candidate solved to zero and
+dropped). `evaluate_complete_state` (`src/precursor.rs`) never checked
+that `target` actually survived in the returned products before
+accepting a result. Fix: filter `balance()`'s results to only those
+whose products still include `target` before accepting. A second,
+independent fix in `search_two_step_routes` (`src/multi_step.rs`)
+makes it skip one malformed accepted entry instead of aborting the
+whole call, hardening it against any future instance of this class of
+defect. New regression test
+`a_spurious_identity_accepted_set_does_not_poison_the_whole_search`
+(confirmed to fail without the fix, pass with it). Full test suite
+(both feature configs), `cargo semver-checks` ("no semver update
+required" — behavior-only fix, no signature change), and `rustdoc -D
+warnings` all green. Re-running this file's own measurement after the
+fix: **0 rows** now excluded by search defects (was 3),
+`one_step_recovered_despite_high_listed_arity` rises from 111 to
+**114** (the 3 previously-erroring rows turn out to be genuinely
+one-step reachable once the spurious match no longer poisons them),
+and the headline **`two_step_recovered_net_new` is unchanged at
+12/294 = 4.08%** — the fix improves correctness and completeness of
+the measurement (100% of the holdout now evaluated, not 405/408) but
+does not change the reported recall number itself. See
+`CHANGELOG.md`'s `[Unreleased]` section for the public-facing entry.
+
 ## What this does not claim
 
 No claim about real supplier/procedure data — this measures gugen's
@@ -170,8 +201,8 @@ this project to check that against. No claim that 4.08% is a ceiling —
 only the frequency-prior/element-overlap/simpler-than-target design
 explored here; a hand-written decomposition grammar (tier 2's other
 half) or an OQMD-based intermediate source (tier 3) remain open,
-undecided next steps. No claim that the two discovered defects are
-fixed — see Discovered Work.
+undecided next steps. (The two discovered defects are now fixed — see
+the Discovered Work section's 2026-08-26 update.)
 
 ## Status
 

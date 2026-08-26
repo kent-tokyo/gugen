@@ -477,8 +477,22 @@ fn evaluate_complete_state(
         products.extend(subset.iter().cloned());
         balance_calls += 1;
         let results = balance::balance(&reactant_compositions, &products)?;
-        if !results.is_empty() {
-            found = results;
+        // `balance()` only guarantees positive coefficients among the
+        // species it *keeps* -- it silently drops any species (on either
+        // side) whose solved coefficient is zero, including `target`
+        // itself if the system admits a smaller independent
+        // sub-solution not involving it at all (e.g. a candidate whose
+        // composition exactly equals one of `subset`'s byproducts can
+        // balance trivially against itself: `O2 -> O2`, with every other
+        // species -- target included -- solved to zero and dropped).
+        // Such a reaction is a real, self-consistent balance, just not
+        // one that produces the target, so it must not be accepted here.
+        let genuine: Vec<BalancedReaction> = results
+            .into_iter()
+            .filter(|reaction| reaction.products().iter().any(|s| &s.composition == target))
+            .collect();
+        if !genuine.is_empty() {
+            found = genuine;
             break;
         }
     }
