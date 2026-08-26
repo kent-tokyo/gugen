@@ -1,0 +1,120 @@
+{
+  "description": "Phase 31 PR 3 -- net-new two-step recall by policy (one_step_baseline/frequency_only/grammar_only/union) on the deterministic dev/eval split of kononova_high_arity_sample.jsonl. Every policy shares candidate_cap=200 for a fair comparison. one_step_baseline's net_new is expected to be 0 by construction (sanity floor). audit_samples is a manual-review aid (per-grammar attribution of the GrammarOnly policy's own 2-stage routes, capped at 3 examples per grammar), not a benchmark figure.",
+  "candidate_cap": 200,
+  "per_grammar_cap": 50,
+  "results": [
+{
+  "split": "development",
+  "policy": "one_step_baseline",
+  "evaluated": 204,
+  "search_errors": 0,
+  "one_step_recovered": 53,
+  "truly_unreachable": 151,
+  "two_step_found_any_route": 0,
+  "two_step_recovered_net_new": 0,
+  "recall_net_new_of_truly_unreachable": 0.000000,
+  "by_arity": {"5": {"total": 125, "recovered": 0}, "6": {"total": 21, "recovered": 0}, "7": {"total": 5, "recovered": 0}},
+  "net_new_rows": []
+},
+{
+  "split": "development",
+  "policy": "frequency_only",
+  "evaluated": 204,
+  "search_errors": 0,
+  "one_step_recovered": 53,
+  "truly_unreachable": 151,
+  "two_step_found_any_route": 55,
+  "two_step_recovered_net_new": 6,
+  "recall_net_new_of_truly_unreachable": 0.039735,
+  "by_arity": {"5": {"total": 125, "recovered": 5}, "6": {"total": 21, "recovered": 1}, "7": {"total": 5, "recovered": 0}},
+  "net_new_rows": [{"doi": "10.1007/s00339-017-0920-7", "target_formula": "Ba0.837Sr0.093Na0.07Ti0.93Nb0.07O3", "arity": 5}, {"doi": "10.1007/s10853-015-9360-y", "target_formula": "(K0.5Na0.5)0.9Sr0.1Nb0.9Ti0.1O3", "arity": 6}, {"doi": "10.1007/s10854-011-0590-8", "target_formula": "Ba2Sr3DyTi3V7O30", "arity": 5}, {"doi": "10.1007/s10854-012-1001-5", "target_formula": "Ba2Sr3GdTi3V7O30", "arity": 5}, {"doi": "10.1016/S0014-3057(02)00118-0", "target_formula": "BaFe10.2Co0.85Ti0.85Mn0.1O19", "arity": 5}, {"doi": "10.1016/j.surfcoat.2008.03.033", "target_formula": "NiCrAlCoW", "arity": 5}]
+},
+{
+  "split": "development",
+  "policy": "grammar_only",
+  "evaluated": 204,
+  "search_errors": 0,
+  "one_step_recovered": 53,
+  "truly_unreachable": 151,
+  "two_step_found_any_route": 46,
+  "two_step_recovered_net_new": 0,
+  "recall_net_new_of_truly_unreachable": 0.000000,
+  "by_arity": {"5": {"total": 125, "recovered": 0}, "6": {"total": 21, "recovered": 0}, "7": {"total": 5, "recovered": 0}},
+  "net_new_rows": []
+},
+{
+  "split": "development",
+  "policy": "union",
+  "evaluated": 204,
+  "search_errors": 0,
+  "one_step_recovered": 53,
+  "truly_unreachable": 151,
+  "two_step_found_any_route": 55,
+  "two_step_recovered_net_new": 6,
+  "recall_net_new_of_truly_unreachable": 0.039735,
+  "by_arity": {"5": {"total": 125, "recovered": 5}, "6": {"total": 21, "recovered": 1}, "7": {"total": 5, "recovered": 0}},
+  "net_new_rows": [{"doi": "10.1007/s00339-017-0920-7", "target_formula": "Ba0.837Sr0.093Na0.07Ti0.93Nb0.07O3", "arity": 5}, {"doi": "10.1007/s10853-015-9360-y", "target_formula": "(K0.5Na0.5)0.9Sr0.1Nb0.9Ti0.1O3", "arity": 6}, {"doi": "10.1007/s10854-011-0590-8", "target_formula": "Ba2Sr3DyTi3V7O30", "arity": 5}, {"doi": "10.1007/s10854-012-1001-5", "target_formula": "Ba2Sr3GdTi3V7O30", "arity": 5}, {"doi": "10.1016/S0014-3057(02)00118-0", "target_formula": "BaFe10.2Co0.85Ti0.85Mn0.1O19", "arity": 5}, {"doi": "10.1016/j.surfcoat.2008.03.033", "target_formula": "NiCrAlCoW", "arity": 5}]
+},
+{
+  "split": "evaluation",
+  "policy": "one_step_baseline",
+  "evaluated": 204,
+  "search_errors": 0,
+  "one_step_recovered": 61,
+  "truly_unreachable": 143,
+  "two_step_found_any_route": 0,
+  "two_step_recovered_net_new": 0,
+  "recall_net_new_of_truly_unreachable": 0.000000,
+  "by_arity": {"5": {"total": 112, "recovered": 0}, "6": {"total": 29, "recovered": 0}, "7": {"total": 2, "recovered": 0}},
+  "net_new_rows": []
+},
+{
+  "split": "evaluation",
+  "policy": "frequency_only",
+  "evaluated": 204,
+  "search_errors": 0,
+  "one_step_recovered": 61,
+  "truly_unreachable": 143,
+  "two_step_found_any_route": 57,
+  "two_step_recovered_net_new": 3,
+  "recall_net_new_of_truly_unreachable": 0.020979,
+  "by_arity": {"5": {"total": 112, "recovered": 3}, "6": {"total": 29, "recovered": 0}, "7": {"total": 2, "recovered": 0}},
+  "net_new_rows": [{"doi": "10.1016/j.jssc.2004.01.010", "target_formula": "Bi2SrBaNb2TiO12", "arity": 5}, {"doi": "10.1016/j.materresbull.2006.08.009", "target_formula": "Bi2SrNaNb2RuO12", "arity": 5}, {"doi": "10.1016/j.tca.2014.08.028", "target_formula": "SiO2P2O5K2OMgOCaO", "arity": 5}]
+},
+{
+  "split": "evaluation",
+  "policy": "grammar_only",
+  "evaluated": 204,
+  "search_errors": 0,
+  "one_step_recovered": 61,
+  "truly_unreachable": 143,
+  "two_step_found_any_route": 49,
+  "two_step_recovered_net_new": 1,
+  "recall_net_new_of_truly_unreachable": 0.006993,
+  "by_arity": {"5": {"total": 112, "recovered": 1}, "6": {"total": 29, "recovered": 0}, "7": {"total": 2, "recovered": 0}},
+  "net_new_rows": [{"doi": "10.1016/j.tca.2014.08.028", "target_formula": "SiO2P2O5K2OMgOCaO", "arity": 5}]
+},
+{
+  "split": "evaluation",
+  "policy": "union",
+  "evaluated": 204,
+  "search_errors": 0,
+  "one_step_recovered": 61,
+  "truly_unreachable": 143,
+  "two_step_found_any_route": 57,
+  "two_step_recovered_net_new": 3,
+  "recall_net_new_of_truly_unreachable": 0.020979,
+  "by_arity": {"5": {"total": 112, "recovered": 3}, "6": {"total": 29, "recovered": 0}, "7": {"total": 2, "recovered": 0}},
+  "net_new_rows": [{"doi": "10.1016/j.jssc.2004.01.010", "target_formula": "Bi2SrBaNb2TiO12", "arity": 5}, {"doi": "10.1016/j.materresbull.2006.08.009", "target_formula": "Bi2SrNaNb2RuO12", "arity": 5}, {"doi": "10.1016/j.tca.2014.08.028", "target_formula": "SiO2P2O5K2OMgOCaO", "arity": 5}]
+}
+  ],
+  "audit_samples": [
+{"split": "development", "doi": "10.1007/s10832-013-9864-2", "target_formula": "(Ba0.91Ca0.09Ti0.916Sn0.084O3", "precursor_formulas": ["SnO2", "TiO2", "CaCO3", "BaCO3", "ZnO", "MnO2"], "intermediate": "Composition { amounts: {Element(\"Ba\"): Frac { num: 1, den: 1 }, Element(\"O\"): Frac { num: 1, den: 1 }} }", "net_new": false, "contributing_grammars": ["carbonate-to-oxide"]},
+{"split": "development", "doi": "10.1007/s10853-012-6326-1", "target_formula": "Ba0.85Ca0.15Ti0.90Zr0.10O3", "precursor_formulas": ["CuO", "TiO2", "CaCO3", "BaCO3", "ZrO2"], "intermediate": "Composition { amounts: {Element(\"Ba\"): Frac { num: 1, den: 1 }, Element(\"O\"): Frac { num: 1, den: 1 }} }", "net_new": false, "contributing_grammars": ["carbonate-to-oxide"]},
+{"split": "development", "doi": "10.1007/s10854-015-2687-y", "target_formula": "(Ba0.98Ca0.02)(Ti0.94Sn0.06)O3", "precursor_formulas": ["SnO2", "TiO2", "CaCO3", "BaCO3", "ZnO"], "intermediate": "Composition { amounts: {Element(\"Ba\"): Frac { num: 1, den: 1 }, Element(\"O\"): Frac { num: 1, den: 1 }} }", "net_new": false, "contributing_grammars": ["carbonate-to-oxide"]},
+{"split": "development", "doi": "10.1007/s10854-016-5674-z", "target_formula": "KBaY(BO3)2", "precursor_formulas": ["Eu2O3", "Y2O3", "H3BO3", "BaCO3", "K2CO3"], "intermediate": "Composition { amounts: {Element(\"B\"): Frac { num: 1, den: 1 }, Element(\"O\"): Frac { num: 3, den: 2 }} }", "net_new": false, "contributing_grammars": ["hydroxide-to-oxide"]},
+{"split": "development", "doi": "10.1016/j.jlumin.2011.09.003", "target_formula": "LiSr4(BO3)3", "precursor_formulas": ["CeO2", "Eu2O3", "SrCO3", "H3BO3", "Li2CO3"], "intermediate": "Composition { amounts: {Element(\"B\"): Frac { num: 1, den: 1 }, Element(\"O\"): Frac { num: 3, den: 2 }} }", "net_new": false, "contributing_grammars": ["hydroxide-to-oxide"]},
+{"split": "development", "doi": "10.1016/j.jlumin.2012.06.018", "target_formula": "BaAl2B2O7", "precursor_formulas": ["CeO2", "Al2O3", "H3BO3", "BaCO3", "Tb4O7"], "intermediate": "Composition { amounts: {Element(\"B\"): Frac { num: 1, den: 1 }, Element(\"O\"): Frac { num: 3, den: 2 }} }", "net_new": false, "contributing_grammars": ["hydroxide-to-oxide"]},
+{"split": "evaluation", "doi": "10.1016/j.tca.2014.08.028", "target_formula": "SiO2P2O5K2OMgOCaO", "precursor_formulas": ["MgO", "CaCO3", "H3PO4", "SiO2", "K2CO3"], "intermediate": "Composition { amounts: {Element(\"H\"): Frac { num: 2, den: 1 }, Element(\"K\"): Frac { num: 1, den: 1 }, Element(\"O\"): Frac { num: 4, den: 1 }, Element(\"P\"): Frac { num: 1, den: 1 }} }", "net_new": true, "contributing_grammars": ["acid-carbonate-phosphate"]}
+  ]
+}

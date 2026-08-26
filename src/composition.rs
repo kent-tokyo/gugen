@@ -130,6 +130,15 @@ impl Composition {
         self.amounts.get(&element).map(|f| f.to_f64())
     }
 
+    /// Exact-rational amount, for internal callers (e.g.
+    /// `transformation_grammar.rs`) that must subtract/compare element
+    /// amounts without an `f64` rounding step -- `amount_of`'s `to_f64()`
+    /// is fine for reporting but not for deciding whether a stoichiometric
+    /// ratio predicate (e.g. "O:C exactly 3:1") holds exactly.
+    pub(crate) fn amount_of_frac(&self, element: Element) -> Option<Frac> {
+        self.amounts.get(&element).copied()
+    }
+
     pub fn elements(&self) -> impl Iterator<Item = Element> + '_ {
         self.amounts.keys().copied()
     }

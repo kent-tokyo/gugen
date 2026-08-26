@@ -231,6 +231,11 @@ name = "exploration_two_step_arity_recall"
 path = "examples/exploration_two_step_arity_recall.rs"
 required-features = ["serde"]
 
+[[example]]
+name = "exploration_grammar_audit"
+path = "examples/exploration_grammar_audit.rs"
+required-features = ["serde"]
+
 [[bin]]
 name = "gugen"
 path = "src/bin/gugen.rs"
