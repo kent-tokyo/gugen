@@ -143,6 +143,7 @@ mod route_suitability;
 mod score;
 mod target;
 mod thermodynamics;
+mod transformation_grammar;
 
 pub use balance::{balance, curated_byproducts};
 pub use candidate_generator::{
@@ -239,4 +240,9 @@ pub use thermodynamics::{
     DecompositionComparison, Kelvin, SolidThermodynamicEntry, ThermodynamicDatasetIdentity,
     ThermodynamicSelectivityAssessment, balanced_reaction_delta_ev_per_atom,
     decomposition_margin_ev_per_atom, reduced_mass_amu, relative_solid_gibbs_ev_per_atom,
+};
+pub use transformation_grammar::{
+    AcidCarbonatePhosphateGrammar, CarbonateToOxideGrammar, DedupedProposal, GrammarEvidenceClass,
+    GrammarId, HydroxideToOxideGrammar, NitrateToOxideGrammar, ProposedIntermediate,
+    TransformationGrammar, default_grammars, propose_all,
 };
