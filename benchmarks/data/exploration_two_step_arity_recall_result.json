@@ -2,12 +2,12 @@
   "description": "Phase 31 PR 2 -- search_two_step_routes recall against real, literature-cited targets whose corpus-listed precursor count exceeds SearchBudget::default().max_precursors_per_plan, using a corpus-grounded FrequencyPriorGenerator as the intermediate-candidate source. two_step_found_any_route counts every row where a returned route (1- or 2-stage) matches the target; two_step_recovered_net_new is the honest gate metric -- only rows where the target was NOT already reachable in one step from a smaller real subset (see one_step_recovered_despite_high_listed_arity). Not a claim that any recovered intermediate matches a documented real synthesis procedure -- see this file's generating example's own module doc. search_errors lists rows excluded by a discovered, pre-existing, unrelated search defect (see module doc's Discovered Work note), not counted in any recall figure.",
   "holdout_total": 408,
   "holdout_unparseable_skipped": 0,
-  "excluded_by_discovered_search_defect": 3,
-  "evaluated": 405,
+  "excluded_by_discovered_search_defect": 0,
+  "evaluated": 408,
   "max_intermediate_candidates": 2000,
-  "one_step_recovered_despite_high_listed_arity": 111,
+  "one_step_recovered_despite_high_listed_arity": 114,
   "truly_unreachable_in_one_step": 294,
-  "two_step_found_any_route": 112,
+  "two_step_found_any_route": 115,
   "two_step_recovered_net_new": 12,
   "two_step_recall_net_new_of_truly_unreachable": 0.040816,
   "two_step_recall_net_new_of_raw_holdout": 0.029412,
@@ -17,9 +17,7 @@
     "7": {"total": 7, "recovered": 0}
   },
   "search_errors": [
-    {"doi": "10.1016/j.jmatprotec.2006.10.015", "target_formula": "NdSiAlON", "error": "the final stage's products do not include the target composition"},
-    {"doi": "10.1016/j.jmatprotec.2006.10.015", "target_formula": "YbSiAlON", "error": "the final stage's products do not include the target composition"},
-    {"doi": "10.1016/j.materresbull.2014.01.009", "target_formula": "Na0.5Bi0.5Cu3Ti4O12", "error": "stage 1's reactant Composition { amounts: {Element(\"C\"): Frac { num: 1, den: 1 }, Element(\"Na\"): Frac { num: 1, den: 1 }, Element(\"O\"): Frac { num: 3, den: 1 }} } is not explained by any base precursor or an earlier stage's product"}
+
   ],
   "rows": [
     {"doi": "10.1002/adfm.201102758", "target_formula": "(Bi0.49Nd0.01Na0.335K0.125Li0.04)TiO3", "arity": 6, "intermediate_candidates_tried": 268, "two_step_recovered": false, "one_step_recovered": false},
@@ -207,6 +205,8 @@
     {"doi": "10.1016/j.jlumin.2017.09.026", "target_formula": "Cr0.04Yb1.5Ho0.0126Pr0.003Gd0.4844YSc1.96Ga3O12", "arity": 7, "intermediate_candidates_tried": 258, "two_step_recovered": false, "one_step_recovered": false},
     {"doi": "10.1016/j.jlumin.2018.01.053", "target_formula": "KLaMgWO6", "arity": 5, "intermediate_candidates_tried": 259, "two_step_recovered": true, "one_step_recovered": true},
     {"doi": "10.1016/j.jlumin.2018.02.022", "target_formula": "Ca9Zn1.5(PO4)7", "arity": 5, "intermediate_candidates_tried": 231, "two_step_recovered": true, "one_step_recovered": true},
+    {"doi": "10.1016/j.jmatprotec.2006.10.015", "target_formula": "NdSiAlON", "arity": 5, "intermediate_candidates_tried": 277, "two_step_recovered": true, "one_step_recovered": true},
+    {"doi": "10.1016/j.jmatprotec.2006.10.015", "target_formula": "YbSiAlON", "arity": 5, "intermediate_candidates_tried": 276, "two_step_recovered": true, "one_step_recovered": true},
     {"doi": "10.1016/j.jmmm.2006.10.872", "target_formula": "(Mg0.476Mn0.448Zn0.007)(Fe1.997Ti0.002)O4", "arity": 5, "intermediate_candidates_tried": 262, "two_step_recovered": false, "one_step_recovered": false},
     {"doi": "10.1016/j.jmmm.2007.03.203", "target_formula": "Ba3(Co0.4Zn0.6)2Fe24O41", "arity": 5, "intermediate_candidates_tried": 264, "two_step_recovered": true, "one_step_recovered": true},
     {"doi": "10.1016/j.jmmm.2008.02.108", "target_formula": "RuSr2Eu1.5Ce0.5Cu2O10-δ", "arity": 5, "intermediate_candidates_tried": 267, "two_step_recovered": false, "one_step_recovered": false},
@@ -288,6 +288,7 @@
     {"doi": "10.1016/j.materresbull.2013.05.082", "target_formula": "Ba0.75Bi0.25Co1.35Ti1.1Fe9.55O19", "arity": 5, "intermediate_candidates_tried": 267, "two_step_recovered": false, "one_step_recovered": false},
     {"doi": "10.1016/j.materresbull.2013.05.109", "target_formula": "Ba3Sr4(BO3)3F5", "arity": 5, "intermediate_candidates_tried": 276, "two_step_recovered": true, "one_step_recovered": true},
     {"doi": "10.1016/j.materresbull.2013.11.049", "target_formula": "KCaY(PO4)2", "arity": 5, "intermediate_candidates_tried": 257, "two_step_recovered": false, "one_step_recovered": false},
+    {"doi": "10.1016/j.materresbull.2014.01.009", "target_formula": "Na0.5Bi0.5Cu3Ti4O12", "arity": 6, "intermediate_candidates_tried": 261, "two_step_recovered": true, "one_step_recovered": true},
     {"doi": "10.1016/j.materresbull.2014.07.043", "target_formula": "Li4SrCa(SiO4)2", "arity": 5, "intermediate_candidates_tried": 266, "two_step_recovered": true, "one_step_recovered": true},
     {"doi": "10.1016/j.materresbull.2014.08.037", "target_formula": "NaCa3Bi0.95Eu0.05(PO4)3F", "arity": 5, "intermediate_candidates_tried": 281, "two_step_recovered": false, "one_step_recovered": false},
     {"doi": "10.1016/j.materresbull.2014.08.037", "target_formula": "NaCa3La0.95Eu0.05(PO4)3F", "arity": 5, "intermediate_candidates_tried": 280, "two_step_recovered": false, "one_step_recovered": false},

@@ -4,6 +4,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `search_precursor_sets` no longer accepts a spurious "identity"
+  reaction (a candidate whose composition exactly equals a
+  `curated_byproducts()` entry, e.g. elemental O2, balancing trivially
+  against itself) when the target's own solved coefficient happens to
+  be zero and gets dropped by `balance()` -- `evaluate_complete_state`
+  now rejects a `balance()` result that doesn't actually include the
+  target among its (positive-coefficient) products, discovered via
+  real-corpus testing in Phase 31 PR 2 (`docs/phase31_pr2_two_step_arity_recall.md`).
+- `search_two_step_routes` no longer aborts an entire call's route
+  construction when one accepted candidate set fails `SynthesisRoute`'s
+  own validation (a downstream symptom of the same defect above) --
+  that one malformed entry is now skipped instead of discarding every
+  other legitimate route found in the same call.
+
 ## [0.6.0] - 2026-08-23
 
 Commercial workflow surface, plus the first surfacing of past lab
