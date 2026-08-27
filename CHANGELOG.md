@@ -4,6 +4,70 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-27
+
+Validated two-step synthesis-route primitives, route connectivity
+validation, and real-corpus-driven search correctness fixes -- **not**
+a claim that multi-step synthesis accuracy has improved in general,
+that the new experimental grammar feature improves recall, that gugen
+predicts actual reaction mechanisms, or that any route here is
+experimentally validated. Purely additive: `cargo semver-checks
+check-release --baseline-version 0.6.0 --all-features` and an
+independent manual public-export diff both confirm zero removed or
+changed items, so this is a minor version bump under this crate's
+pre-1.0 SemVer convention (new public API, no breakage).
+`report::SCHEMA_VERSION` stays at `3` -- `SynthesisPlanningReport`'s
+serialized schema did not change.
+
+### Added
+
+- `SynthesisRoute`/`RouteError`/`search_two_step_routes` (Phase 31 PR
+  1/2, new unconditional module `src/multi_step.rs`): chains two
+  `search_precursor_sets` calls into a stoichiometrically connected
+  route (precursors → intermediate → target) for targets a one-step
+  search can't reach within budget. `SynthesisRoute::new` is a smart
+  constructor validating non-empty stages, the final stage's products
+  containing the target, and every reactant of every stage being
+  explained by a base precursor or an earlier stage's product --
+  element conservation within each stage is already `BalancedReaction`'s
+  own guarantee. `intermediate_candidates` is always caller-supplied,
+  never computed or fetched by gugen itself (matching
+  `FrequencyPriorGenerator`'s own convention); depth is fixed at
+  exactly 1 or 2, with no depth-3+ variant; duplicate
+  `intermediate_candidates` entries are not deduplicated by this
+  function (each produces its own route -- a documented limitation,
+  not a bug); output is deterministic across repeated calls with
+  identical input. Not wired into `Planner`/`SynthesisPlan`. First
+  rustdoc code example (`# Examples`) in this crate.
+- `CandidateGenerator` trait plus `CatalogExactGenerator`,
+  `FrequencyPriorGenerator`, `ThermodynamicStabilityGenerator`, and
+  `CandidateGeneratorEnsemble` (Phase 30 PR 1/2, new unconditional
+  module `src/candidate_generator.rs`): pluggable precursor-candidate
+  proposal, each implementing `PrecursorCatalog` so any of them (or an
+  ensemble of them) is a drop-in `Planner::builder` catalog argument --
+  confirmed by a dedicated integration test, not just that it compiles.
+  See "Validation notes" below for what the ensemble did and didn't
+  demonstrate.
+- `search_diagnostics` feature (default off, Phase 30.5, zero new
+  dependencies): `search_precursor_sets_diagnostic`,
+  `SearchDiagnosticTrace`, `TieBreakPolicy` -- a pluggable-tie-break
+  variant of the real search frontier plus a targeted trace type, for
+  benchmark/audit tooling only. `search_precursor_sets` itself is
+  completely unaffected regardless of this feature.
+- `experimental_grammar` feature (**default off**, Phase 31 PR 3, new
+  module `src/transformation_grammar.rs`): `TransformationGrammar`
+  trait plus 4 narrow, ratio-based decomposition grammars
+  (`CarbonateToOxideGrammar`, `HydroxideToOxideGrammar`,
+  `NitrateToOxideGrammar`, `AcidCarbonatePhosphateGrammar`) that propose
+  candidate intermediate compositions for `search_two_step_routes` --
+  never asserting a reaction is real; every proposal still has to
+  survive `balance()` before it counts as a route. **Explicitly
+  experimental, not stable API**: names, signatures, and the set of
+  shipped grammars may change in any `0.x` release without a major
+  version bump. Not wired into `Planner`. See "Validation notes" below
+  for the measured result that motivated keeping this behind a
+  default-off feature instead of shipping it unconditionally.
+
 ### Fixed
 
 - `search_precursor_sets` no longer accepts a spurious "identity"
@@ -19,6 +83,58 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   own validation (a downstream symptom of the same defect above) --
   that one malformed entry is now skipped instead of discarding every
   other legitimate route found in the same call.
+- **`cargo test --all-features` against the actual published package
+  (not just this repo's working tree) has silently failed to compile
+  since Phase 20B first excluded `benchmarks/data/*.json(l)` from the
+  package** (pre-dating v0.4.0) -- 4 examples and 2 tests
+  `include_str!` a corpus file that exclusion deliberately keeps out of
+  the tarball. Discovered by actually building and testing the unpacked
+  package for this release, not assumed. Fixed by excluding those 6
+  benchmark/exploration-only files (never meant as library usage
+  examples, unlike `examples/balance_batio3.rs`) from the package too --
+  `cargo` already skips a declared example/test target gracefully with
+  a warning when its path isn't in the package, so no `[[example]]`/
+  `[[test]]` manifest entries needed to change. Verified: `cargo test
+  --all-features` and `cargo doc --all-features --no-deps` both now
+  pass against the unpacked `cargo package` output.
+
+### Validation notes
+
+Research/measurement findings, not accuracy claims about the library in
+general -- kept separate from "Added" so a feature bullet never reads
+as a bigger claim than what was actually measured.
+
+- `search_two_step_routes`, measured against a real 408-row literature
+  holdout using only a corpus-frequency-prior intermediate source (zero
+  hand-written chemistry rules): of the 294 targets confirmed genuinely
+  unreachable in one step, 12 net-new (4.08%) were recovered. Modest
+  but real; no formal pass/fail gate was declared for this number. Full
+  detail: `docs/phase31_pr2_two_step_arity_recall.md`.
+- The `experimental_grammar` feature's 4 grammars, measured on a
+  DOI-grouped dev/eval split of the same corpus: the grammar-only and
+  union-with-frequency-prior policies did not recover any independent
+  target beyond what the frequency prior alone already reaches --
+  union was numerically identical to frequency-only on both splits.
+  This is why the feature ships default-off rather than as stable,
+  unconditional API. Full detail:
+  `docs/phase31_pr3_transformation_grammar_audit.md`.
+- The thermodynamic-selectivity purity-prediction hypothesis (does the
+  more thermodynamically favorable of two precursor routes to the same
+  target more often correspond to the literature-reported phase-pure
+  one) was pre-registered and calibrated: 54 qualifying targets, 59.3%
+  directional accuracy, one-sided binomial p=0.110 -- **not**
+  statistically significant at the pre-registered threshold. No change
+  to `score_plan`, `RankingWeights`, or default ranking; this result
+  motivated no code in this release. Full detail:
+  `docs/phase21b_calibration_result.md`.
+- A corpus-integrity audit (Phase 32) classified every reaction record
+  in both corpora used above by whether it's in a form gugen's own
+  search/balance can actually use: of 1908 Kononova rows and 1692
+  thermodynamic-selectivity rows, only 54.1%/27.0% balance as-declared
+  or via a narrow, manually-audited CO2/H2O/O2 completion. This is
+  benchmark/audit infrastructure (`benchmarks/`), not a library
+  feature -- no `src/` change. Full detail:
+  `docs/phase32_reaction_record_qualification.md`.
 
 ## [0.6.0] - 2026-08-23
 

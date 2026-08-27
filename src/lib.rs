@@ -102,8 +102,26 @@
 //! `PlannerBuilder::prior_experiment_evidence_provider(...)`) -- same
 //! display-only discipline as the existing literature-evidence
 //! integration: never a success rate, never fed into `score`,
-//! `confidence`, or ranking. **v0.6.0 is published** (crates.io, tagged
-//! `v0.6.0`). See `CHANGELOG.md` for the user-facing summary.
+//! `confidence`, or ranking. v0.6.0 is published (crates.io, tagged
+//! `v0.6.0`).
+//!
+//! Phase 31 adds [`SynthesisRoute`]/[`search_two_step_routes`]:
+//! validated, stoichiometrically connected two-step (precursor →
+//! intermediate → target) routes for targets a one-step search can't
+//! reach within budget -- a primitive, not an accuracy claim;
+//! `intermediate_candidates` is always caller-supplied and `Planner`
+//! never invokes this automatically. The same phase's real-corpus
+//! testing found and fixed a spurious identity-reaction acceptance bug
+//! in `search_precursor_sets` (a candidate matching a
+//! `curated_byproducts()` composition exactly could be accepted as a
+//! no-op unrelated to the target). An optional, explicitly experimental
+//! `experimental_grammar` feature (default off) adds hand-written
+//! intermediate-candidate decomposition grammars
+//! (`transformation_grammar` module); measured against the same
+//! corpus, they did not recover any target beyond a plain
+//! corpus-frequency prior, so this is not yet promised-stable API.
+//! **v0.7.0 is pending publication** (crates.io). See `CHANGELOG.md`
+//! for the user-facing summary.
 
 #![forbid(unsafe_code)]
 
@@ -143,6 +161,7 @@ mod route_suitability;
 mod score;
 mod target;
 mod thermodynamics;
+#[cfg(feature = "experimental_grammar")]
 mod transformation_grammar;
 
 pub use balance::{balance, curated_byproducts};
@@ -241,6 +260,7 @@ pub use thermodynamics::{
     ThermodynamicSelectivityAssessment, balanced_reaction_delta_ev_per_atom,
     decomposition_margin_ev_per_atom, reduced_mass_amu, relative_solid_gibbs_ev_per_atom,
 };
+#[cfg(feature = "experimental_grammar")]
 pub use transformation_grammar::{
     AcidCarbonatePhosphateGrammar, CarbonateToOxideGrammar, DedupedProposal, GrammarEvidenceClass,
     GrammarId, HydroxideToOxideGrammar, NitrateToOxideGrammar, ProposedIntermediate,

@@ -14,20 +14,21 @@
 （evidence）・仮定（assumption）・未確定条件（unresolved）を明示したまま、
 機械可読な形で返します。実験の成功を保証するものではありません。
 
-> **ステータス：v0.6.0 公開済み**（商用ワークフローsurface +
-> 参照専用の過去実験エビデンス、破壊的変更あり。詳細はCHANGELOG.md参照）。
+> **ステータス：v0.7.0 公開準備中**（検証済みの2段階合成route primitive、
+> route接続性の検証、実コーパス駆動の検索正確性修正。詳細はCHANGELOG.md
+> 参照）。
 > [crates.io](https://crates.io/crates/gugen) /
-> [docs.rs](https://docs.rs/gugen) /
-> [v0.6.0リリース](https://github.com/kent-tokyo/gugen/releases/tag/v0.6.0)。
-> v0.6.0では、`gugen commercial-plan` CLIサブコマンド、実世界の
-> サプライヤーCSVヘッダに対応する列名マッピング、命名済みの商用調達
-> ランキング方針（`Balanced`/`CostFirst`/`LeadTimeFirst`/`PurityFirst`/
-> `MinimumUnresolvedData`/`Pareto`、Paretoフロンティアを含む）、実験室で
-> 実際に起きたことを記録する追記専用の`SynthesisExecutionRecord`、
-> planning時に参照専用として表示される過去実験エビデンスを追加しました
-> ——いずれもplanの`score`・`confidence`・ランキング順位を変更しません。
-> 破壊的変更の全リストと移行手順は
-> [`CHANGELOG.md`](CHANGELOG.md)を参照してください。
+> [docs.rs](https://docs.rs/gugen)。
+> v0.7.0では`search_two_step_routes`/`SynthesisRoute`
+> （前駆体→中間体→目標という化学量論的に連結したroute）を追加し、実
+> コーパステストで発見された`search_precursor_sets`の偽陽性
+> identity-reaction受理バグを修正し、手書きの中間体候補grammarのための
+> 任意・明示的にexperimentalな`experimental_grammar`feature（デフォルト
+> 無効）を追加しました。**これは多段階合成の精度が全般的に向上した
+> という主張ではありません**。grammar featureがrecallを改善するという
+> 主張でもなく（実測では、単純なfrequency priorを上回りませんでした）、
+> いずれかのrouteが実験的に検証済みだという主張でもありません。詳細と
+> 誠実な限界については[`CHANGELOG.md`](CHANGELOG.md)を参照してください。
 
 ## ブラウザで試す
 
@@ -86,6 +87,37 @@ let reactions = balance(&[bao, tio2], &[batio3])?;
 された候補すべてに理由コードを付けて返します。採用候補だけを返すことはあり
 ません。具体例は [`src/precursor.rs`](src/precursor.rs) のテストを参照して
 ください。
+
+### 多段階合成route
+
+`search_two_step_routes` は `search_precursor_sets` を2回連結し、budget内
+では1段階で到達できない目標に対して、化学量論的に連結したroute（前駆体→
+中間体→目標）を組み立てます。これは精度向上の主張ではなく **primitive**
+です。`intermediate_candidates` は常に呼び出し側が用意するもので（gugen
+自身が提案・取得することはありません）、各routeは接続性のみを検証します
+（各stageの反応物は、ベース前駆体または前のstageの生成物のいずれかで
+説明できる）——実際の合成手順と一致するかどうかは検証しません。また
+`Planner` がこれを自動的に呼び出すこともありません。実際の408行の文献
+holdoutで測定したところ、1段階では到達不可能と確認された294件の目標
+のうち、12件（4.08%）を新たに回収しました。詳細な方法論と誠実な限界
+については
+[`docs/phase31_pr2_two_step_arity_recall.md`](docs/phase31_pr2_two_step_arity_recall.md)
+を参照してください。実行可能なソース全体は`search_two_step_routes`自身の
+[rustdoc例](https://docs.rs/gugen/latest/gugen/fn.search_two_step_routes.html)
+にあります。
+
+任意・デフォルト無効の`experimental_grammar`featureは、化学量論のみから
+中間体候補組成を提案する少数の手書き分解grammar
+（`src/transformation_grammar.rs`、例：`MCO3 -> MO + CO2`）を追加します。
+これは明示的にexperimentalです。同じholdoutで測定したところ、単純な
+コーパスfrequency priorがすでに到達している範囲を超えて目標を回収する
+ことはありませんでした（詳細は
+[`docs/phase31_pr3_transformation_grammar_audit.md`](docs/phase31_pr3_transformation_grammar_audit.md)
+を参照）。APIは`0.x`のどのリリースでも変更される可能性があり、
+`Planner`には接続されていません。
+
+gugen Playgroundは現在、多段階routeを可視化しません——単一段階のplanのみ
+表示します。
 
 ### 固相合成プロセステンプレート
 

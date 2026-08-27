@@ -1,3 +1,17 @@
+//! **Experimental, feature-gated (`experimental_grammar`, default off).**
+//! Not part of gugen's stable public API: names, signatures, and the set
+//! of shipped grammars may change in any 0.x release without a major
+//! version bump, per this crate's pre-1.0 SemVer convention. Measured
+//! against a real, DOI-grouped dev/eval split
+//! (`docs/phase31_pr3_transformation_grammar_audit.md`): the grammar-only
+//! and union-with-frequency-prior policies did not recover any
+//! independent multi-step target beyond what frequency-prior candidates
+//! (`FrequencyPriorGenerator`, stable) already reach -- union was
+//! numerically identical to frequency-only on both splits. Not wired
+//! into `Planner`. Kept because the module is self-contained and fully
+//! tested, as a candidate-proposal primitive future work can build on --
+//! not because it currently improves multi-step recall.
+//!
 //! Phase 31 PR 3: a small, conservative set of hand-written decomposition
 //! grammars that propose intermediate candidate compositions for
 //! `search_two_step_routes` (`src/multi_step.rs`), as an alternative

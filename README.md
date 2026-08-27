@@ -15,20 +15,22 @@ solid-state process plans — each with its evidence, assumptions, and
 unresolved conditions kept explicit and machine-readable. It does not
 predict experimental success.
 
-> **Status: v0.6.0 published** (commercial workflow surface +
-> reference-only prior-experiment evidence, breaking change -- see
-> CHANGELOG.md).
+> **Status: v0.7.0 pending publication** (validated two-step
+> synthesis-route primitives, route connectivity validation, and
+> real-corpus-driven search correctness fixes -- see CHANGELOG.md).
 > [crates.io](https://crates.io/crates/gugen) /
-> [docs.rs](https://docs.rs/gugen) / [v0.6.0 release](https://github.com/kent-tokyo/gugen/releases/tag/v0.6.0).
-> v0.6.0 adds a `gugen commercial-plan` CLI subcommand, declarative CSV
-> column-name mapping for real-world supplier catalogs, named commercial
-> ranking policies (`Balanced`/`CostFirst`/`LeadTimeFirst`/`PurityFirst`/
-> `MinimumUnresolvedData`/`Pareto`, including a Pareto frontier), an
-> append-only `SynthesisExecutionRecord` for real lab outcomes, and
-> reference-only prior-experiment evidence surfaced during planning --
-> none of it changes a plan's `score`, `confidence`, or ranking order.
-> See [`CHANGELOG.md`](CHANGELOG.md) for the full breaking-change list
-> and migration notes.
+> [docs.rs](https://docs.rs/gugen).
+> v0.7.0 adds `search_two_step_routes`/`SynthesisRoute` (stoichiometrically
+> connected precursor → intermediate → target routes), fixes a spurious
+> identity-reaction acceptance bug in `search_precursor_sets` found via
+> real-corpus testing, and adds an optional, explicitly experimental
+> `experimental_grammar` feature (default off) for hand-written
+> intermediate-candidate grammars. **This is not a claim that multi-step
+> synthesis accuracy has improved in general**, that the grammar feature
+> improves recall (measured: it doesn't, beyond a plain frequency prior),
+> or that any route is experimentally validated -- see
+> [`CHANGELOG.md`](CHANGELOG.md) for the full detail and honest
+> limitations.
 
 ## Try it in your browser
 
@@ -89,6 +91,71 @@ a precursor catalog, returning both accepted precursor sets (each with
 its balanced reaction) and every rejected candidate with a reason code —
 never just the winners. See [`src/precursor.rs`](src/precursor.rs)'s
 tests for worked examples.
+
+### Multi-step synthesis routes
+
+`search_two_step_routes` chains two `search_precursor_sets` calls into a
+stoichiometrically connected route (precursors → intermediate → target)
+for targets a single step can't reach within budget. It is a
+**primitive**, not an accuracy improvement: `intermediate_candidates` is
+always caller-supplied (gugen never proposes or fetches them itself),
+every route is validated for connectivity only (each stage's reactants
+are explained by a base precursor or an earlier stage's product) — not
+for whether it matches any real synthesis procedure — and `Planner`
+never calls this automatically. Measured against a real 408-row
+literature holdout, of the 294 targets confirmed genuinely unreachable
+in one step this recovered 12 net-new (4.08%); see
+[`docs/phase31_pr2_two_step_arity_recall.md`](docs/phase31_pr2_two_step_arity_recall.md)
+for the full methodology and honest limitations. The full runnable
+source is in `search_two_step_routes`'s own
+[rustdoc example](https://docs.rs/gugen/latest/gugen/fn.search_two_step_routes.html).
+
+```rust
+use gugen::{
+    Composition, Element, PlanningConstraints, PrecursorCandidate, PrecursorId, SearchBudget,
+    search_two_step_routes,
+};
+
+// Target needs 5 elements at once -- more than a tight one-step budget
+// (max_precursors_per_plan = 4) allows, so it's only reachable by first
+// combining three of them into an intermediate.
+let target = Composition::new([
+    (Element::new("Fe")?, 1.0), (Element::new("Li")?, 1.0),
+    (Element::new("Na")?, 1.0), (Element::new("K")?, 1.0),
+    (Element::new("O")?, 1.0),
+])?;
+let base = vec![
+    PrecursorCandidate { id: PrecursorId("Fe".into()), composition: Composition::new([(Element::new("Fe")?, 1.0)])?, availability: None },
+    PrecursorCandidate { id: PrecursorId("Li".into()), composition: Composition::new([(Element::new("Li")?, 1.0)])?, availability: None },
+    PrecursorCandidate { id: PrecursorId("Na".into()), composition: Composition::new([(Element::new("Na")?, 1.0)])?, availability: None },
+    PrecursorCandidate { id: PrecursorId("K".into()), composition: Composition::new([(Element::new("K")?, 1.0)])?, availability: None },
+    PrecursorCandidate { id: PrecursorId("O2".into()), composition: Composition::new([(Element::new("O")?, 2.0)])?, availability: None },
+];
+let intermediate = Composition::new([
+    (Element::new("Fe")?, 1.0), (Element::new("Li")?, 1.0), (Element::new("Na")?, 1.0),
+])?;
+let budget = SearchBudget { max_precursor_sets: 10_000, max_precursors_per_plan: 4, max_plans_returned: 20 };
+
+let routes = search_two_step_routes(
+    &target, &base, &[intermediate], &PlanningConstraints::default(), &budget,
+)?;
+// routes[0].stages() has exactly 2 stages; the last stage's products
+// include `target`.
+```
+
+An optional, separate `experimental_grammar` feature (default off) adds
+a small set of hand-written decomposition grammars
+(`src/transformation_grammar.rs`) that propose candidate intermediate
+compositions from stoichiometry alone (e.g. `MCO3 -> MO + CO2`). It is
+explicitly experimental: measured against the same holdout, it did not
+recover any target beyond what a plain corpus-frequency prior already
+reaches (see
+[`docs/phase31_pr3_transformation_grammar_audit.md`](docs/phase31_pr3_transformation_grammar_audit.md)),
+its API may change in any `0.x` release, and it is not wired into
+`Planner`.
+
+The gugen Playground does not currently visualize multi-step routes —
+only single-step plans.
 
 ### Solid-state process templates
 

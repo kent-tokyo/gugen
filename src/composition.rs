@@ -135,6 +135,7 @@ impl Composition {
     /// amounts without an `f64` rounding step -- `amount_of`'s `to_f64()`
     /// is fine for reporting but not for deciding whether a stoichiometric
     /// ratio predicate (e.g. "O:C exactly 3:1") holds exactly.
+    #[cfg(feature = "experimental_grammar")]
     pub(crate) fn amount_of_frac(&self, element: Element) -> Option<Frac> {
         self.amounts.get(&element).copied()
     }
