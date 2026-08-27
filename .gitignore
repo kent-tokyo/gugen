@@ -55,3 +55,4 @@ CLAUDE.md
 /playground/wasm/target
 /playground/web/pkg
 /playground/web/node_modules
+internal_docs/

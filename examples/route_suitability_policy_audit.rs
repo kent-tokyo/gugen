@@ -146,6 +146,10 @@ fn known_polymorphic_compositions() -> Vec<(&'static str, Composition)> {
             "ZnS (wurtzite / zinc blende)",
             composition(&[("Zn", 1.0), ("S", 1.0)]),
         ),
+        (
+            "Al(OH)3 (gibbsite / bayerite / nordstrandite)",
+            composition(&[("Al", 1.0), ("O", 3.0), ("H", 3.0)]),
+        ),
     ]
 }
 
@@ -283,6 +287,8 @@ fn main() {
 
     let ba_ti_o3 = composition(&[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)]);
     let mg_oh2 = composition(&[("Mg", 1.0), ("O", 2.0), ("H", 2.0)]);
+    let ca_oh2 = composition(&[("Ca", 1.0), ("O", 2.0), ("H", 2.0)]);
+    let ga_fe_o3 = composition(&[("Ga", 1.0), ("Fe", 1.0), ("O", 3.0)]);
     let dev_batio3 = derive_recommendation(&RouteSuitabilityAssessment {
         route_family: RouteFamily::Mechanochemical,
         findings: provider
@@ -293,6 +299,18 @@ fn main() {
         route_family: RouteFamily::ConventionalSolidState,
         findings: provider
             .assess(&mg_oh2, RouteFamily::ConventionalSolidState)
+            .unwrap(),
+    });
+    let dev_caoh2 = derive_recommendation(&RouteSuitabilityAssessment {
+        route_family: RouteFamily::ConventionalSolidState,
+        findings: provider
+            .assess(&ca_oh2, RouteFamily::ConventionalSolidState)
+            .unwrap(),
+    });
+    let dev_gafeo3 = derive_recommendation(&RouteSuitabilityAssessment {
+        route_family: RouteFamily::Mechanochemical,
+        findings: provider
+            .assess(&ga_fe_o3, RouteFamily::Mechanochemical)
             .unwrap(),
     });
 
@@ -332,8 +350,10 @@ fn main() {
     out.push_str(&format!(
         "- **Evidence coverage against the currently shipped provider:** \
         {covered_by_shipped_provider}/{} corpus targets get at least one finding from \
-        `InMemoryRouteSuitabilityProvider::from_curated_records()` (2 curated records total, \
-        Phase 15A). Expected near-zero and measured, not assumed -- `fetch_kononova.py`'s own \
+        `InMemoryRouteSuitabilityProvider::from_curated_records()` (4 curated records total: \
+        2 from Phase 15A, 2 more added since -- see `route_suitability.rs`'s own \
+        `curated_records()` doc comment). Expected near-zero and measured, not assumed -- \
+        `fetch_kononova.py`'s own \
         leakage filter already excludes exact route matches to gugen's curated fixtures.\n",
         targets.len()
     ));
@@ -341,8 +361,9 @@ fn main() {
         "- **Polymorph-ambiguity floor:** {polymorph_floor}/{} corpus targets exactly match one \
         of {} explicitly hand-listed, well-established polymorphic compositions (textbook \
         crystallography, not individually DOI-cited): {polymorph_hits:?}. Measured as zero, and \
-        this measurement is itself a finding, not an absence of one: none of these seven \
-        binary-oxide/carbonate systems appears as a `target_formula` in this sample, while they \
+        this measurement is itself a finding, not an absence of one: none of these eight \
+        binary-oxide/carbonate/hydroxide systems appears as a `target_formula` in this sample, \
+        while they \
         appear heavily as *precursor* formulas ({fe2o3_precursor_hits} rows list Fe2O3 among \
         precursors, {tio2_precursor_hits} list TiO2) -- consistent with `fetch_kononova.py`'s \
         source corpus treating common binary oxides mostly as starting materials rather than \
@@ -360,15 +381,19 @@ fn main() {
         "**Two real categories, not three.** `derive_recommendation`'s decision matrix \
         (Phase 15B) was designed from stated principles and never fit against real data -- \
         there is no genuine \"threshold-reference\" set in gugen's actual history, so this \
-        report does not invent one. **dev** = the 2 existing `curated_records()` entries \
-        (already informed the original design, not blind). **holdout** = the record gathered \
+        report does not invent one. **dev** = the 4 existing `curated_records()` entries \
+        (already informed the original design, not blind -- the 2 added after Phase 15B did \
+        not change `derive_recommendation` itself, only exercised it against new real cases). \
+        **holdout** = the record gathered \
         fresh this phase (see module doc), never referenced during Phase 15A/15B's design, \
         evaluated once. `derive_recommendation` is not adjusted based on what follows, \
         regardless of outcome.\n\n",
     );
     out.push_str(&format!(
         "- **dev sanity check (already-known behavior, not a discovery):** BaTiO3 + \
-        Mechanochemical -> {dev_batio3:?}; Mg(OH)2 + ConventionalSolidState -> {dev_mgoh2:?}.\n"
+        Mechanochemical -> {dev_batio3:?}; Mg(OH)2 + ConventionalSolidState -> {dev_mgoh2:?}; \
+        Ca(OH)2 + ConventionalSolidState -> {dev_caoh2:?}; GaFeO3 + Mechanochemical -> \
+        {dev_gafeo3:?}.\n"
     ));
     assert_eq!(
         holdout_recommendation,
@@ -432,9 +457,13 @@ fn main() {
         real finding: the largest literature corpus already available to this repo cannot \
         support route-suitability evaluation without per-paper reading, genuinely comparative \
         or negative route evidence is rare even under a real, honest search effort, and the \
-        current decision policy therefore abstains on almost everything outside its 2 \
-        hand-verified curated records plus this phase's 1 hand-verified holdout record. What \
-        gugen needs next is a larger hand-verified negative-evidence corpus, not a change to \
+        current decision policy therefore abstains on almost everything outside its 4 \
+        hand-verified curated records plus this phase's 1 hand-verified holdout record. \
+        **Update (2026-08-28):** 2 more curated records (Ca(OH)2/ConventionalSolidState, \
+        GaFeO3/Mechanochemical, both `Contradicts`) were added since this phase's own \
+        completion -- the first real expansion of this set, and the first `Contradicts` \
+        finding for `Mechanochemical` specifically. Still small; gugen still needs a \
+        substantially larger hand-verified negative-evidence corpus, not a change to \
         `derive_recommendation`.\n",
     );
 

@@ -134,10 +134,10 @@ pub struct CuratedSuitabilityRecord {
 }
 
 /// `RouteSuitabilityProvider` backed by a small, hand-verified set of real,
-/// cited findings (Phase 15A). Deliberately minimal: this phase builds the
-/// evidence *vessel*, not a comprehensive suitability database -- see this
-/// module's `curated_records()` doc comment for what the two seed records
-/// prove and what's intentionally deferred.
+/// cited findings (Phase 15A, expanded once since). Deliberately minimal:
+/// this is still not a comprehensive suitability database -- see this
+/// module's `curated_records()` doc comment for what each record proves and
+/// what's intentionally deferred.
 pub struct InMemoryRouteSuitabilityProvider {
     records: Vec<CuratedSuitabilityRecord>,
 }
@@ -179,14 +179,25 @@ fn composition(pairs: &[(&str, f64)]) -> Composition {
         .expect("curated record uses a valid, finite composition")
 }
 
-/// Two hand-verified seed records (AGENTS.md §21.3: fetched/read live this
-/// phase, not recalled from training data), chosen to prove the
-/// `Supports`/`Contradicts` distinction works end to end -- not a
+/// Four hand-verified records (AGENTS.md §21.3: fetched/read live this
+/// phase, not recalled from training data). The first two were chosen to
+/// prove the `Supports`/`Contradicts` distinction works end to end -- not a
 /// comprehensive suitability database. Phase 15B added `derive_recommendation`
 /// (the logic that actually acts on these findings) but deliberately did
 /// **not** expand this curated set -- the Mg(OH)2 record below is already
 /// `ExactTarget`/`Moderate`, strong enough to exercise `NotRecommended`
 /// end to end, which was enough to prove the filtering wiring honestly.
+///
+/// The two records after that (Ca(OH)2, GaFeO3) are the first real expansion
+/// of this set since Phase 15A/15B -- an open item this module's own doc
+/// comment carried forward unaddressed from v0.4.0 onward. Both are
+/// `Contradicts` findings, since Phase 17's own corpus audit
+/// (`docs/route_suitability_corpus_audit.md`) found negative-filtering
+/// evidence is the genuinely scarce kind, not `Supports`. The GaFeO3 record
+/// is also this set's first `Contradicts` finding for `Mechanochemical`
+/// specifically -- previously that route family only had the one BaTiO3
+/// `Supports` record above.
+///
 /// A broader curated database covering more negative-filtering cases
 /// (volatile precursor + long high-temperature firing, air-sensitive
 /// target + atmospheric processing, etc.) is left to future work.
@@ -224,6 +235,51 @@ fn composition(pairs: &[(&str, f64)]) -> Composition {
 /// hematite-via-conventional-solid-state case too. Mg(OH)2 has no such
 /// ambiguity: it is a genuinely different `Composition` from MgO (1:2:2
 /// vs. 1:1), not a same-formula polymorph.
+///
+/// **Contradicts (ConventionalSolidState)**: Vallejo Castaño, Callagon La
+/// Plante, Shimoda, Wang, Neithalath, Sant, Pilon, "Calcination-free
+/// production of calcium hydroxide at sub-boiling temperatures," RSC
+/// Advances 11(3), 1762-1772 (2021), DOI 10.1039/D0RA08449B, open access
+/// (RSC Advances is open-access by default; full text read directly,
+/// title/authors/venue/year confirmed via CrossRef). This paper's own TGA
+/// of its precipitated product states "66 mass% of the analyzed
+/// precipitates corresponding to Ca(OH)2 started to decompose at 400 C,"
+/// consistent with the same paper's own literature citation that Ca(OH)2's
+/// "characteristic thermal decomposition" occurs "at temperatures in
+/// excess of ~400 C." Cross-referenced (not re-cited fresh) against
+/// gugen's own already-curated CaO/MgAl2O4/LaAlO3 records in
+/// `literature_conditions.rs`, which cite 900-1725 C for conventional
+/// solid-state synthesis of comparable oxide-family ceramics -- 500-1300 C
+/// above where Ca(OH)2 has already fully decomposed, so a conventional
+/// high-temperature firing route, as actually practiced, cannot reach
+/// Ca(OH)2 as a target phase at all -- the same failure mode as the Mg(OH)2
+/// record above, for a chemically analogous but distinct target. Checked
+/// directly: portlandite (Ca(OH)2's only common form) has no documented
+/// competing polymorph the way Fe2O3/Al(OH)3 do (see the regression test
+/// below), so no polymorph-ambiguity risk here.
+///
+/// **Contradicts (Mechanochemical)**: Diamandescu, Tolea, Feder, Vasiliu,
+/// Mercioniu, Enculescu, Popescu, Popescu, "Multifunctional GaFeO3 Obtained
+/// via Mechanochemical Activation Followed by Calcination of Equimolar
+/// Nano-System Ga2O3-Fe2O3," Nanomaterials 11(1), 57 (2020), DOI
+/// 10.3390/nano11010057, open access (CC BY; full text read directly,
+/// title/authors/venue/year confirmed via CrossRef). Starting from
+/// equimolar beta-Ga2O3 + alpha-Fe2O3, states that "after 12 h of
+/// [high-energy ball milling], only nanoscaled (~20 nm) gallium-doped
+/// alpha-Fe2O3 was obtained" -- not GaFeO3 at all -- and that "the GaFeO3
+/// structure was obtained as single phase, merely after calcination at
+/// 950 C for a couple of hours" following that same 12 h of milling.
+/// Mechanochemical processing alone does not reach GaFeO3 as a target
+/// phase; a subsequent conventional-firing-style calcination step is what
+/// actually produces it. This is this curated set's first `Contradicts`
+/// finding for `Mechanochemical` (previously only the BaTiO3 `Supports`
+/// record above existed for this route family). The starting alpha-Fe2O3
+/// precursor's own hematite/maghemite polymorph ambiguity does not apply
+/// here -- suitability findings are precursor-set independent by design,
+/// and the ambiguity would only matter if a curated record's own *target*
+/// were bare Fe2O3, which this one isn't. Checked directly: this paper
+/// reports GaFeO3 crystallizing in one orthorhombic structure (space group
+/// Pna21) with no alternative polymorph discussed.
 fn curated_records() -> Vec<CuratedSuitabilityRecord> {
     vec![
         CuratedSuitabilityRecord {
@@ -286,6 +342,84 @@ fn curated_records() -> Vec<CuratedSuitabilityRecord> {
                 ],
             }],
         },
+        CuratedSuitabilityRecord {
+            target: composition(&[("Ca", 1.0), ("O", 2.0), ("H", 2.0)]),
+            route_family: RouteFamily::ConventionalSolidState,
+            findings: vec![SuitabilityFinding {
+                verdict: SuitabilityVerdict::Contradicts,
+                statement: "Ca(OH)2 (portlandite) begins thermal decomposition to CaO at \
+                    temperatures in excess of ~400 C (this paper's own TGA measurement of its \
+                    precipitated product: \"66 mass% of the analyzed precipitates \
+                    corresponding to Ca(OH)2 started to decompose at 400 C\"). Real-world \
+                    conventional solid-state synthesis of comparable oxide-family ceramics is \
+                    reported in the literature at much higher temperatures -- 900 C for CaO \
+                    (gugen's own already-curated record), 1500-1725 C for LaAlO3/MgAl2O4 -- so \
+                    a conventional high-temperature firing route, as actually practiced, \
+                    cannot reach Ca(OH)2 as a target phase at all: the target decomposes long \
+                    before reaching temperatures that route family typically requires. This is \
+                    a claim about real-world conventional solid-state synthesis, not about \
+                    gugen's own ConventionalSolidState template specifically -- that template \
+                    leaves Heat step temperature unresolved (None) unless a process-evidence \
+                    provider fills it, so it carries no temperature of its own to contradict"
+                    .to_string(),
+                source_id: Some("10.1039/D0RA08449B".to_string()),
+                strength: EvidenceStrength::Moderate,
+                applicable_to: EvidenceScope::ExactTarget,
+                limitations: vec![
+                    "the 900-1725 C comparison points are gugen's own already-curated \
+                        records (literature_conditions.rs) for different targets (CaO, \
+                        MgAl2O4, LaAlO3), not a fresh source measuring Ca(OH)2 and a \
+                        conventional solid-state route side by side in one paper"
+                        .to_string(),
+                    "this paper's own focus is a novel low-temperature aqueous \
+                        precipitation route for Ca(OH)2, not conventional solid-state \
+                        synthesis -- the 400 C decomposition figure is this paper's own \
+                        measurement of its own product, not a study of solid-state firing \
+                        specifically, though the physical fact (decomposition temperature) \
+                        does not depend on which route produced the sample being measured"
+                        .to_string(),
+                    "does not itself state that low-temperature routes (precipitation, as \
+                        this paper demonstrates) work for Ca(OH)2 in general -- only that \
+                        high-temperature firing cannot reach it; the positive claim beyond \
+                        this paper's own specific process is not sourced here"
+                        .to_string(),
+                ],
+            }],
+        },
+        CuratedSuitabilityRecord {
+            target: composition(&[("Ga", 1.0), ("Fe", 1.0), ("O", 3.0)]),
+            route_family: RouteFamily::Mechanochemical,
+            findings: vec![SuitabilityFinding {
+                verdict: SuitabilityVerdict::Contradicts,
+                statement: "Mechanochemical (ball-milling-only) processing does not produce \
+                    single-phase GaFeO3. Starting from equimolar beta-Ga2O3 + alpha-Fe2O3, \
+                    this paper reports that \"after 12 h of [high-energy ball milling], only \
+                    nanoscaled (~20 nm) gallium-doped alpha-Fe2O3 was obtained\" -- not GaFeO3 \
+                    at all -- and that \"the GaFeO3 structure was obtained as single phase, \
+                    merely after calcination at 950 C for a couple of hours\" following that \
+                    same 12 h of milling. A subsequent conventional-firing-style calcination \
+                    step, not the mechanochemical processing itself, is what actually produces \
+                    the target phase"
+                    .to_string(),
+                source_id: Some("10.3390/nano11010057".to_string()),
+                strength: EvidenceStrength::Moderate,
+                applicable_to: EvidenceScope::ExactTarget,
+                limitations: vec![
+                    "single source, one specific milling protocol (12 h high-energy ball \
+                        milling, one particular mill/media combination) -- does not establish \
+                        that no milling protocol could ever reach GaFeO3 directly, only that \
+                        this one, real, published attempt didn't"
+                        .to_string(),
+                    "the required 950 C calcination step is itself a conventional-firing-style \
+                        process, so this finding is really \"mechanochemical activation plus \
+                        firing reaches the target, mechanochemical activation alone does not\" \
+                        -- consistent with gugen's own RouteFamily::Mechanochemical doc comment \
+                        scoping this route family to the structural (ball-milling) route only, \
+                        not a milling-plus-firing combination"
+                        .to_string(),
+                ],
+            }],
+        },
     ]
 }
 
@@ -312,24 +446,68 @@ mod tests {
     }
 
     /// The maghemite (gamma-Fe2O3) vs. hematite (alpha-Fe2O3) lesson from
-    /// this module's own doc comment, made into a permanent, checkable
-    /// regression guard rather than just prose: bare Fe2O3 is a known,
-    /// documented trap where two real polymorphs share one `Composition`
-    /// gugen cannot distinguish, so a Contradicts finding keyed on it alone
-    /// would be misapplied to whichever polymorph the finding doesn't
-    /// actually describe. This is a single documented case, not a general
-    /// phase-safety checker -- real phase-awareness needs structural data
-    /// (Phase 16, `chematic-crystal`), not just a denylist here.
+    /// this module's own doc comment, generalized to every known trap found
+    /// so far (Al(OH)3/gibbsite-bayerite-nordstrandite was found the same
+    /// way while sourcing this module's Ca(OH)2/GaFeO3 records -- almost
+    /// used as a target before checking, since gibbsite's own decomposition
+    /// paper would otherwise have looked like a clean case) -- made into a
+    /// permanent, checkable regression guard rather than just prose: each
+    /// composition below is a known, documented trap where two or more real
+    /// polymorphs share one `Composition` gugen cannot distinguish, so a
+    /// `Contradicts`/`Supports` finding keyed on it alone would be
+    /// misapplied to whichever polymorph the finding doesn't actually
+    /// describe. Deliberately mirrors (not imports -- an example can't be a
+    /// dependency of `src/`) `examples/route_suitability_policy_audit.rs`'s
+    /// own `known_polymorphic_compositions()`; keep both lists in sync by
+    /// hand if either grows. This is a small hand-listed denylist, not a
+    /// general phase-safety checker -- real phase-awareness needs
+    /// structural data (Phase 16, `chematic-crystal`), not just a denylist
+    /// here.
     #[test]
-    fn no_curated_record_targets_bare_fe2o3_the_documented_polymorph_trap() {
-        let fe2o3 = composition(&[("Fe", 2.0), ("O", 3.0)]);
+    fn no_curated_record_targets_a_documented_polymorph_trap() {
+        let known_traps: Vec<(&str, Composition)> = vec![
+            (
+                "Fe2O3 (hematite alpha-Fe2O3 / maghemite gamma-Fe2O3)",
+                composition(&[("Fe", 2.0), ("O", 3.0)]),
+            ),
+            (
+                "TiO2 (rutile / anatase / brookite)",
+                composition(&[("Ti", 1.0), ("O", 2.0)]),
+            ),
+            (
+                "ZrO2 (monoclinic / tetragonal / cubic)",
+                composition(&[("Zr", 1.0), ("O", 2.0)]),
+            ),
+            (
+                "Al2O3 (alpha / gamma)",
+                composition(&[("Al", 2.0), ("O", 3.0)]),
+            ),
+            (
+                "SiO2 (quartz / cristobalite / tridymite)",
+                composition(&[("Si", 1.0), ("O", 2.0)]),
+            ),
+            (
+                "CaCO3 (calcite / aragonite)",
+                composition(&[("Ca", 1.0), ("C", 1.0), ("O", 3.0)]),
+            ),
+            (
+                "ZnS (wurtzite / zinc blende)",
+                composition(&[("Zn", 1.0), ("S", 1.0)]),
+            ),
+            (
+                "Al(OH)3 (gibbsite / bayerite / nordstrandite)",
+                composition(&[("Al", 1.0), ("O", 3.0), ("H", 3.0)]),
+            ),
+        ];
         for record in curated_records() {
-            assert_ne!(
-                record.target, fe2o3,
-                "bare Fe2O3 is ambiguous between maghemite and hematite -- see this \
-                module's doc comment for why a suitability finding must not be keyed \
-                on it alone"
-            );
+            for (name, trap) in &known_traps {
+                assert_ne!(
+                    &record.target, trap,
+                    "{name} is ambiguous between multiple real polymorphs gugen's \
+                    Composition type cannot distinguish -- see this module's doc \
+                    comment for why a suitability finding must not be keyed on it alone"
+                );
+            }
         }
     }
 
