@@ -86,18 +86,39 @@ host-formula labeling ambiguity (§2's own condition-2 finding, e.g. a
 `MnCO3` dopant precursor for a target field naming only the undoped
 host lattice) that is not a valid single reaction as stated at all.
 
-**This pre-registration does not try to distinguish (a) from (b) by
-inspection.** Instead: every row's reaction is attempted through
-gugen's own existing, already-tested `balance()` (`src/balance.rs`,
-unchanged), trying `[target]` plus every `curated_byproducts()` subset
-as the candidate product side (identical to
-`search_precursor_sets`'s own `evaluate_complete_state` pattern,
-including its PR 78 fix requiring `target` to actually survive in the
-returned products). A row that balances is chemically explicable via
-gugen's own curated byproduct set (case a, or genuinely byproduct-free);
-a row that doesn't is excluded, not guessed at (case b, or any other
-unexplainable mismatch). **The real, final calibration sample size is
-whatever this produces — not assumed here, measured and reported.**
+**Correction, made in this same pre-registration before any energy was
+computed** (caught while designing the Rust harness, not after seeing
+a result): an earlier draft of this section planned to try `[target]`
+plus every `curated_byproducts()` subset as the candidate product side,
+mirroring `search_precursor_sets`'s own `evaluate_complete_state`
+pattern. That would be methodologically wrong here specifically:
+`balanced_reaction_delta_ev_per_atom`'s own doc comment
+(`src/thermodynamics.rs`) states its gas-free scope is enforced
+structurally, not by classifying species -- a caller who only supplies
+**solid**-phase `SolidThermodynamicEntry` values simply has no entry
+for `CO2`/`H2O`/`O2`/etc., so any reaction needing one abstains
+(`Ok(None)`) automatically. `curated_byproducts()`'s six species are
+exactly such non-solid species (gases, plus acetone, a liquid) -- OQMD
+is a solid-state DFT database and this pipeline never fabricates a
+solid-phase entry for any of them. So: **this pre-registration does
+not try to distinguish (a) from (b) by inspection, and does not need
+to** -- every row's reaction is attempted through gugen's own existing,
+already-tested `balance()` (`src/balance.rs`, unchanged) with **`[target]`
+alone as the product side (no byproduct search)**, requiring both
+`target` and every one of the route's own declared precursors to
+survive with a strictly positive coefficient in the result (extending
+PR 78's "target must survive" fix to every declared reactant too --
+a route precursor solved to zero would mean gugen silently scored a
+smaller sub-reaction than the one actually reported in the literature).
+A row that balances this way is a genuine, byproduct-free direct
+combination (necessarily a subset of the 357 exact-element-match rows
+counted above, and only those whose specific stoichiometric ratios
+also admit an all-positive solution); every other row -- whether case
+(a) or case (b) above -- is excluded, not guessed at, and would in any
+case only ever abstain to `Ok(None)` in the energy step even if a
+byproduct-permitting balance were attempted. **The real, final
+calibration sample size is whatever this produces — not assumed here,
+measured and reported.**
 
 ## Unit of analysis and representative-pair selection
 
