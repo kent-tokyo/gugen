@@ -236,6 +236,11 @@ name = "exploration_grammar_audit"
 path = "examples/exploration_grammar_audit.rs"
 required-features = ["serde"]
 
+[[example]]
+name = "exploration_phase21b_calibration"
+path = "examples/exploration_phase21b_calibration.rs"
+required-features = ["serde"]
+
 [[bin]]
 name = "gugen"
 path = "src/bin/gugen.rs"

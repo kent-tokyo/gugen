@@ -1,6 +1,8 @@
 # Phase 21B: thermodynamic-selectivity calibration
 
-**Status: all four GO conditions measured; condition 1 result is GO.**
+**Status: all four GO conditions measured (condition 1 result is GO);
+the calibration itself has since run — NO-GO (see the 2026-08-27
+update below and `docs/phase21b_calibration_result.md`).**
 Phase 21A's GO for Phase 21B was conditioned on four requirements.
 Conditions 2 and 3 completed first (§2, §3). Condition 1 was originally
 scoped against Materials Project, but the owner explicitly redirected it
@@ -20,13 +22,26 @@ resuming the pre-registered fetch (§6.6).
 | 4. Carry forward leakage exclusion + DOI independence unit | **Done — both conditions 2 and 3 build directly on Phase 21A's leakage-excluded, DOI-tracked population.** |
 
 **All four Phase 21B GO conditions are now measured, and all four are
-GO.** Per §6.5's own pre-committed procedure, this stops here: **no
-calibration was run, no correlation was computed, and this document
-gives no GO/NO-GO for the calibration itself** — that remains a
-separate, later, explicitly-triggered phase (§6.6, §7). This is the same
-discipline as Phase 21A's own §7 ("not measured in this phase"): a
+GO.** Per §6.5's own pre-committed procedure, this stopped there at the
+time: **no calibration was run, no correlation was computed, and this
+document gave no GO/NO-GO for the calibration itself** — that remained
+a separate, later, explicitly-triggered phase (§6.6, §7). This was the
+same discipline as Phase 21A's own §7 ("not measured in this phase"): a
 result is reported as exactly what it is, not extended one step further
 than what was actually asked for. No `src/` change, no version bump.
+
+**Update (2026-08-27): the calibration itself has now run, on the
+owner's own explicit "phase21b" trigger.** Full pre-registration
+(`docs/phase21b_calibration_preregistration.md`) and result
+(`docs/phase21b_calibration_result.md`): **NO-GO** — 54 qualifying
+targets (well above the ≥30 floor), 59.3% directional accuracy, one-sided
+binomial p=0.110 against the pre-registered p<0.05 threshold. Not
+statistically significant. A real, previously-unmeasured gap was found
+along the way: condition 1's own coverage gate only checks per-species
+OQMD availability, never whether a route's precursors actually balance
+into a valid reaction — only 347/1285 flat-parseable, OQMD-covered rows
+did. Every non-goal below still holds, unchanged, including on this
+result.
 
 ## 1. Recap: what this builds on
 
@@ -179,13 +194,14 @@ route rows across 381 targets) is written to
 the population any future calibration (and this document's own condition
 2 sample) draws from — not the uncleaned 385.
 
-## 4. What remains before a calibration can run
+## 4. What remained before a calibration could run (done as of 2026-08-27)
 
-1. **Condition 1 (thermodynamic coverage)**: redirected to OQMD, see §6.
+1. **Condition 1 (thermodynamic coverage)**: redirected to OQMD, see §6. Done — GO (§6.6).
 2. **The calibration experiment itself**: computing
    `balanced_reaction_delta_ev_per_atom` for each clean route pair and
-   testing correlation against the audited pure/impure label — blocked
-   on condition 1.
+   testing correlation against the audited pure/impure label. Done —
+   NO-GO, see the 2026-08-27 update above and
+   `docs/phase21b_calibration_result.md`.
 3. Condition 2's own finding (§2) should shape the eventual calibration's
    scope: given the real accessibility and route-representation caveats
    found, any future calibration should treat the pure/impure label as

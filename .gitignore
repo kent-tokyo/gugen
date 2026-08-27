@@ -30,6 +30,16 @@ CLAUDE.md
 # regenerable-plus-checksum indirection here.
 /benchmarks/data/exploration_recall_manifest.json
 /benchmarks/data/exploration_frozen_catalog_manifest.json
+# Phase 21B calibration intermediates: both fully regenerable in seconds
+# from already-committed source data (oqmd_coverage_gate_result.json,
+# thermodynamic_selectivity_clean_population.json, oqmd_coverage_manifest.json)
+# via benchmarks/build_phase21b_calibration_input.py then
+# examples/exploration_phase21b_calibration.rs -- not comparable in size
+# to the kononova_sample.jsonl ~500KB commit precedent (1.0MB, 377KB).
+# Only the final analysis (phase21b_calibration_result.json, ~46KB,
+# comparable to prior committed exploration-result files) ships.
+/benchmarks/data/phase21b_calibration_input.json
+/benchmarks/data/exploration_phase21b_calibration_result.json
 # playground: build output, not source.
 /playground/wasm/target
 /playground/web/pkg
