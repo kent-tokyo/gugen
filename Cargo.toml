@@ -1,6 +1,6 @@
 [package]
 name = "gugen"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2024"
 rust-version = "1.85"
 description = "Explainable materials synthesis and process planning"
@@ -20,7 +20,30 @@ categories = ["science::computational-chemistry", "command-line-utilities", "alg
 # published gugen crate. No `include` allowlist exists on this package, so
 # without this, `cargo package`/`cargo publish` would sweep it in by
 # default (same reasoning as the benchmarks/data exclusion below).
-exclude = ["benchmarks/data/*.json", "benchmarks/data/*.jsonl", "playground/"]
+#
+# The example/test files below `include_str!` a benchmarks/data/*.json(l)
+# file excluded above -- discovered (v0.7.0 release-prep) by actually
+# building `cargo test --all-features` against the *unpacked* published
+# tarball, not just the working tree, where the excluded data is still
+# present on disk. This has silently broken `cargo test --all-features`
+# from the published package since Phase 20B introduced the exclusion
+# above (pre-dating this crate's `benchmarks/data/*.json(l)` exclusion by
+# several releases) -- nobody had verified the unpacked package builds
+# until now. These are internal benchmark/exploration tooling, never
+# meant as library usage examples for a crates.io consumer (unlike
+# examples/balance_batio3.rs), so excluding them from the package -- not
+# reversing the Phase 20B data exclusion -- is the fix.
+exclude = [
+    "benchmarks/data/*.json",
+    "benchmarks/data/*.jsonl",
+    "playground/",
+    "examples/exploration_grammar_audit.rs",
+    "examples/exploration_two_step_arity_recall.rs",
+    "examples/large_scale_benchmark.rs",
+    "examples/route_suitability_policy_audit.rs",
+    "tests/exploration_recall.rs",
+    "tests/large_scale_benchmark.rs",
+]
 
 [package.metadata.docs.rs]
 # default = [] hides most public types (serde impls, the mikiwame adapter)
@@ -85,6 +108,17 @@ literature_corpus = ["serde"]
 # already are. search_precursor_sets itself is completely unaffected
 # regardless of this feature.
 search_diagnostics = []
+# Phase 31 PR 3: hand-written intermediate-candidate decomposition
+# grammars (src/transformation_grammar.rs). Gated as experimental,
+# default off, for v0.7.0 -- the measured audit
+# (docs/phase31_pr3_transformation_grammar_audit.md) found the
+# grammar-only and union-with-frequency-prior policies did not recover
+# any independent multi-step target beyond FrequencyPriorGenerator
+# alone, so this is not yet promised stable API. Zero new dependencies,
+# not wired into Planner; search_two_step_routes and
+# FrequencyPriorGenerator are completely unaffected regardless of this
+# feature.
+experimental_grammar = []
 
 [[test]]
 name = "json_roundtrip"
@@ -234,7 +268,7 @@ required-features = ["serde"]
 [[example]]
 name = "exploration_grammar_audit"
 path = "examples/exploration_grammar_audit.rs"
-required-features = ["serde"]
+required-features = ["serde", "experimental_grammar"]
 
 [[example]]
 name = "exploration_phase21b_calibration"

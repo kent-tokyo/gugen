@@ -146,6 +146,79 @@ impl SynthesisRoute {
 /// at least one valid route per reachable intermediate, not every
 /// combination of stage-1 x stage-2 routes. Revisit with exhaustive
 /// enumeration only if a real fixture needs the alternates.`
+///
+/// # Guarantees and limitations
+///
+/// - **Depth is fixed at exactly 1 or 2** -- there is no depth-3+
+///   variant of this function; a route through more than one
+///   intermediate is out of scope.
+/// - **No identity-reaction routes**: every stage comes from
+///   `search_precursor_sets`, which rejects a `balance()` result whose
+///   own target doesn't survive with a positive coefficient -- so a
+///   stage can never be a no-op "candidate balances against itself".
+/// - **Deterministic**: identical inputs always produce identical
+///   output, in the same order, since every step is `search_precursor_sets`
+///   (itself deterministic) plus plain `Vec`/`BTreeSet` bookkeeping --
+///   no hashing-order-dependent or randomized step anywhere in this
+///   function.
+/// - **Duplicate `intermediate_candidates` are not deduplicated**: each
+///   entry is searched independently, so two entries naming the same
+///   composition each produce their own (structurally identical)
+///   route in the output. Deduplicating `intermediate_candidates`
+///   before calling, if that matters to a caller, is the caller's own
+///   responsibility.
+/// - **Not wired into [`crate::Planner`]**: calling this is always an
+///   explicit, separate step from `Planner::plan`.
+///
+/// # Examples
+///
+/// ```
+/// use gugen::{
+///     Composition, Element, PlanningConstraints, PrecursorCandidate, PrecursorId, SearchBudget,
+///     search_two_step_routes,
+/// };
+///
+/// fn comp(pairs: &[(&str, f64)]) -> Composition {
+///     Composition::new(pairs.iter().map(|&(s, a)| (Element::new(s).unwrap(), a))).unwrap()
+/// }
+/// fn candidate(id: &str, pairs: &[(&str, f64)]) -> PrecursorCandidate {
+///     PrecursorCandidate {
+///         id: PrecursorId(id.to_string()),
+///         composition: comp(pairs),
+///         availability: None,
+///     }
+/// }
+///
+/// // Target needs 5 elements at once -- more than a tight one-step
+/// // budget (max_precursors_per_plan = 4) allows, so it is only
+/// // reachable by first combining three of them into an intermediate.
+/// let target = comp(&[("Fe", 1.0), ("Li", 1.0), ("Na", 1.0), ("K", 1.0), ("O", 1.0)]);
+/// let base = vec![
+///     candidate("Fe", &[("Fe", 1.0)]),
+///     candidate("Li", &[("Li", 1.0)]),
+///     candidate("Na", &[("Na", 1.0)]),
+///     candidate("K", &[("K", 1.0)]),
+///     candidate("O2", &[("O", 2.0)]),
+/// ];
+/// let intermediate = comp(&[("Fe", 1.0), ("Li", 1.0), ("Na", 1.0)]);
+/// let budget = SearchBudget {
+///     max_precursor_sets: 10_000,
+///     max_precursors_per_plan: 4,
+///     max_plans_returned: 20,
+/// };
+///
+/// let routes = search_two_step_routes(
+///     &target,
+///     &base,
+///     &[intermediate],
+///     &PlanningConstraints::default(),
+///     &budget,
+/// )
+/// .unwrap();
+///
+/// assert_eq!(routes.len(), 1);
+/// assert_eq!(routes[0].stages().len(), 2);
+/// ```
 pub fn search_two_step_routes(
     target: &Composition,
     base_candidates: &[PrecursorCandidate],
@@ -342,6 +415,53 @@ mod tests {
             "the direct route must appear exactly once, not duplicated"
         );
         assert_eq!(routes[0].stages().len(), 1);
+    }
+
+    /// Documents a real, disclosed limitation (see `search_two_step_routes`'s
+    /// own doc comment): `intermediate_candidates` is searched
+    /// independently per entry, with no output-level dedup. Two entries
+    /// that are the same composition each independently produce a route,
+    /// so the caller -- not this function -- is responsible for
+    /// deduplicating its own `intermediate_candidates` input if it wants
+    /// exactly one route per distinct intermediate.
+    #[test]
+    fn a_duplicated_intermediate_candidate_produces_a_duplicated_route_not_deduplicated() {
+        let (target, base, intermediate) = five_element_fixture();
+        let routes = search_two_step_routes(
+            &target,
+            &base,
+            &[intermediate.clone(), intermediate],
+            &PlanningConstraints::default(),
+            &tight_budget(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            routes.len(),
+            2,
+            "duplicate intermediate_candidates entries are not deduplicated by this function"
+        );
+        assert_eq!(routes[0], routes[1]);
+    }
+
+    #[test]
+    fn search_two_step_routes_is_deterministic_across_repeated_calls() {
+        let (target, base, intermediate) = five_element_fixture();
+        let run = || {
+            search_two_step_routes(
+                &target,
+                &base,
+                std::slice::from_ref(&intermediate),
+                &PlanningConstraints::default(),
+                &tight_budget(),
+            )
+            .unwrap()
+        };
+        assert_eq!(
+            run(),
+            run(),
+            "repeated calls with identical input must agree exactly"
+        );
     }
 
     #[test]
