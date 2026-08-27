@@ -1,13 +1,25 @@
-name: OQMD recovery check
+name: OQMD data availability monitor
 
-# Daily health check only -- detects whether oqmd.org is returning
-# usable formation-energy data again (Phase 21B condition 1 has been
-# blocked on a real oqmd.org outage since 2026-08-15, see
-# docs/thermodynamic_selectivity_calibration.md Sec 6.2). This workflow
-# never runs the real Phase 21B fetcher (benchmarks/fetch_oqmd_coverage.py)
-# and never starts calibration -- on recovery it only opens a GitHub
-# Issue so a human can decide the next step. See
-# .github/scripts/check_oqmd_recovery.py for what "healthy" means.
+# Coverage-only monitor. This checks one thing: does oqmd.org currently
+# return usable formation-energy data for a common test compound. It is
+# NOT a balanceability check, NOT a selectivity-accuracy check, and NOT
+# a production GO/NO-GO gate for any phase.
+#
+# Per Phase 32 (docs/phase32_reaction_record_qualification.md) and the
+# Phase 21B calibration result (docs/phase21b_calibration_result.md,
+# NO-GO), per-species OQMD availability was never the bottleneck: of
+# 1285 OQMD-covered, formula-parseable rows, only 347 actually balanced
+# into a valid reaction. OQMD coming back online does not by itself mean
+# any closed phase should resume -- Phase 21B's own reopening bar is a
+# newly-qualified corpus with >=100 new independent target pairs
+# (docs/phase32_reaction_record_qualification.md), not raw availability.
+# This workflow never runs the real fetcher (benchmarks/fetch_oqmd_coverage.py),
+# never starts calibration, and never emits a predictive signal -- it
+# only reports whether OQMD's data availability changed since the last
+# run, so a human can decide whether that's worth acting on. It must
+# never block a merge (no other workflow depends on this one). See
+# .github/scripts/check_oqmd_recovery.py for what "healthy" (== data
+# currently available) means.
 #
 # Every value derived from the health check (`reason` in particular) is
 # built from OQMD's own API response and is treated as untrusted: it is
@@ -39,14 +51,14 @@ jobs:
         id: health
         run: python3 .github/scripts/check_oqmd_recovery.py
 
-      - name: Check for an existing open recovery issue
+      - name: Check for an existing open availability-change issue
         id: dedup
         if: steps.health.outputs.healthy == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           count=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
-            --search "\"OQMD service recovered\" in:title" --json number --jq 'length')
+            --search "\"OQMD data availability changed\" in:title" --json number --jq 'length')
           echo "count=$count" >> "$GITHUB_OUTPUT"
 
       - name: Decide whether this run may actually create an issue
@@ -62,7 +74,7 @@ jobs:
           fi
           echo "dry_run=$dry_run" >> "$GITHUB_OUTPUT"
 
-      - name: Create recovery issue
+      - name: Create availability-change issue
         if: >-
           steps.health.outputs.healthy == 'true' &&
           steps.dedup.outputs.count == '0' &&
@@ -72,14 +84,14 @@ jobs:
           HEALTH_REASON: ${{ steps.health.outputs.reason }}
         run: |
           cat > /tmp/oqmd_recovery_issue_body.md <<'BODY_EOF'
-          The daily OQMD recovery check (`.github/workflows/oqmd-recovery-check.yml`) detected that oqmd.org is returning usable formation-energy data again.
+          The OQMD data availability monitor (`.github/workflows/oqmd-recovery-check.yml`) detected that oqmd.org is returning usable formation-energy data again.
 
-          This does **not** auto-start Phase 21B condition 1 or calibration. Per `docs/thermodynamic_selectivity_calibration.md`, condition 1's real coverage measurement still needs a fresh owner trigger to run `python3 benchmarks/fetch_oqmd_coverage.py` for real. This workflow only detects recovery -- it will not open a duplicate issue while this one stays open.
+          **This is a coverage signal only.** It does not mean any closed phase should resume, and it does not auto-start anything. Per-species OQMD availability was already known to not be the bottleneck for Phase 21B (of 1285 OQMD-covered, formula-parseable rows, only 347 actually balanced into a valid reaction -- see `docs/phase21b_calibration_result.md`). Phase 21B's real reopening bar is a newly-qualified corpus with at least 100 new independent target pairs (`docs/phase32_reaction_record_qualification.md`), not raw data availability. This workflow only detects an availability change -- it will not open a duplicate issue while this one stays open.
           BODY_EOF
           printf '\n**Health-check detail:** %s\n' "$HEALTH_REASON" >> /tmp/oqmd_recovery_issue_body.md
           gh issue create \
             --repo "$GITHUB_REPOSITORY" \
-            --title "OQMD service recovered -- Phase 21B condition 1 can resume" \
+            --title "OQMD data availability changed -- coverage signal only, not a phase-resumption trigger" \
             --body-file /tmp/oqmd_recovery_issue_body.md
 
       - name: Report outcome
@@ -91,12 +103,12 @@ jobs:
         run: |
           if [ "$HEALTHY" = "true" ]; then
             if [ "$DRY_RUN" = "true" ]; then
-              printf 'dry_run: OQMD is healthy (%s). Existing open recovery issues: %s. No issue created (dry run).\n' "$HEALTH_REASON" "$DEDUP_COUNT"
+              printf 'dry_run: OQMD data is available (%s). Existing open availability-change issues: %s. No issue created (dry run).\n' "$HEALTH_REASON" "$DEDUP_COUNT"
             elif [ "$DEDUP_COUNT" = "0" ]; then
-              echo "OQMD is healthy. Created a new recovery issue."
+              echo "OQMD data is available. Created a new availability-change issue (coverage signal only)."
             else
-              echo "OQMD is healthy, but a recovery issue is already open -- not creating a duplicate."
+              echo "OQMD data is available, but an availability-change issue is already open -- not creating a duplicate."
             fi
           else
-            printf 'OQMD still unhealthy: %s. No issue, no notification -- this is the expected daily outcome during the outage.\n' "$HEALTH_REASON"
+            printf 'OQMD data unavailable: %s. No issue, no notification -- an unavailable result is an expected, non-failing outcome for this monitor.\n' "$HEALTH_REASON"
           fi
