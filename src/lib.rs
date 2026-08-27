@@ -120,7 +120,7 @@
 //! (`transformation_grammar` module); measured against the same
 //! corpus, they did not recover any target beyond a plain
 //! corpus-frequency prior, so this is not yet promised-stable API.
-//! **v0.7.0 is pending publication** (crates.io). See `CHANGELOG.md`
+//! **v0.7.0 is published** (crates.io, tagged `v0.7.0`). See `CHANGELOG.md`
 //! for the user-facing summary.
 
 #![forbid(unsafe_code)]

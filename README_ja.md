@@ -14,11 +14,12 @@
 （evidence）・仮定（assumption）・未確定条件（unresolved）を明示したまま、
 機械可読な形で返します。実験の成功を保証するものではありません。
 
-> **ステータス：v0.7.0 公開準備中**（検証済みの2段階合成route primitive、
+> **ステータス：v0.7.0 公開済み**（検証済みの2段階合成route primitive、
 > route接続性の検証、実コーパス駆動の検索正確性修正。詳細はCHANGELOG.md
 > 参照）。
 > [crates.io](https://crates.io/crates/gugen) /
-> [docs.rs](https://docs.rs/gugen)。
+> [docs.rs](https://docs.rs/gugen) /
+> [v0.7.0リリース](https://github.com/kent-tokyo/gugen/releases/tag/v0.7.0)。
 > v0.7.0では`search_two_step_routes`/`SynthesisRoute`
 > （前駆体→中間体→目標という化学量論的に連結したroute）を追加し、実
 > コーパステストで発見された`search_precursor_sets`の偽陽性

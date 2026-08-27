@@ -15,11 +15,11 @@ solid-state process plans — each with its evidence, assumptions, and
 unresolved conditions kept explicit and machine-readable. It does not
 predict experimental success.
 
-> **Status: v0.7.0 pending publication** (validated two-step
+> **Status: v0.7.0 published** (validated two-step
 > synthesis-route primitives, route connectivity validation, and
 > real-corpus-driven search correctness fixes -- see CHANGELOG.md).
 > [crates.io](https://crates.io/crates/gugen) /
-> [docs.rs](https://docs.rs/gugen).
+> [docs.rs](https://docs.rs/gugen) / [v0.7.0 release](https://github.com/kent-tokyo/gugen/releases/tag/v0.7.0).
 > v0.7.0 adds `search_two_step_routes`/`SynthesisRoute` (stoichiometrically
 > connected precursor → intermediate → target routes), fixes a spurious
 > identity-reaction acceptance bug in `search_precursor_sets` found via
