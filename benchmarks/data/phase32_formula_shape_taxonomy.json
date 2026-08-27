@@ -1,0 +1,493 @@
+{
+  "kononova": {
+    "distinct_formula_counts_by_bucket": {
+      "flat": 1286,
+      "malformed": 203,
+      "nested_parentheses": 27,
+      "parentheses": 389,
+      "phase_affix": 18
+    },
+    "distinct_formulas": 1923,
+    "examples_by_bucket": {
+      "flat": [
+        {
+          "detail": {
+            "has_decimal_occupancy": false
+          },
+          "formula": "BaZrO3"
+        },
+        {
+          "detail": {
+            "has_decimal_occupancy": false
+          },
+          "formula": "ZrO2"
+        },
+        {
+          "detail": {
+            "has_decimal_occupancy": false
+          },
+          "formula": "BaCO3"
+        },
+        {
+          "detail": {
+            "has_decimal_occupancy": false
+          },
+          "formula": "Li10GeP2S12"
+        },
+        {
+          "detail": {
+            "has_decimal_occupancy": false
+          },
+          "formula": "P2S5"
+        },
+        {
+          "detail": {
+            "has_decimal_occupancy": false
+          },
+          "formula": "Li2S"
+        },
+        {
+          "detail": {
+            "has_decimal_occupancy": false
+          },
+          "formula": "GeS2"
+        },
+        {
+          "detail": {
+            "has_decimal_occupancy": false
+          },
+          "formula": "Li2MoO3"
+        }
+      ],
+      "malformed": [
+        {
+          "detail": {
+            "reason": "symbolic non-stoichiometry suffix (e.g. -delta), not recoverable"
+          },
+          "formula": "BaZr0.8Y0.2O3-\u03b4"
+        },
+        {
+          "detail": {
+            "reason": "symbolic non-stoichiometry suffix (e.g. -delta), not recoverable"
+          },
+          "formula": "SrNb0.1Fe0.9O3-\u03b4"
+        },
+        {
+          "detail": {
+            "reason": "repeated element symbol, would parse if summed"
+          },
+          "formula": "KNN"
+        },
+        {
+          "detail": {
+            "reason": "repeated element symbol, would parse if summed"
+          },
+          "formula": "NH4H2PO4"
+        },
+        {
+          "detail": {
+            "reason": "symbolic non-stoichiometry suffix (e.g. -delta), not recoverable"
+          },
+          "formula": "Sr1.01Ti0.98Nb0.02O3-\u03b4"
+        },
+        {
+          "detail": {
+            "reason": "unrecognized shape (likely acronym/trade name or unknown symbol)"
+          },
+          "formula": "NBT"
+        },
+        {
+          "detail": {
+            "reason": "symbolic non-stoichiometry suffix (e.g. -delta), not recoverable"
+          },
+          "formula": "BaCe0.2Zr0.7Y0.1O3-\u03b4"
+        },
+        {
+          "detail": {
+            "reason": "unrecognized shape (likely acronym/trade name or unknown symbol)"
+          },
+          "formula": "Na0.5K0.5NbO3-5"
+        }
+      ],
+      "nested_parentheses": [
+        {
+          "detail": {
+            "max_depth": 2
+          },
+          "formula": "Ca((Li0.33Nb0.67)0.9Ti0.1)O3-\u03b4"
+        },
+        {
+          "detail": {
+            "max_depth": 2
+          },
+          "formula": "Pb((Zn1/3Nb2/3)0.91Ti0.09)O3"
+        },
+        {
+          "detail": {
+            "max_depth": 2
+          },
+          "formula": "0.95((K0.5Na0.5)1-xAgxNbO3)-0.05LiSbO3"
+        },
+        {
+          "detail": {
+            "max_depth": 2
+          },
+          "formula": "((K0.5Na0.5)0.94Li0.06)0.97La0.01(Nb0.9Ta0.1)O3"
+        },
+        {
+          "detail": {
+            "max_depth": 2
+          },
+          "formula": "(Bi0.5(Na0.75K0.15Li0.10)0.5)TiO3"
+        },
+        {
+          "detail": {
+            "max_depth": 2
+          },
+          "formula": "Pb((Mn0.33Nb0.67)0.5(Mn0.33Sb0.67)0.5)0.08(Zr0.95Ti0.5)0.92O3"
+        },
+        {
+          "detail": {
+            "max_depth": 2
+          },
+          "formula": "Pb0.90La0.04Ba((Zr0.6Sn0.4)0.85Ti0.15)O3"
+        },
+        {
+          "detail": {
+            "max_depth": 2
+          },
+          "formula": "Pb0.90La0.04Ba0.04((Zr0.6Sn0.4)0.85Ti0.15)O3"
+        }
+      ],
+      "parentheses": [
+        {
+          "detail": {
+            "max_depth": 1
+          },
+          "formula": "Na5/6(Li1/4Mn3/4)O2"
+        },
+        {
+          "detail": {
+            "max_depth": 1
+          },
+          "formula": "Sr5(VO4)3F"
+        },
+        {
+          "detail": {
+            "max_depth": 1
+          },
+          "formula": "Pb(Zr0.65Ti0.355)O3"
+        },
+        {
+          "detail": {
+            "max_depth": 1
+          },
+          "formula": "0.96(K0.48Na0.52)(Nb0.95Sb0.05)O3-0.04Bi0.5(Na0.82K0.18)0.5ZrO3"
+        },
+        {
+          "detail": {
+            "max_depth": 1
+          },
+          "formula": "(wt%)-La0.9Sr0.1Ga0.8Mg0.2O3"
+        },
+        {
+          "detail": {
+            "max_depth": 1
+          },
+          "formula": "Fe(NO3)3"
+        },
+        {
+          "detail": {
+            "max_depth": 1
+          },
+          "formula": "Ni0.5Mn1.5(OH)4"
+        },
+        {
+          "detail": {
+            "max_depth": 1
+          },
+          "formula": "(Ni0.8Cu0.12Zn0.12)Fe1.96O4"
+        }
+      ],
+      "phase_affix": [
+        {
+          "detail": {
+            "kind": "prefix",
+            "marker": "\u03b1",
+            "remainder": "Fe2O3"
+          },
+          "formula": "\u03b1-Fe2O3"
+        },
+        {
+          "detail": {
+            "kind": "prefix",
+            "marker": "\u03bb",
+            "remainder": "MnO2"
+          },
+          "formula": "\u03bb-MnO2"
+        },
+        {
+          "detail": {
+            "kind": "prefix",
+            "marker": "\u03b3",
+            "remainder": "Al2O3"
+          },
+          "formula": "\u03b3-Al2O3"
+        },
+        {
+          "detail": {
+            "kind": "prefix",
+            "marker": "\u03b3",
+            "remainder": "Bi2MoO6"
+          },
+          "formula": "\u03b3-Bi2MoO6"
+        },
+        {
+          "detail": {
+            "kind": "prefix",
+            "marker": "\u03b1",
+            "remainder": "Al2O3"
+          },
+          "formula": "\u03b1-Al2O3"
+        },
+        {
+          "detail": {
+            "kind": "prefix",
+            "marker": "\u03b3",
+            "remainder": "Y2Si2O7"
+          },
+          "formula": "\u03b3-Y2Si2O7"
+        },
+        {
+          "detail": {
+            "kind": "prefix",
+            "marker": "\u03b3",
+            "remainder": "Na0.7CoO2"
+          },
+          "formula": "\u03b3-Na0.7CoO2"
+        },
+        {
+          "detail": {
+            "kind": "prefix",
+            "marker": "\u03b1",
+            "remainder": "Fe1.4Ti0.6O3"
+          },
+          "formula": "\u03b1-Fe1.4Ti0.6O3"
+        }
+      ]
+    },
+    "rows_touched_by_bucket": {
+      "flat": 1903,
+      "malformed": 316,
+      "nested_parentheses": 28,
+      "parentheses": 418,
+      "phase_affix": 53
+    },
+    "rows_touched_by_malformed_reason": {
+      "repeated element symbol, would parse if summed": 92,
+      "symbolic non-stoichiometry suffix (e.g. -delta), not recoverable": 131,
+      "unrecognized shape (likely acronym/trade name or unknown symbol)": 96
+    },
+    "rows_with_all_formulas_flat": 1164,
+    "total_rows": 1908
+  },
+  "thermodynamic_selectivity": {
+    "distinct_formula_counts_by_bucket": {
+      "flat": 736,
+      "hydrate_dot": 6,
+      "malformed": 11,
+      "parentheses": 42
+    },
+    "distinct_formulas": 795,
+    "examples_by_bucket": {
+      "flat": [
+        {
+          "detail": {
+            "has_decimal_occupancy": false
+          },
+          "formula": "Ti3SiC2"
+        },
+        {
+          "detail": {
+            "has_decimal_occupancy": false
+          },
+          "formula": "B2O3"
+        },
+        {
+          "detail": {
+            "has_decimal_occupancy": false
+          },
+          "formula": "C"
+        },
+        {
+          "detail": {
+            "has_decimal_occupancy": false
+          },
+          "formula": "Si"
+        },
+        {
+          "detail": {
+            "has_decimal_occupancy": false
+          },
+          "formula": "Ti"
+        },
+        {
+          "detail": {
+            "has_decimal_occupancy": false
+          },
+          "formula": "Al"
+        },
+        {
+          "detail": {
+            "has_decimal_occupancy": false
+          },
+          "formula": "SiC"
+        },
+        {
+          "detail": {
+            "has_decimal_occupancy": false
+          },
+          "formula": "TiC"
+        }
+      ],
+      "hydrate_dot": [
+        {
+          "detail": {},
+          "formula": "FeCl2\u00b76H2O"
+        },
+        {
+          "detail": {},
+          "formula": "TmCl3\u00b76H2O"
+        },
+        {
+          "detail": {},
+          "formula": "TbCl3\u00b76H2O"
+        },
+        {
+          "detail": {},
+          "formula": "DyCl3\u00b76H2O"
+        },
+        {
+          "detail": {},
+          "formula": "Li2SO4\u00b7H2O"
+        },
+        {
+          "detail": {},
+          "formula": "MnBr2\u00b74H2O"
+        }
+      ],
+      "malformed": [
+        {
+          "detail": {
+            "reason": "unrecognized shape (likely acronym/trade name or unknown symbol)"
+          },
+          "formula": "CMAS"
+        },
+        {
+          "detail": {
+            "reason": "repeated element symbol, would parse if summed"
+          },
+          "formula": "I2I2"
+        },
+        {
+          "detail": {
+            "reason": "repeated element symbol, would parse if summed"
+          },
+          "formula": "C2H5OH"
+        },
+        {
+          "detail": {
+            "reason": "unrecognized shape (likely acronym/trade name or unknown symbol)"
+          },
+          "formula": "ZBS"
+        },
+        {
+          "detail": {
+            "reason": "repeated element symbol, would parse if summed"
+          },
+          "formula": "NH4HF2"
+        },
+        {
+          "detail": {
+            "reason": "unrecognized shape (likely acronym/trade name or unknown symbol)"
+          },
+          "formula": "PVA"
+        },
+        {
+          "detail": {
+            "reason": "unrecognized shape (likely acronym/trade name or unknown symbol)"
+          },
+          "formula": "TEOS"
+        },
+        {
+          "detail": {
+            "reason": "unrecognized shape (likely acronym/trade name or unknown symbol)"
+          },
+          "formula": "Ln2S3"
+        }
+      ],
+      "parentheses": [
+        {
+          "detail": {
+            "max_depth": 1
+          },
+          "formula": "Pb(Zr0.52Ti0.48)O3"
+        },
+        {
+          "detail": {
+            "max_depth": 1
+          },
+          "formula": "Al2(WO4)3"
+        },
+        {
+          "detail": {
+            "max_depth": 1
+          },
+          "formula": "Al(NO3)3\u00b79H2O"
+        },
+        {
+          "detail": {
+            "max_depth": 1
+          },
+          "formula": "Eu(NO3)3\u00b75H2O"
+        },
+        {
+          "detail": {
+            "max_depth": 1
+          },
+          "formula": "Eu(NO3)3"
+        },
+        {
+          "detail": {
+            "max_depth": 1
+          },
+          "formula": "Cr(NO3)3\u00b79H2O"
+        },
+        {
+          "detail": {
+            "max_depth": 1
+          },
+          "formula": "Na2(CO3)\u00b710H2O"
+        },
+        {
+          "detail": {
+            "max_depth": 1
+          },
+          "formula": "Tb(NO3)3"
+        }
+      ]
+    },
+    "rows_touched_by_bucket": {
+      "flat": 1692,
+      "hydrate_dot": 7,
+      "malformed": 18,
+      "parentheses": 101
+    },
+    "rows_touched_by_malformed_reason": {
+      "repeated element symbol, would parse if summed": 4,
+      "unrecognized shape (likely acronym/trade name or unknown symbol)": 14
+    },
+    "rows_with_all_formulas_flat": 1569,
+    "total_rows": 1692
+  }
+}

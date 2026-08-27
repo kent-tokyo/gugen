@@ -40,6 +40,17 @@ CLAUDE.md
 # comparable to prior committed exploration-result files) ships.
 /benchmarks/data/phase21b_calibration_input.json
 /benchmarks/data/exploration_phase21b_calibration_result.json
+# Phase 32 qualification intermediates: same rationale as Phase 21B's
+# above -- fully regenerable in seconds from already-committed source
+# data via build_phase32_qualification_input.py then
+# examples/exploration_phase32_reaction_qualification.rs, too large for
+# the ~500KB commit precedent (1.8MB, 429KB, 2.6MB). Only the final
+# funnel/audit summary (phase32_qualification_result.json, ~5KB) and
+# the formula-shape survey (phase32_formula_shape_taxonomy.json, ~12KB)
+# ship.
+/benchmarks/data/phase32_qualification_input.json
+/benchmarks/data/exploration_phase32_reaction_qualification_result.json
+/benchmarks/data/phase32_qualified_records.json
 # playground: build output, not source.
 /playground/wasm/target
 /playground/web/pkg

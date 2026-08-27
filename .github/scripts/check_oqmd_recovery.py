@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
 """Lightweight daily health check: does OQMD's REST API currently return
 usable formation-energy data -- not just "does the site respond"? Used
-by .github/workflows/oqmd-recovery-check.yml to detect when Phase 21B
-condition 1 (blocked by oqmd.org's outage, see
-docs/thermodynamic_selectivity_calibration.md Sec 6.2) can resume.
+by .github/workflows/oqmd-recovery-check.yml, which is a coverage-only
+monitor -- it reports whether OQMD's data availability changed, and is
+NOT a signal that any phase should resume. Per-species OQMD coverage
+was never Phase 21B's real bottleneck (of 1285 OQMD-covered,
+formula-parseable rows, only 347 actually balanced into a valid
+reaction -- docs/phase21b_calibration_result.md); Phase 21B's real
+reopening bar is a newly-qualified corpus with >=100 new independent
+target pairs (docs/phase32_reaction_record_qualification.md).
 
-This script only detects recovery and reports it. It never runs the
-real Phase 21B fetcher (benchmarks/fetch_oqmd_coverage.py), never
-writes a coverage manifest, and never starts calibration -- recovery
-detection and the real coverage measurement are deliberately separate
-steps, gated on a fresh owner trigger for the latter.
+This script only detects an availability change and reports it. It
+never runs the real Phase 21B fetcher (benchmarks/fetch_oqmd_coverage.py),
+never writes a coverage manifest, and never starts calibration --
+availability detection and any real coverage measurement are
+deliberately separate steps, gated on a fresh owner trigger for the
+latter.
 
 "Healthy" means: HTTP 200, valid JSON, the expected top-level keys
 (data/meta) present, the first returned entry has every field the real
