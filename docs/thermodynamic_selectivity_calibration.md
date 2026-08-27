@@ -43,6 +43,21 @@ into a valid reaction — only 347/1285 flat-parseable, OQMD-covered rows
 did. Every non-goal below still holds, unchanged, including on this
 result.
 
+**Update (2026-08-27): reopening conditions superseded by Phase 32.**
+`docs/phase32_reaction_record_qualification.md` (a corpus-integrity
+audit built directly on the "only 347/1285 balanced" gap above)
+measured that even reclassifying against the *full*
+thermodynamic-selectivity corpus (not just condition 1's 273-target
+gate) yields only 80 independent qualifying target pairs — still below
+the ≥100-new-independent-pair floor Phase 32 set for reopening this
+calibration, and not "new" data regardless (same existing corpus,
+re-measured). **This calibration stays closed.** Reopening it requires
+a genuinely new, independently-qualified corpus (balanceable, byproducts
+resolved, dopant/host notation disambiguated, DOI-independent,
+consistent pure/impure labeling) — not a re-count of this same
+population. See Phase 32's own decision-gate section for the exact
+criteria.
+
 ## 1. Recap: what this builds on
 
 Phase 21A found 385 targets (lenient label aggregation) / 371 (strict,

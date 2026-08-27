@@ -294,3 +294,10 @@ New files: `benchmarks/build_grammar_audit_split.py`,
 `benchmarks/data/exploration_grammar_audit_result.json`. One `pub(crate)`
 addition to `src/composition.rs` (`amount_of_frac`, no public API
 change).
+
+**Update (v0.7.0 release, 2026-08-27)**: this module now ships behind a
+new `experimental_grammar` Cargo feature, default off, precisely because
+of this audit's own NO-GO result -- not stable, unconditional public API
+that promises long-term compatibility. `default_grammars()`/`propose_all()`
+and every grammar type require `--features experimental_grammar` to
+use. No change to the measured result or any of the numbers above.

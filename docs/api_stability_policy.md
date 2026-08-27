@@ -8,14 +8,16 @@ quotes below).
 
 ## `SCHEMA_VERSION`
 
-`SCHEMA_VERSION` (`src/report.rs`, currently `2`) is a plain `u32` embedded
+`SCHEMA_VERSION` (`src/report.rs`, currently `3`) is a plain `u32` embedded
 in every `SynthesisPlanningReport`/`PlanningProvenance`. It is bumped only
 when a change to `SynthesisPlanningReport`'s own shape is judged significant
 enough to flag — it is **not** bumped for every report-shape change, and
 this has already happened: it stayed `1` through v0.1.0, v0.2.0, and v0.3.0
 even though the report gained fields in that span (e.g.
-`route_suitability`/`not_recommended` in v0.3.0). It moved `1 -> 2` only in
-v0.4.0, when `SynthesisPlan` gained `literature_evidence`. **`SCHEMA_VERSION`
+`route_suitability`/`not_recommended` in v0.3.0). It moved `1 -> 2` in
+v0.4.0, when `SynthesisPlan` gained `literature_evidence`, and `2 -> 3` in
+v0.6.0, when `SynthesisPlan` gained `prior_experiment_evidence` (Phase 26)
+-- unchanged through v0.7.0. **`SCHEMA_VERSION`
 does not cleanly delimit one report shape from another** — a consumer with
 its own strict schema (a hand-written validator, or a `serde` struct with
 `#[serde(deny_unknown_fields)]`) should not key strict-field-set validation
@@ -58,17 +60,46 @@ surfaces; this policy does not promise otherwise.
 Run manually per release (`cargo semver-checks --all-features` against the
 last published version) — not automated in CI (`ci.yml`/`publish.yml`).
 Treat a clean `cargo semver-checks` run as necessary, not sufficient,
-evidence of a non-breaking release. It has at least one confirmed blind
-spot: a bare return-type shape change (e.g. `Option<T>` widening to
+evidence of a non-breaking release. It has at least two confirmed blind
+spots: a bare return-type shape change (e.g. `Option<T>` widening to
 `Result<Option<T>>` while an existing `Ok`/`Some`/`None` caller keeps
 compiling but a new `Err` arm is needed) was not flagged by any of its
 lints when this happened in v0.4.0 (`balanced_reaction_delta_ev_per_atom`/
 `decomposition_margin_ev_per_atom` gaining `Result`, see that CHANGELOG
-entry). Every release still runs the full quality gate matrix (fmt,
-clippy `-D warnings`, tests under both `--all-features` and
-`--no-default-features`, doc build `-D warnings`, `cargo package --list`)
-alongside `semver-checks`, and any breaking change found is disclosed by
+entry). Second (v0.7.0 release-prep): **run it before `Cargo.toml`'s own
+version is bumped, not after** -- once the target version already reflects
+a jump cargo treats as major-equivalent for a 0.x crate (e.g. `0.6.0 ->
+0.7.0`), the tool skips substantive lint checks entirely (observed: "0
+checks: 0 pass, 253 skip", still reporting "no semver update required"
+either way) since no change could be "unexpectedly breaking" at that
+level. The pre-bump run (comparing the current tree against the same
+baseline, before editing `version =`) is the one that actually checks
+anything; supplement it with an independent manual public-export diff
+(every `pub fn/struct/enum/trait/const/type/mod/use` plus every `pub`
+struct field, diffed against a `git worktree` of the prior tag) for full
+confidence, not semver-checks alone either way. Every release still runs
+the full quality gate matrix (fmt, clippy `-D warnings`, tests under both
+`--all-features` and `--no-default-features`, doc build `-D warnings`,
+`cargo package --list`) alongside `semver-checks`, and any breaking
+change found is disclosed by
 hand in `CHANGELOG.md` regardless of whether the tool caught it.
+
+## `cargo package` -- test the unpacked output, not just the working tree
+
+`cargo package --list`/`cargo package` were already part of every
+release-prep, but until v0.7.0 no session had ever built or tested the
+*unpacked* package output (`target/package/gugen-<version>/`) -- every
+`cargo test`/`cargo doc` run so far had run against the git working tree,
+which still has every file on disk regardless of `Cargo.toml`'s own
+`exclude` list. This let a real defect ship silently since before v0.4.0:
+several examples/tests `include_str!` a `benchmarks/data/*.json(l)` file
+that `exclude` deliberately keeps out of the package, so `cargo test
+--all-features` against the actual crates.io tarball has been failing to
+compile since that exclusion was first added (Phase 20B) -- fixed in
+v0.7.0 by excluding those specific files too. **Every future release-prep
+should `cd target/package/gugen-<version>` and run `cargo test
+--all-features` / `cargo doc --all-features --no-deps` there**, not just
+against the working tree.
 
 ## Constructor deprecation
 
