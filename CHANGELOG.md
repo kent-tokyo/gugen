@@ -4,6 +4,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed (breaking)
+
+- `SolidThermodynamicEntry`'s `formation_enthalpy_ev_per_atom` and
+  `volume_angstrom3_per_atom` fields are now private, with accessor
+  methods of the same names added, matching the smart-constructor
+  pattern `BalancedReaction`/`ReactionSpecies` already use (Phase 23A).
+  The fields were `pub`, so `SolidThermodynamicEntry::new`'s
+  finite/positive validation could be bypassed via direct struct-literal
+  construction -- a bypassed NaN or negative volume would then flow
+  silently into `relative_solid_gibbs_ev_per_atom` and from there into
+  `decomposition_margin_ev_per_atom`/`balanced_reaction_delta_ev_per_atom`.
+  Those two functions also gained a defensive finiteness check on their
+  own computed output: a non-finite delta now abstains (`Ok(None)`,
+  this module's existing idiom) instead of returning `Ok(Some(NaN))`.
+  No known caller constructs this type via struct literal (every
+  existing call site already goes through `new()` or the `new()`-routed
+  `Deserialize` impl), so this is expected to be a no-op for real users,
+  but it is a semver-breaking change (`cargo semver-checks` confirms:
+  exactly these two fields flagged, nothing else).
+
 ### Fixed
 
 - `HydroxideToOxideGrammar` (`experimental_grammar` feature) no longer

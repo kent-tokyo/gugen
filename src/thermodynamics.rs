@@ -338,8 +338,8 @@ pub struct ThermodynamicDatasetIdentity {
 pub struct SolidThermodynamicEntry {
     pub composition: Composition,
     pub phase_id: Option<String>,
-    pub formation_enthalpy_ev_per_atom: f64,
-    pub volume_angstrom3_per_atom: f64,
+    formation_enthalpy_ev_per_atom: f64,
+    volume_angstrom3_per_atom: f64,
     pub dataset: ThermodynamicDatasetIdentity,
 }
 
@@ -369,6 +369,16 @@ impl SolidThermodynamicEntry {
             volume_angstrom3_per_atom,
             dataset,
         })
+    }
+
+    /// 0 K formation enthalpy per atom, validated finite by [`Self::new`].
+    pub fn formation_enthalpy_ev_per_atom(&self) -> f64 {
+        self.formation_enthalpy_ev_per_atom
+    }
+
+    /// Crystal volume per atom, validated finite and positive by [`Self::new`].
+    pub fn volume_angstrom3_per_atom(&self) -> f64 {
+        self.volume_angstrom3_per_atom
     }
 }
 
@@ -562,7 +572,8 @@ pub fn balanced_reaction_delta_ev_per_atom(
         reactant_atoms += species.coefficient() as f64 * atoms;
     }
 
-    Ok(Some((product_total - reactant_total) / reactant_atoms))
+    let delta = (product_total - reactant_total) / reactant_atoms;
+    Ok(delta.is_finite().then_some(delta))
 }
 
 /// The energy margin between `target` and one specific, caller-named
@@ -669,7 +680,8 @@ pub fn decomposition_margin_ev_per_atom(
         })
         .sum();
 
-    Ok(Some((assemblage_total - target_total) / target_atoms))
+    let margin = (assemblage_total - target_total) / target_atoms;
+    Ok(margin.is_finite().then_some(margin))
 }
 
 /// One named alternative assemblage compared against a target, and the
@@ -1308,5 +1320,63 @@ mod tests {
                 "amount {bad_amount} must be rejected, got {result:?}"
             );
         }
+    }
+
+    /// Fix 3 (breaking, this pass): `SolidThermodynamicEntry`'s numeric
+    /// fields are now private specifically so `new()`'s finite/positive
+    /// validation can never be bypassed via struct-literal construction
+    /// from outside this module. As defense-in-depth on top of that,
+    /// `decomposition_margin_ev_per_atom` and
+    /// `balanced_reaction_delta_ev_per_atom` must also abstain (`Ok(None)`)
+    /// rather than return `Ok(Some(NaN))` if a non-finite value ever
+    /// reaches them regardless -- this test bypasses `new()` via an
+    /// in-module struct-literal mutation (only possible because `tests` is
+    /// a descendant of this module) purely to simulate that.
+    #[test]
+    fn decomposition_margin_abstains_on_non_finite_result_instead_of_returning_nan() {
+        let batio3 = composition(&[("Ba", 1.0), ("Ti", 1.0), ("O", 3.0)]);
+        let bao = composition(&[("Ba", 1.0), ("O", 1.0)]);
+        let tio2 = composition(&[("Ti", 1.0), ("O", 2.0)]);
+
+        let mut target = SolidThermodynamicEntry::new(batio3, None, -3.5, 60.0, dataset()).unwrap();
+        target.formation_enthalpy_ev_per_atom = f64::NAN;
+        let bao_entry = SolidThermodynamicEntry::new(bao, None, -2.0, 20.0, dataset()).unwrap();
+        let tio2_entry = SolidThermodynamicEntry::new(tio2, None, -3.0, 30.0, dataset()).unwrap();
+
+        let t = Kelvin::new(900.0).unwrap();
+        let result =
+            decomposition_margin_ev_per_atom(&target, &[(bao_entry, 1.0), (tio2_entry, 1.0)], t);
+        assert_eq!(
+            result,
+            Ok(None),
+            "must abstain instead of returning Some(NaN)"
+        );
+    }
+
+    #[test]
+    fn balanced_reaction_delta_abstains_on_non_finite_result_instead_of_returning_nan() {
+        let feo = composition(&[("Fe", 1.0), ("O", 1.0)]);
+        let fe2o2 = composition(&[("Fe", 2.0), ("O", 2.0)]);
+        let reaction = BalancedReaction::new(
+            vec![species(feo.clone(), 2)],
+            vec![species(fe2o2.clone(), 1)],
+        )
+        .unwrap();
+
+        let mut fe2o2_entry =
+            SolidThermodynamicEntry::new(fe2o2, None, -3.0, 20.0, dataset()).unwrap();
+        fe2o2_entry.formation_enthalpy_ev_per_atom = f64::NAN;
+        let entries = vec![
+            SolidThermodynamicEntry::new(feo, None, -2.0, 12.0, dataset()).unwrap(),
+            fe2o2_entry,
+        ];
+
+        let result =
+            balanced_reaction_delta_ev_per_atom(&reaction, &entries, Kelvin::new(900.0).unwrap());
+        assert_eq!(
+            result,
+            Ok(None),
+            "must abstain instead of returning Some(NaN)"
+        );
     }
 }
