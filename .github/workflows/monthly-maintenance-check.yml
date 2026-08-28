@@ -1,0 +1,149 @@
+name: Monthly maintenance check
+
+# gugen is in stable-operation mode (owner's 2026-08-28 directive,
+# internal_docs/ROADMAP.md): no autonomous new research/feature work,
+# only active-maintenance items and evidence-gated reopenings. This
+# workflow is the "someone should glance at this monthly" mechanism the
+# owner asked for, replacing an ad-hoc session-only reminder (a Claude
+# session's own scheduling tools are not durable across sessions or
+# past 7 days) with something that actually recurs regardless of
+# whether any AI session is running.
+#
+# Purely informational -- never updates a dependency, never closes an
+# issue, never starts any phase, never gates a merge. Opens one new,
+# dated issue per run with a status digest; a human decides what (if
+# anything) to act on.
+#
+# No untrusted event input reaches this workflow (schedule/
+# workflow_dispatch triggers only), but command output (cargo audit,
+# gh issue list, other workflows' run status) is still routed through
+# files/env vars rather than interpolated directly into a `run:` script
+# via `${{ }}`, matching oqmd-recovery-check.yml's own discipline. The
+# one `${{ }}` used in a `run:` step is `steps.audit.outputs.exit_code`,
+# a value this workflow's own earlier step wrote (not external input).
+
+on:
+  schedule:
+    # 1st of each month, 03:17 UTC -- off-the-hour on purpose.
+    - cron: "17 3 1 * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Do not create an issue (print the digest only)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+  actions: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@cargo-audit
+
+      - name: cargo audit
+        id: audit
+        run: |
+          set +e
+          cargo audit > audit_output.txt 2>&1
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+          set -e
+          cat audit_output.txt
+
+      - name: Check for newer dependency versions (informational only -- never applied)
+        run: cargo update --dry-run > update_dry_run.txt 2>&1 || true
+
+      - name: Open issue count and titles
+        id: issues
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --json number,title,createdAt \
+            --jq '.[] | "#\(.number) \(.title) (opened \(.createdAt | split("T")[0]))"' \
+            > open_issues.txt
+          echo "count=$(wc -l < open_issues.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Last run status of the other periodic monitors
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for wf in oqmd-recovery-check.yml playground-smoke.yml; do
+            gh run list --repo "$GITHUB_REPOSITORY" --workflow "$wf" --limit 1 \
+              --json conclusion,createdAt,htmlUrl \
+              --jq '.[] | "\(.conclusion // "no runs yet") (\(.createdAt | split("T")[0])) \(.htmlUrl)"' \
+              > "monitor_${wf}.txt" || echo "no runs found" > "monitor_${wf}.txt"
+          done
+
+      - name: crates.io publish status
+        run: |
+          curl -s "https://crates.io/api/v1/crates/gugen" -A "gugen-monthly-check/1.0" \
+            | python3 -c "import json,sys; d=json.load(sys.stdin)['crate']; print(f\"max_version={d['max_version']}\")" \
+            > crates_io_status.txt || echo "crates.io check failed (network or API issue)" > crates_io_status.txt
+
+      - name: Decide whether this run may actually create an issue
+        id: decide
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DRY_RUN_INPUT: ${{ github.event.inputs.dry_run }}
+        run: |
+          if [ "$EVENT_NAME" = "schedule" ]; then
+            dry_run="false"
+          else
+            dry_run="$DRY_RUN_INPUT"
+          fi
+          echo "dry_run=$dry_run" >> "$GITHUB_OUTPUT"
+
+      - name: Compose and open the monthly digest issue
+        if: steps.decide.outputs.dry_run == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPEN_ISSUE_COUNT: ${{ steps.issues.outputs.count }}
+        run: |
+          month=$(date +%Y-%m)
+          {
+            echo "Purely informational monthly digest -- gugen is in stable-operation mode"
+            echo "(see \`internal_docs/ROADMAP.md\`'s Active maintenance / Evidence-gated /"
+            echo "Opportunistic split). Nothing here is auto-applied: no dependency was"
+            echo "updated, no issue was closed, no phase was started."
+            echo
+            echo "## cargo audit"
+            echo '```'
+            cat audit_output.txt
+            echo '```'
+            echo
+            echo "## Dependencies with a newer version available (not applied)"
+            echo '```'
+            cat update_dry_run.txt
+            echo '```'
+            echo
+            echo "## Open issues ($OPEN_ISSUE_COUNT)"
+            if [ -s open_issues.txt ]; then
+              cat open_issues.txt
+            else
+              echo "(none)"
+            fi
+            echo
+            echo "## Other periodic monitors, most recent run"
+            echo "- OQMD data availability monitor: $(cat monitor_oqmd-recovery-check.yml.txt)"
+            echo "- Playground live smoke check: $(cat monitor_playground-smoke.yml.txt)"
+            echo
+            echo "## crates.io"
+            cat crates_io_status.txt
+          } > digest.md
+          gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Monthly maintenance check -- ${month}" \
+            --body-file digest.md
+
+      - name: Print digest (dry run)
+        if: steps.decide.outputs.dry_run == 'true'
+        run: |
+          echo "cargo audit exit code: ${{ steps.audit.outputs.exit_code }}"
+          echo "open issues: ${{ steps.issues.outputs.count }}"
+          cat update_dry_run.txt
