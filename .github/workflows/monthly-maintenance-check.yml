@@ -73,15 +73,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -o pipefail
           for wf in oqmd-recovery-check.yml playground-smoke.yml; do
             gh run list --repo "$GITHUB_REPOSITORY" --workflow "$wf" --limit 1 \
-              --json conclusion,createdAt,htmlUrl \
-              --jq '.[] | "\(.conclusion // "no runs yet") (\(.createdAt | split("T")[0])) \(.htmlUrl)"' \
+              --json conclusion,createdAt,url \
+              --jq '.[] | "\(.conclusion // "no runs yet") (\(.createdAt | split("T")[0])) \(.url)"' \
               > "monitor_${wf}.txt" || echo "no runs found" > "monitor_${wf}.txt"
           done
 
       - name: crates.io publish status
         run: |
+          set -o pipefail
           curl -s "https://crates.io/api/v1/crates/gugen" -A "gugen-monthly-check/1.0" \
             | python3 -c "import json,sys; d=json.load(sys.stdin)['crate']; print(f\"max_version={d['max_version']}\")" \
             > crates_io_status.txt || echo "crates.io check failed (network or API issue)" > crates_io_status.txt
@@ -99,13 +101,10 @@ jobs:
           fi
           echo "dry_run=$dry_run" >> "$GITHUB_OUTPUT"
 
-      - name: Compose and open the monthly digest issue
-        if: steps.decide.outputs.dry_run == 'false'
+      - name: Compose the monthly digest
         env:
-          GH_TOKEN: ${{ github.token }}
           OPEN_ISSUE_COUNT: ${{ steps.issues.outputs.count }}
         run: |
-          month=$(date +%Y-%m)
           {
             echo "Purely informational monthly digest -- gugen is in stable-operation mode"
             echo "(see \`internal_docs/ROADMAP.md\`'s Active maintenance / Evidence-gated /"
@@ -136,14 +135,18 @@ jobs:
             echo "## crates.io"
             cat crates_io_status.txt
           } > digest.md
+
+      - name: Create the monthly digest issue
+        if: steps.decide.outputs.dry_run == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          month=$(date +%Y-%m)
           gh issue create \
             --repo "$GITHUB_REPOSITORY" \
             --title "Monthly maintenance check -- ${month}" \
             --body-file digest.md
 
-      - name: Print digest (dry run)
+      - name: Print digest (dry run -- no issue created)
         if: steps.decide.outputs.dry_run == 'true'
-        run: |
-          echo "cargo audit exit code: ${{ steps.audit.outputs.exit_code }}"
-          echo "open issues: ${{ steps.issues.outputs.count }}"
-          cat update_dry_run.txt
+        run: cat digest.md
