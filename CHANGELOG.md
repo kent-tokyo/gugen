@@ -4,6 +4,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-08-28
+
+A bug-check-and-refactoring sweep (the second full-`src/` pass, after
+v0.4.1's): one closed validation-bypass gap, one grammar-guard fix, and
+one internal file split. Breaking (hence the minor version bump under
+this crate's pre-1.0 SemVer convention) -- `cargo semver-checks` against
+the 0.7.0 baseline flags exactly 2 lint rules, covering exactly the
+`SolidThermodynamicEntry` field privatization below and nothing else.
+`SCHEMA_VERSION` stays `3` -- no `SynthesisPlanningReport`/`SynthesisPlan`
+shape change.
+
 ### Changed (breaking)
 
 - `SolidThermodynamicEntry`'s `formation_enthalpy_ev_per_atom` and
@@ -33,6 +44,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   this module's highest confidence class. Same bug class as the
   already-fixed `NitrateToOxideGrammar`/HNO3 issue, in a sibling
   grammar that wasn't caught then.
+
+### Internal
+
+- `src/process.rs`'s condition-conflict-resolution algorithm
+  (`ConditionConflict`/`ProcessPrecedent`/`ConditionPrecedent`/
+  `apply_condition_precedents` and helpers) moved to a new sibling
+  `src/condition_precedents.rs` -- pure file-organization change,
+  `gugen::ConditionConflict`/`ConditionPrecedent`/`ProcessPrecedent`
+  resolve identically. Not counted in `cargo semver-checks`' 2 flagged
+  changes above.
 
 ## [0.7.0] - 2026-08-27
 

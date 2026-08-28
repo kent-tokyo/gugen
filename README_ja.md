@@ -14,22 +14,16 @@
 （evidence）・仮定（assumption）・未確定条件（unresolved）を明示したまま、
 機械可読な形で返します。実験の成功を保証するものではありません。
 
-> **ステータス：v0.7.0 公開済み**（検証済みの2段階合成route primitive、
-> route接続性の検証、実コーパス駆動の検索正確性修正。詳細はCHANGELOG.md
-> 参照）。
+> **ステータス：v0.8.0 公開準備中**（バグチェック・リファクタリングの
+> 一巡。破壊的変更を1件含む。詳細はCHANGELOG.md参照）。
 > [crates.io](https://crates.io/crates/gugen) /
-> [docs.rs](https://docs.rs/gugen) /
-> [v0.7.0リリース](https://github.com/kent-tokyo/gugen/releases/tag/v0.7.0)。
-> v0.7.0では`search_two_step_routes`/`SynthesisRoute`
-> （前駆体→中間体→目標という化学量論的に連結したroute）を追加し、実
-> コーパステストで発見された`search_precursor_sets`の偽陽性
-> identity-reaction受理バグを修正し、手書きの中間体候補grammarのための
-> 任意・明示的にexperimentalな`experimental_grammar`feature（デフォルト
-> 無効）を追加しました。**これは多段階合成の精度が全般的に向上した
-> という主張ではありません**。grammar featureがrecallを改善するという
-> 主張でもなく（実測では、単純なfrequency priorを上回りませんでした）、
-> いずれかのrouteが実験的に検証済みだという主張でもありません。詳細と
-> 誠実な限界については[`CHANGELOG.md`](CHANGELOG.md)を参照してください。
+> [docs.rs](https://docs.rs/gugen)。
+> v0.8.0は`SolidThermodynamicEntry`の検証バイパス問題を解消し
+> （`BalancedReaction`/`ReactionSpecies`と同じ手法でフィールドを非公開化）、
+> experimental機能`HydroxideToOxideGrammar`のガード漏れバグを修正し、
+> `process.rs`の条件競合解決ロジックを独立ファイルへ分離しました
+> （公開APIへの影響なし）。破壊的変更の全リストと移行方法については
+> [`CHANGELOG.md`](CHANGELOG.md)を参照してください。
 
 ## ブラウザで試す
 

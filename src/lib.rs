@@ -120,7 +120,14 @@
 //! (`transformation_grammar` module); measured against the same
 //! corpus, they did not recover any target beyond a plain
 //! corpus-frequency prior, so this is not yet promised-stable API.
-//! **v0.7.0 is published** (crates.io, tagged `v0.7.0`). See `CHANGELOG.md`
+//! **v0.7.0 is published** (crates.io, tagged `v0.7.0`).
+//!
+//! v0.8.0 is a bug-check-and-refactoring sweep: `SolidThermodynamicEntry`'s
+//! two numeric fields are now private (closing the same validation-bypass
+//! gap Phase 23A closed for `BalancedReaction`/`ReactionSpecies` --
+//! breaking), `HydroxideToOxideGrammar`'s missing metal-presence guard is
+//! fixed, and `process.rs`'s condition-conflict-resolution code moved to
+//! `condition_precedents.rs` (no public API change). See `CHANGELOG.md`
 //! for the user-facing summary.
 
 #![forbid(unsafe_code)]
