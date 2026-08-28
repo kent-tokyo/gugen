@@ -278,6 +278,14 @@ impl Planner {
         // ever added.
         let mut route_suitability = Vec::new();
         if let Some(provider) = &self.route_suitability_provider {
+            // Exhaustive, wildcard-free match purely to fail to compile
+            // the moment `RouteFamily` gains a new variant -- the array
+            // literal below can't enforce that on its own. See the
+            // identical assertion in `process.rs`'s
+            // `applicable_route_family_templates`.
+            let _ = |rf: RouteFamily| match rf {
+                RouteFamily::ConventionalSolidState | RouteFamily::Mechanochemical => {}
+            };
             for route_family in [
                 RouteFamily::ConventionalSolidState,
                 RouteFamily::Mechanochemical,

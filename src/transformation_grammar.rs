@@ -228,7 +228,14 @@ impl TransformationGrammar for CarbonateToOxideGrammar {
 /// `M(OH)n -> MO(n/2) + (n/2) H2O`, identified by an exact O:H = 1:1
 /// ratio (every OH- group contributes exactly one O and one H).
 /// Narrowed to compositions with **no carbon**, to avoid confusion with
-/// hydrated carbonates or other mixed C+O+H species.
+/// hydrated carbonates or other mixed C+O+H species. Requires at least
+/// 3 distinct elements (metal + O + H), matching
+/// `CarbonateToOxideGrammar`'s own `len() < 3` guard -- without it, a
+/// metal-free 2-element O:H=1:1 composition (e.g. H2O2) would pass this
+/// grammar's own ratio check and produce a bare-oxygen "proposal" with
+/// no metal for the claimed hydroxide-decomposition mechanism to apply
+/// to (the same missing-guard bug class `NitrateToOxideGrammar`'s own
+/// hydrogen exclusion was added to close, for HNO3).
 pub struct HydroxideToOxideGrammar;
 
 impl TransformationGrammar for HydroxideToOxideGrammar {
@@ -240,7 +247,7 @@ impl TransformationGrammar for HydroxideToOxideGrammar {
         let (o, h, c) = (el("O"), el("H"), el("C"));
         let mut out = Vec::new();
         for p in precursors {
-            if p.len() < 2 || p.amount_of_frac(c).is_some() {
+            if p.len() < 3 || p.amount_of_frac(c).is_some() {
                 continue;
             }
             let (Some(o_amt), Some(h_amt)) = (p.amount_of_frac(o), p.amount_of_frac(h)) else {
@@ -352,8 +359,14 @@ impl TransformationGrammar for NitrateToOxideGrammar {
 
 /// `2 H3PO4 + M2CO3 -> 2 MH2PO4 + CO2 + H2O`, restricted to phosphoric
 /// acid (exact H:P:O = 3:1:4 signature, no other elements) paired with a
-/// monovalent-metal carbonate (exact M:C = 2:1, no hydrogen -- reusing
-/// [`CarbonateToOxideGrammar`]'s own carbonate signature). The proposed
+/// monovalent-metal carbonate (exact M:C = 2:1, no hydrogen, and an
+/// **exact** O:C = 3:1 -- deliberately stricter than
+/// [`CarbonateToOxideGrammar`]'s own carbonate check, which accepts
+/// O:C >= 3:1 to also correctly handle oxycarbonate-like compositions
+/// with extra oxide oxygen beyond the carbonate group; this grammar
+/// produces a fixed-formula guess rather than a pure mass-balance
+/// derivation, so the tighter, exact signature is the safer choice
+/// here). The proposed
 /// composition is always the fixed monobasic-phosphate formula unit
 /// `MH2PO4`, independent of the pair's actual relative amounts (matching
 /// every other grammar here: a formula-unit-shaped candidate, not a
@@ -579,6 +592,21 @@ mod tests {
             HydroxideToOxideGrammar
                 .propose(std::slice::from_ref(&not_hydroxide))
                 .is_empty()
+        );
+    }
+
+    #[test]
+    fn hydroxide_to_oxide_skips_a_metal_free_composition_instead_of_treating_it_as_a_hydroxide() {
+        // H2O2 has an exact O:H = 1:1 ratio and no carbon -- it would
+        // otherwise pass this grammar's own ratio check with no metal
+        // for the claimed hydroxide-decomposition mechanism to apply
+        // to, producing a nonsensical bare-oxygen "proposal".
+        let h2o2 = comp(&[("O", 2.0), ("H", 2.0)]);
+        assert!(
+            HydroxideToOxideGrammar
+                .propose(std::slice::from_ref(&h2o2))
+                .is_empty(),
+            "a metal-free O:H=1:1 composition must not be treated as a metal hydroxide"
         );
     }
 

@@ -688,6 +688,15 @@ pub fn applicable_route_family_templates(
     target: &Composition,
     accepted: &AcceptedPrecursorSet,
 ) -> Vec<ProcessTemplateResult> {
+    // `RouteFamily` is `#[non_exhaustive]` specifically because it's
+    // expected to grow (see its own doc comment) -- this exhaustive,
+    // wildcard-free match exists purely to fail to compile the moment a
+    // new variant is added, since the `vec![...]` below can't enforce
+    // that on its own. `Planner::plan`'s route-suitability loop has the
+    // identical assertion; update both together.
+    let _ = |rf: RouteFamily| match rf {
+        RouteFamily::ConventionalSolidState | RouteFamily::Mechanochemical => {}
+    };
     vec![
         conventional_solid_state_template(target, accepted),
         mechanochemical_template(target, accepted),
