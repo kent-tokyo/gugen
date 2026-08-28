@@ -195,4 +195,4 @@ ConfidenceAssessment {
 - Annealing heating step atmosphere: no thermodynamic or literature evidence provider is wired in yet (AGENTS.md §4.1)
 - Annealing heating step ramp rate: no thermodynamic or literature evidence provider is wired in yet (AGENTS.md §4.1)
 
-_Generated 2026-08-14T00:00:00Z by gugen 0.7.0._
+_Generated 2026-08-14T00:00:00Z by gugen 0.8.0._

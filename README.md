@@ -15,22 +15,17 @@ solid-state process plans — each with its evidence, assumptions, and
 unresolved conditions kept explicit and machine-readable. It does not
 predict experimental success.
 
-> **Status: v0.7.0 published** (validated two-step
-> synthesis-route primitives, route connectivity validation, and
-> real-corpus-driven search correctness fixes -- see CHANGELOG.md).
+> **Status: v0.8.0 pending publication** (bug-check-and-refactoring
+> sweep; one breaking validation-bypass fix -- see CHANGELOG.md).
 > [crates.io](https://crates.io/crates/gugen) /
-> [docs.rs](https://docs.rs/gugen) / [v0.7.0 release](https://github.com/kent-tokyo/gugen/releases/tag/v0.7.0).
-> v0.7.0 adds `search_two_step_routes`/`SynthesisRoute` (stoichiometrically
-> connected precursor → intermediate → target routes), fixes a spurious
-> identity-reaction acceptance bug in `search_precursor_sets` found via
-> real-corpus testing, and adds an optional, explicitly experimental
-> `experimental_grammar` feature (default off) for hand-written
-> intermediate-candidate grammars. **This is not a claim that multi-step
-> synthesis accuracy has improved in general**, that the grammar feature
-> improves recall (measured: it doesn't, beyond a plain frequency prior),
-> or that any route is experimentally validated -- see
-> [`CHANGELOG.md`](CHANGELOG.md) for the full detail and honest
-> limitations.
+> [docs.rs](https://docs.rs/gugen).
+> v0.8.0 closes a validation-bypass gap in `SolidThermodynamicEntry`
+> (private fields, matching the `BalancedReaction`/`ReactionSpecies`
+> precedent), fixes a grammar-guard bug in the experimental
+> `HydroxideToOxideGrammar`, and moves `process.rs`'s
+> condition-conflict-resolution code into its own file (no public API
+> change). See [`CHANGELOG.md`](CHANGELOG.md) for the full
+> breaking-change list and migration notes.
 
 ## Try it in your browser
 
