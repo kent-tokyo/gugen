@@ -1,10 +1,11 @@
 use crate::candidate_generator::{GeneratedCandidate, GeneratorId};
 use crate::composition::Composition;
+use crate::condition_precedents::ProcessPrecedent;
 use crate::error::ProviderError;
 use crate::literature_evidence::LiteratureRouteEvidence;
 use crate::precursor::{PrecursorCandidate, PrecursorSelection};
 use crate::prior_experiment_evidence::PriorExperimentEvidence;
-use crate::process::{ProcessPrecedent, RouteFamily};
+use crate::process::RouteFamily;
 use crate::reaction::{BalancedReaction, CompetingPhase, ReactionEnergy, ThermodynamicConditions};
 use crate::route_suitability::SuitabilityFinding;
 use crate::target::{PlanningConstraints, TargetSpecification};

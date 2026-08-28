@@ -132,6 +132,7 @@ mod chematic_crystal_adapter;
 #[cfg(feature = "commercial_catalog")]
 mod commercial_catalog;
 mod composition;
+mod condition_precedents;
 mod config;
 mod error;
 mod evidence;
@@ -185,6 +186,7 @@ pub use commercial_catalog::{
     assess_commercial_precursors_with_policy,
 };
 pub use composition::{Composition, ELEMENT_SYMBOLS, Element};
+pub use condition_precedents::{ConditionConflict, ConditionPrecedent, ProcessPrecedent};
 pub use config::{PlanningConfig, SearchBudget};
 pub use error::{GugenError, ProviderError, Result};
 pub use evidence::{EvidenceKind, EvidenceScope, EvidenceStrength, PlanningEvidence};
@@ -223,11 +225,11 @@ pub use precursor::{
 pub use precursor::{SearchDiagnosticTrace, TieBreakPolicy, search_precursor_sets_diagnostic};
 pub use prior_experiment_evidence::{InMemoryExecutionRecordProvider, PriorExperimentEvidence};
 pub use process::{
-    Atmosphere, CharacterizationMethod, ConditionConflict, ConditionPrecedent, CoolingMode,
-    DurationRange, FormingMethod, GrindingMethod, HeatingPurpose, InertGas, MaterialAmount,
-    MixingMethod, PlannedStep, PressureRange, ProcessPrecedent, ProcessStep, ProcessTemplateResult,
-    RampRateRange, ReducingAgent, RouteFamily, StepRequirement, TemperatureRange,
-    applicable_route_family_templates, conventional_solid_state_template, mechanochemical_template,
+    Atmosphere, CharacterizationMethod, CoolingMode, DurationRange, FormingMethod, GrindingMethod,
+    HeatingPurpose, InertGas, MaterialAmount, MixingMethod, PlannedStep, PressureRange,
+    ProcessStep, ProcessTemplateResult, RampRateRange, ReducingAgent, RouteFamily, StepRequirement,
+    TemperatureRange, applicable_route_family_templates, conventional_solid_state_template,
+    mechanochemical_template,
 };
 pub use provenance::PlanningProvenance;
 pub use provider::{

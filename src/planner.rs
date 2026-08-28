@@ -1,12 +1,12 @@
 use crate::composition::Element;
+use crate::condition_precedents::{
+    ConditionPrecedent, ProcessPrecedent, apply_condition_precedents,
+};
 use crate::config::PlanningConfig;
 use crate::error::{ProviderError, Result};
 use crate::evidence::{EvidenceKind, EvidenceScope, EvidenceStrength, PlanningEvidence};
 use crate::precursor::{PrecursorId, PrecursorSelection, search_precursor_sets};
-use crate::process::{
-    ConditionPrecedent, ProcessPrecedent, RouteFamily, applicable_route_family_templates,
-    apply_condition_precedents,
-};
+use crate::process::{RouteFamily, applicable_route_family_templates};
 use crate::provenance::PlanningProvenance;
 use crate::provider::{
     LiteratureEvidenceProvider, PrecursorCatalog, PriorExperimentEvidenceProvider,
@@ -952,6 +952,7 @@ fn assess_applicability(target: &TargetSpecification) -> ApplicabilityAssessment
 mod tests {
     use super::*;
     use crate::composition::Composition;
+    use crate::condition_precedents::ProcessPrecedent;
     use crate::config::SearchBudget;
     use crate::error::ProviderError;
     use crate::literature_evidence::{
@@ -960,7 +961,6 @@ mod tests {
     };
     use crate::precursor::{AvailabilityMetadata, InMemoryPrecursorCatalog, PrecursorCandidate};
     use crate::prior_experiment_evidence::PriorExperimentEvidence;
-    use crate::process::ProcessPrecedent;
     use crate::reaction::ReactionEnergy;
     use crate::target::PlanningConstraints;
 
