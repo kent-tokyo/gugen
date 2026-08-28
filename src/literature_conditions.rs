@@ -1,11 +1,9 @@
 use crate::composition::{Composition, Element};
+use crate::condition_precedents::{ConditionPrecedent, ProcessPrecedent};
 use crate::error::ProviderError;
 use crate::evidence::{EvidenceKind, EvidenceScope, EvidenceStrength};
 use crate::precursor::{PrecursorId, PrecursorSelection};
-use crate::process::{
-    Atmosphere, ConditionPrecedent, DurationRange, HeatingPurpose, ProcessPrecedent,
-    TemperatureRange,
-};
+use crate::process::{Atmosphere, DurationRange, HeatingPurpose, TemperatureRange};
 use crate::provider::ProcessEvidenceProvider;
 use crate::target::TargetSpecification;
 use std::collections::BTreeSet;

@@ -1,10 +1,11 @@
 use crate::composition::{Composition, Element};
+use crate::condition_precedents::{
+    CONDITION_FIELD_ATMOSPHERE, CONDITION_FIELD_DURATION, CONDITION_FIELD_RAMP_RATE,
+    CONDITION_FIELD_TEMPERATURE, ConditionConflict,
+};
 use crate::error::{GugenError, Result, require_finite};
 use crate::evidence::{EvidenceStrength, PlanningEvidence};
-use crate::process::{
-    CONDITION_FIELD_ATMOSPHERE, CONDITION_FIELD_DURATION, CONDITION_FIELD_RAMP_RATE,
-    CONDITION_FIELD_TEMPERATURE, ConditionConflict, PlannedStep, ProcessStep, RouteFamily,
-};
+use crate::process::{PlannedStep, ProcessStep, RouteFamily};
 use crate::reaction::BalancedReaction;
 use crate::report::{
     ApplicabilityAssessment, PlanningWarning, UnresolvedRequirement, WarningSeverity,
