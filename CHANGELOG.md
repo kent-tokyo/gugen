@@ -4,6 +4,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `HydroxideToOxideGrammar` (`experimental_grammar` feature) no longer
+  misclassifies a metal-free O:H=1:1 composition (e.g. H2O2) as a metal
+  hydroxide -- it lacked the metal-presence guard every sibling grammar
+  already has, so it could produce a bare-oxygen "proposal" tagged with
+  this module's highest confidence class. Same bug class as the
+  already-fixed `NitrateToOxideGrammar`/HNO3 issue, in a sibling
+  grammar that wasn't caught then.
+
 ## [0.7.0] - 2026-08-27
 
 Validated two-step synthesis-route primitives, route connectivity
