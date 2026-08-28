@@ -15,10 +15,10 @@ solid-state process plans — each with its evidence, assumptions, and
 unresolved conditions kept explicit and machine-readable. It does not
 predict experimental success.
 
-> **Status: v0.8.0 pending publication** (bug-check-and-refactoring
+> **Status: v0.8.0 published** (bug-check-and-refactoring
 > sweep; one breaking validation-bypass fix -- see CHANGELOG.md).
 > [crates.io](https://crates.io/crates/gugen) /
-> [docs.rs](https://docs.rs/gugen).
+> [docs.rs](https://docs.rs/gugen) / [v0.8.0 release](https://github.com/kent-tokyo/gugen/releases/tag/v0.8.0).
 > v0.8.0 closes a validation-bypass gap in `SolidThermodynamicEntry`
 > (private fields, matching the `BalancedReaction`/`ReactionSpecies`
 > precedent), fixes a grammar-guard bug in the experimental

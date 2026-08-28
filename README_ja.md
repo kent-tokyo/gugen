@@ -14,10 +14,11 @@
 （evidence）・仮定（assumption）・未確定条件（unresolved）を明示したまま、
 機械可読な形で返します。実験の成功を保証するものではありません。
 
-> **ステータス：v0.8.0 公開準備中**（バグチェック・リファクタリングの
+> **ステータス：v0.8.0 公開済み**（バグチェック・リファクタリングの
 > 一巡。破壊的変更を1件含む。詳細はCHANGELOG.md参照）。
 > [crates.io](https://crates.io/crates/gugen) /
-> [docs.rs](https://docs.rs/gugen)。
+> [docs.rs](https://docs.rs/gugen) /
+> [v0.8.0リリース](https://github.com/kent-tokyo/gugen/releases/tag/v0.8.0)。
 > v0.8.0は`SolidThermodynamicEntry`の検証バイパス問題を解消し
 > （`BalancedReaction`/`ReactionSpecies`と同じ手法でフィールドを非公開化）、
 > experimental機能`HydroxideToOxideGrammar`のガード漏れバグを修正し、

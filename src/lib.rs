@@ -127,7 +127,8 @@
 //! gap Phase 23A closed for `BalancedReaction`/`ReactionSpecies` --
 //! breaking), `HydroxideToOxideGrammar`'s missing metal-presence guard is
 //! fixed, and `process.rs`'s condition-conflict-resolution code moved to
-//! `condition_precedents.rs` (no public API change). See `CHANGELOG.md`
+//! `condition_precedents.rs` (no public API change).
+//! **v0.8.0 is published** (crates.io, tagged `v0.8.0`). See `CHANGELOG.md`
 //! for the user-facing summary.
 
 #![forbid(unsafe_code)]
