@@ -44,8 +44,9 @@ should not assume the variant list is complete. It does **not** block
 constructing an existing named variant from outside this crate, and it says
 nothing about structs — a `#[non_exhaustive]` struct still allows external
 struct-literal construction unless its fields are also private (the
-mechanism `BalancedReaction`/`ReactionSpecies` use as of v0.5.0, Phase 23A;
-see the CHANGELOG). No struct in this crate is `#[non_exhaustive]` today.
+mechanism `BalancedReaction`/`ReactionSpecies` use as of v0.5.0, Phase 23A,
+and `SolidThermodynamicEntry` as of v0.8.0; see the CHANGELOG). No struct
+in this crate is `#[non_exhaustive]` today.
 
 No enum without a stated growth expectation in its own doc comment is
 guaranteed to *stay* closed forever — `#[non_exhaustive]` is added to a type
