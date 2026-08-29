@@ -4,6 +4,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed (breaking)
+
+- `TemperatureRange`, `DurationRange`, `PressureRange`, `RampRateRange`
+  (`src/process.rs`), and `ParticleSizeRangeUm` (`commercial_catalog`
+  feature) all had `pub min`/`pub max` `f64` fields, so each type's own
+  `new()` validation (finite, `min <= max`, non-negative where
+  physically required) could be bypassed via direct struct-literal
+  construction -- the exact bug class the `[0.8.0]` entry below
+  describes and fixes for `SolidThermodynamicEntry`, found in five more
+  public types during an independent follow-up sweep of the same bug
+  class. Fields are now private; accessor methods of the same names
+  (e.g. `min_celsius()`/`max_celsius()`) were added -- for the four
+  `process.rs` types, generated once inside the shared
+  `validated_range!` macro. No known caller constructs any of these
+  types via struct literal (every existing call site already goes
+  through `new()` or the `new()`-routed `Deserialize` impl), so this is
+  expected to be a no-op for real users, but it is semver-breaking
+  (`cargo semver-checks` confirms: exactly these 5 types' fields
+  flagged, nothing else). Also added a rejection test for
+  `PressureRange::new` and `ParticleSizeRangeUm::new`, neither of which
+  had one before, found incidentally while making this fix.
+
+### Documentation
+
+- `ConditionConflict` (re-exported at the crate root) now has its own
+  rustdoc on docs.rs. Its description had been fused into a doc
+  comment block that rustdoc attached only to `CONDITION_FIELD_TEMPERATURE`
+  instead -- pre-existing since before the `[0.8.0]`
+  `process.rs` → `condition_precedents.rs` split, which faithfully
+  carried the misattachment through rather than introducing it.
+
 ## [0.8.0] - 2026-08-28
 
 A bug-check-and-refactoring sweep (the second full-`src/` pass, after
