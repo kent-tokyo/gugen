@@ -282,5 +282,5 @@ required-features = ["serde"]
 
 [[bin]]
 name = "gugen"
-path = "src/bin/gugen.rs"
+path = "src/bin/gugen/main.rs"
 required-features = ["serde", "clap"]

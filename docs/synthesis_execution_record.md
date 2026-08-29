@@ -119,9 +119,9 @@ that entirely.
 Result<(Vec<SynthesisExecutionRecord>, ExecutionRecordLoadReport), ProviderError>`
 is pure -- it takes an in-memory JSONL string and never opens a file.
 This matches a real, confirmed boundary across the entire crate: no
-library module (only `src/bin/gugen.rs`) ever calls `std::fs`/`File`/
-`OpenOptions`. Appending to, or reading, an actual file is the caller's
-own few-line responsibility:
+library module (only the CLI binary's `src/bin/gugen/commands.rs`)
+ever calls `std::fs`/`File`/`OpenOptions`. Appending to, or reading, an
+actual file is the caller's own few-line responsibility:
 
 ```rust
 let mut f = std::fs::OpenOptions::new().create(true).append(true).open(path)?;
