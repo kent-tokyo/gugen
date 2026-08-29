@@ -42,26 +42,6 @@ pub struct ConditionPrecedent {
     pub applicable_to: EvidenceScope,
 }
 
-/// Splices provider-supplied, cited condition data into `steps`'s `Heat`
-/// fields (Phase 10). Only ever fills an already-`None` slot -- never
-/// overwrites a field some other resolution source already set -- so this
-/// composes with any future resolution source rather than one silently
-/// clobbering another. Returns one `PlanningEvidence` entry per `Heat` step
-/// a precedent actually changed, carrying that precedent's own
-/// `evidence_kind`/`strength`/`source_id`/`applicable_to` rather than a
-/// value this function invents.
-/// One `Heat` step field where two or more matching `ConditionPrecedent`s
-/// disagreed, so it was deliberately left unresolved rather than picking
-/// one arbitrarily or averaging (Phase 19 -- the owner's explicit
-/// "架空の平均値を作らず未解決として示す" directive). `step_index` is
-/// this field's position in the `steps` slice `apply_condition_precedents`
-/// was called with, so callers can attach `reason` to the right
-/// `UnresolvedRequirement`. Disagreement is exact-value inequality only
-/// (`PartialEq`) -- an overlapping-but-not-identical range (e.g. a point
-/// value inside a wider reported range) still counts as a conflict, the
-/// conservative reading, since `TemperatureRange`/`DurationRange`/
-/// `RampRateRange` have no overlap/subsumption semantics and inventing
-/// one is explicitly out of scope for this phase.
 /// The four `ConditionConflict.field`/`format_conflict_reason` literals
 /// this module produces, defined once so `score.rs`'s consumer-side
 /// lookup (`condition_conflicts.iter().find(|c| c.field == field)`)
@@ -75,6 +55,18 @@ pub(crate) const CONDITION_FIELD_DURATION: &str = "duration";
 pub(crate) const CONDITION_FIELD_ATMOSPHERE: &str = "atmosphere";
 pub(crate) const CONDITION_FIELD_RAMP_RATE: &str = "ramp rate";
 
+/// One `Heat` step field where two or more matching `ConditionPrecedent`s
+/// disagreed, so it was deliberately left unresolved rather than picking
+/// one arbitrarily or averaging (Phase 19 -- the owner's explicit
+/// "架空の平均値を作らず未解決として示す" directive). `step_index` is
+/// this field's position in the `steps` slice `apply_condition_precedents`
+/// was called with, so callers can attach `reason` to the right
+/// `UnresolvedRequirement`. Disagreement is exact-value inequality only
+/// (`PartialEq`) -- an overlapping-but-not-identical range (e.g. a point
+/// value inside a wider reported range) still counts as a conflict, the
+/// conservative reading, since `TemperatureRange`/`DurationRange`/
+/// `RampRateRange` have no overlap/subsumption semantics and inventing
+/// one is explicitly out of scope for this phase.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConditionConflict {
     pub step_index: usize,
@@ -142,6 +134,15 @@ fn format_conflict_reason<T: std::fmt::Debug>(
     )
 }
 
+/// Splices provider-supplied, cited condition data into `steps`'s `Heat`
+/// fields (Phase 10). Only ever fills an already-`None` slot -- never
+/// overwrites a field some other resolution source already set -- so this
+/// composes with any future resolution source rather than one silently
+/// clobbering another. Returns one `PlanningEvidence` entry per `Heat` step
+/// a precedent actually changed, carrying that precedent's own
+/// `evidence_kind`/`strength`/`source_id`/`applicable_to` rather than a
+/// value this function invents.
+///
 /// Order-independent (Phase 19): every matching precedent for a step's
 /// purpose is evaluated against that field's *original* pre-call state,
 /// never against a state some earlier precedent in `precedents` already
