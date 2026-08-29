@@ -392,15 +392,15 @@ mod tests {
         else {
             panic!("expected Heat step");
         };
-        assert_eq!(temperature.unwrap().min_celsius, 900.0);
-        assert_eq!(duration.unwrap().min_hours, 2.0);
+        assert_eq!(temperature.unwrap().min_celsius(), 900.0);
+        assert_eq!(duration.unwrap().min_hours(), 2.0);
         assert!(matches!(atmosphere, Some(Atmosphere::Air)));
 
         let ProcessStep::Heat { temperature, .. } = &steps[1].step else {
             panic!("expected Heat step");
         };
         assert_eq!(
-            temperature.unwrap().min_celsius,
+            temperature.unwrap().min_celsius(),
             1.0,
             "an already-resolved field must not be overwritten by a later precedent"
         );
@@ -570,7 +570,7 @@ mod tests {
         let ProcessStep::Heat { temperature, .. } = &steps[0].step else {
             panic!("expected Heat step");
         };
-        assert_eq!(temperature.unwrap().min_celsius, 900.0);
+        assert_eq!(temperature.unwrap().min_celsius(), 900.0);
         assert!(conflicts.is_empty());
         let sources: std::collections::BTreeSet<&str> = evidence
             .iter()
@@ -653,7 +653,7 @@ mod tests {
         };
         assert!(temperature.is_none(), "temperature genuinely conflicts");
         assert_eq!(
-            duration.unwrap().min_hours,
+            duration.unwrap().min_hours(),
             2.0,
             "duration agrees across both precedents and must still resolve"
         );

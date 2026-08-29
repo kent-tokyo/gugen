@@ -76,8 +76,8 @@ fn cao_calcination_temperature_and_duration_resolve_from_the_curated_record() {
             _ => None,
         })
         .expect("carbonate route must have a Calcination step");
-    assert_eq!(calcination.0.unwrap().min_celsius, 900.0);
-    assert_eq!(calcination.1.unwrap().min_hours, 1.0);
+    assert_eq!(calcination.0.unwrap().min_celsius(), 900.0);
+    assert_eq!(calcination.1.unwrap().min_hours(), 1.0);
 
     assert!(
         plan.evidence
@@ -124,8 +124,8 @@ fn mgal2o4_sintering_temperature_and_duration_resolve_from_the_curated_record() 
             _ => None,
         })
         .expect("oxide route must have a Sintering step");
-    assert_eq!(sintering.0.unwrap().min_celsius, 1725.0);
-    assert_eq!(sintering.1.unwrap().min_hours, 6.0);
+    assert_eq!(sintering.0.unwrap().min_celsius(), 1725.0);
+    assert_eq!(sintering.1.unwrap().min_hours(), 6.0);
 }
 
 /// La2O3 + Al2O3 -> LaAlO3 has no byproduct, so (like MgAl2O4) the
@@ -156,8 +156,8 @@ fn laalo3_sintering_temperature_and_duration_resolve_from_the_curated_record() {
             _ => None,
         })
         .expect("oxide route must have a Sintering step");
-    assert_eq!(sintering.0.unwrap().min_celsius, 1500.0);
-    assert_eq!(sintering.1.unwrap().min_hours, 5.0);
+    assert_eq!(sintering.0.unwrap().min_celsius(), 1500.0);
+    assert_eq!(sintering.1.unwrap().min_hours(), 5.0);
 }
 
 /// BaCO3 + TiO2 -> BaTiO3 + CO2 releases a byproduct, so both Calcination
@@ -188,12 +188,12 @@ fn batio3_calcination_and_sintering_temperature_resolve_from_the_curated_record(
         {
             match purpose {
                 gugen::HeatingPurpose::Calcination => {
-                    assert_eq!(temperature.unwrap().min_celsius, 1000.0);
-                    assert_eq!(duration.unwrap().min_hours, 2.0);
+                    assert_eq!(temperature.unwrap().min_celsius(), 1000.0);
+                    assert_eq!(duration.unwrap().min_hours(), 2.0);
                 }
                 gugen::HeatingPurpose::Sintering => {
-                    assert_eq!(temperature.unwrap().min_celsius, 1200.0);
-                    assert_eq!(temperature.unwrap().max_celsius, 1350.0);
+                    assert_eq!(temperature.unwrap().min_celsius(), 1200.0);
+                    assert_eq!(temperature.unwrap().max_celsius(), 1350.0);
                     assert!(
                         duration.is_none(),
                         "sintering duration is not stated in the source and must stay \
@@ -257,7 +257,7 @@ fn zn3po42_from_a_different_precursor_route_resolves_as_similar_material_not_exa
         })
         .expect("ZnO + P2O5 route must have a Sintering step (no byproduct)");
     assert_eq!(
-        sintering.unwrap().min_celsius,
+        sintering.unwrap().min_celsius(),
         950.0,
         "the ZnO + (NH4)2HPO4-sourced record must still apply to this different, \
         same-target precursor route"
@@ -415,7 +415,7 @@ fn conflicting_precedents_from_one_provider_call_leave_the_field_unresolved_end_
         sintering.0
     );
     assert_eq!(
-        sintering.1.unwrap().min_hours,
+        sintering.1.unwrap().min_hours(),
         1.0,
         "duration agrees across both precedents and must still resolve"
     );

@@ -126,8 +126,8 @@ impl<'de> serde::Deserialize<'de> for PackageMass {
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct ParticleSizeRangeUm {
-    pub min_um: f64,
-    pub max_um: f64,
+    min_um: f64,
+    max_um: f64,
 }
 
 impl ParticleSizeRangeUm {
@@ -148,6 +148,14 @@ impl ParticleSizeRangeUm {
             });
         }
         Ok(Self { min_um, max_um })
+    }
+
+    pub fn min_um(&self) -> f64 {
+        self.min_um
+    }
+
+    pub fn max_um(&self) -> f64 {
+        self.max_um
     }
 }
 
@@ -824,6 +832,14 @@ mod tests {
         assert!(PackageMass::new(-1.0).is_err());
         assert_eq!(PackageMass::from_kilograms(1.0).unwrap().grams(), 1000.0);
         assert_eq!(PackageMass::from_milligrams(500.0).unwrap().grams(), 0.5);
+    }
+
+    #[test]
+    fn particle_size_range_rejects_non_finite_negative_and_inverted() {
+        assert!(ParticleSizeRangeUm::new(f64::NAN, 10.0).is_err());
+        assert!(ParticleSizeRangeUm::new(-1.0, 10.0).is_err());
+        assert!(ParticleSizeRangeUm::new(10.0, 5.0).is_err());
+        assert!(ParticleSizeRangeUm::new(1.0, 10.0).is_ok());
     }
 
     #[test]

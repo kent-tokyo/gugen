@@ -13,8 +13,8 @@ macro_rules! validated_range {
         #[derive(Debug, Clone, Copy, PartialEq)]
         #[cfg_attr(feature = "serde", derive(serde::Serialize))]
         pub struct $name {
-            pub $min: f64,
-            pub $max: f64,
+            $min: f64,
+            $max: f64,
         }
 
         impl $name {
@@ -34,6 +34,14 @@ macro_rules! validated_range {
                     });
                 }
                 Ok(Self { $min, $max })
+            }
+
+            pub fn $min(&self) -> f64 {
+                self.$min
+            }
+
+            pub fn $max(&self) -> f64 {
+                self.$max
             }
         }
 
@@ -680,6 +688,13 @@ mod tests {
     fn rejects_negative_duration() {
         assert!(DurationRange::new(-1.0, 2.0).is_err());
         assert!(DurationRange::new(1.0, 2.0).is_ok());
+    }
+
+    #[test]
+    fn rejects_negative_or_inverted_pressure() {
+        assert!(PressureRange::new(-1.0, 2.0).is_err());
+        assert!(PressureRange::new(900.0, 700.0).is_err());
+        assert!(PressureRange::new(100.0, 200.0).is_ok());
     }
 
     /// AGENTS.md §11: "すべての材料へ同じtemplateを適用してはいけません" --
