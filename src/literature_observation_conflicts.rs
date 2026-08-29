@@ -236,10 +236,10 @@ fn cross_doi_comparisons(
         }
     }
     let route_operation_shapes: BTreeMap<RouteKey, BTreeSet<usize>> = route_doi_shape
-        .into_iter()
+        .iter()
         .map(|(route_key, dois)| {
-            let counts: BTreeSet<usize> = dois.into_values().map(|(_, count)| count).collect();
-            (route_key, counts)
+            let counts: BTreeSet<usize> = dois.values().map(|&(_, count)| count).collect();
+            (route_key.clone(), counts)
         })
         .collect();
 
@@ -250,6 +250,19 @@ fn cross_doi_comparisons(
     let mut buckets: BTreeMap<StepAlignmentKey, BTreeMap<String, &CorpusHeatingObservation>> =
         BTreeMap::new();
     for obs in &doi_observations {
+        let route_key: RouteKey = (obs.target.clone(), obs.precursors.clone(), obs.route_family);
+        let doi = obs.doi.clone().expect("filtered to Some above");
+        // Only this DOI's own canonical (lowest-corpus_record_index) shape
+        // for this route ever reaches the buckets below -- the same
+        // canonicalization `route_doi_shape` above already applied. Without
+        // this, a DOI whose own records span more than one shape would
+        // populate more than one shape's buckets here, contradicting
+        // `has_multiple_operation_shapes`/`observed_operation_counts`
+        // above, which only ever count that DOI's single canonical shape.
+        let (canonical_record, _) = route_doi_shape[&route_key][&doi];
+        if obs.corpus_record_index != canonical_record {
+            continue;
+        }
         let key = StepAlignmentKey {
             target: obs.target.clone(),
             precursor_set: obs.precursors.clone(),
@@ -257,7 +270,6 @@ fn cross_doi_comparisons(
             heating_operation_count: record_operation_count[&obs.corpus_record_index],
             operation_index: obs.operation_index,
         };
-        let doi = obs.doi.clone().expect("filtered to Some above");
         let bucket = buckets.entry(key).or_default();
         let replace = match bucket.get(&doi) {
             Some(existing) => obs.corpus_record_index < existing.corpus_record_index,
@@ -585,6 +597,60 @@ mod tests {
             "a single DOI's own internal shape disagreement must never set this flag"
         );
         assert_eq!(route.observed_operation_counts, vec![1]);
+    }
+
+    #[test]
+    fn two_dois_each_with_their_own_non_canonical_extra_shape_never_leak_into_step_groups() {
+        let (target, precursors) = bto();
+        // DOI "a": a canonical 1-step record (lowest corpus_record_index)
+        // plus its own non-canonical 2-step record for the same route --
+        // a within-paper artifact, same shape as
+        // `a_single_dois_own_shape_disagreement_never_sets_the_route_flag`
+        // above.
+        let a_one_step = obs_temp(0, 0, "10.1/a", target.clone(), &precursors, temp(900.0));
+        let a_two_step_0 = obs_temp(10, 0, "10.1/a", target.clone(), &precursors, temp(700.0));
+        let a_two_step_1 = obs_temp(10, 1, "10.1/a", target.clone(), &precursors, temp(1100.0));
+        // DOI "b": the same pattern, independently -- its own canonical
+        // 1-step record plus its own non-canonical 2-step record. Before
+        // the fix, "a" and "b"'s non-canonical 2-step records agreed with
+        // each other (both 700.0/1100.0), so each 2-step bucket reached
+        // doi_map.len() == 2 and survived into step_groups even though
+        // route_doi_shape canonicalizes both DOIs to their 1-step shape.
+        let b_one_step = obs_temp(1, 0, "10.1/b", target.clone(), &precursors, temp(950.0));
+        let b_two_step_0 = obs_temp(11, 0, "10.1/b", target.clone(), &precursors, temp(700.0));
+        let b_two_step_1 = obs_temp(11, 1, "10.1/b", target, &precursors, temp(1100.0));
+
+        let result = cross_doi_comparisons(&[
+            a_one_step,
+            a_two_step_0,
+            a_two_step_1,
+            b_one_step,
+            b_two_step_0,
+            b_two_step_1,
+        ]);
+        assert_eq!(result.len(), 1);
+        let route = &result[0];
+        assert!(!route.has_multiple_operation_shapes);
+        assert_eq!(route.observed_operation_counts, vec![1]);
+        assert_eq!(
+            route.step_groups.len(),
+            1,
+            "only the two DOIs' shared canonical (1-step) shape may produce a step group -- \
+            their own non-canonical 2-step records must not leak in just because they happen \
+            to agree with each other: {:?}",
+            route.step_groups
+        );
+        for group in &route.step_groups {
+            assert!(
+                route
+                    .observed_operation_counts
+                    .contains(&group.key.heating_operation_count),
+                "every step group's heating_operation_count must be one of the route's own \
+                reported observed_operation_counts -- {:?} is not in {:?}",
+                group.key.heating_operation_count,
+                route.observed_operation_counts
+            );
+        }
     }
 
     #[test]

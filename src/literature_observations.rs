@@ -7,12 +7,14 @@
 //! lookups against it, returning [`CorpusHeatingObservation`] values.
 //! Nothing here is promoted to a [`ConditionPrecedent`](crate::ConditionPrecedent)
 //! or fed to [`Planner`](crate::Planner)/`score_plan`/ranking, and this is
-//! not just a convention this module happens to follow: it is structurally
-//! impossible, because `ConditionPrecedent::purpose` is a required
-//! [`HeatingPurpose`](crate::HeatingPurpose) (not optional), while
-//! [`CorpusHeatingObservation::heating_purpose`] is always `None` (enforced
-//! at construction and at deserialize time, see below) -- there is no
-//! lossless conversion from one to the other. Promotion to
+//! not just a convention this module happens to follow: `ConditionPrecedent::purpose`
+//! is a required [`HeatingPurpose`](crate::HeatingPurpose) (not optional), while
+//! every [`CorpusHeatingObservation`] this crate's own snapshot-loading path
+//! (`Deserialize`, see below) can produce has `heating_purpose: None` -- there
+//! is no lossless conversion from one to the other for any value reachable
+//! that way. (`heating_purpose` is a `pub` field with no smart constructor,
+//! so this holds for values loaded from a snapshot, not for a struct literal
+//! an external caller chooses to hand-construct instead.) Promotion to
 //! `ConditionPrecedent` is deliberately deferred to a future phase gated on
 //! a manual purpose-matching accuracy audit, which does not exist yet.
 //!
