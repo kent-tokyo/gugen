@@ -15,11 +15,13 @@ solid-state process plans — each with its evidence, assumptions, and
 unresolved conditions kept explicit and machine-readable. It does not
 predict experimental success.
 
-> **Status: v0.8.0 published** (bug-check-and-refactoring
-> sweep; one breaking validation-bypass fix -- see CHANGELOG.md).
+> **Status: v0.8.1 published** (competitive-boundary APIs, manifest
+> validation, and candidate hardening -- see CHANGELOG.md).
 > [crates.io](https://crates.io/crates/gugen) /
-> [docs.rs](https://docs.rs/gugen) / [v0.8.0 release](https://github.com/kent-tokyo/gugen/releases/tag/v0.8.0).
-> v0.8.0 closes a validation-bypass gap in `SolidThermodynamicEntry`
+> [docs.rs](https://docs.rs/gugen) / [v0.8.1 release](https://github.com/kent-tokyo/gugen/releases/tag/v0.8.1).
+> v0.8.1 adds offline reaction-network ingestion, composition retrieval,
+> fixed ranking/portfolio boundaries, and comparative-protocol validation.
+> It also closes a validation-bypass gap in `SolidThermodynamicEntry`
 > (private fields, matching the `BalancedReaction`/`ReactionSpecies`
 > precedent), fixes a grammar-guard bug in the experimental
 > `HydroxideToOxideGrammar`, and moves `process.rs`'s
@@ -45,8 +47,8 @@ phase product, reaction completion at a stated temperature, high yield,
 safe executability, patentability, or industrial scalability. A ranking
 score is an ordinal, explainable measure for sorting candidates against
 each other — never a success probability. See
-[`docs/scientific_scope.md`](docs/scientific_scope.md) for the full list
-of what's in and out of scope for v0.1, and
+[`docs/scientific_scope.md`](docs/scientific_scope.md) for the current
+scope, and
 [`docs/evidence_model.md`](docs/evidence_model.md) for how evidence,
 assumptions, and unresolved conditions are kept separate.
 
@@ -277,6 +279,8 @@ gugen balance reaction.json
 gugen plan target.json --catalog precursors.json [--output report.json] [--format json|markdown]
 gugen explain report.json --plan plan-001
 gugen validate-target target.json
+gugen validate-network network.jsonl --mode lenient
+gugen validate-comparative manifest.json
 gugen doctor
 gugen batch input.json --catalog precursors.json [--output out.json]
 ```
@@ -370,7 +374,7 @@ rejected-candidate section for length — all are in the full file):
 
 ### Evidence
 
-- [Weak/ProcessTemplate] weigh/mix/grind/form are the fixed opening sequence of the v0.1 conventional solid-state template
+- [Weak/ProcessTemplate] weigh/mix/grind/form are the fixed opening sequence of the conventional solid-state template
 - [Strong/StoichiometricBalance] balanced reaction releases a byproduct beyond the target, indicating a decomposition (calcination) step is needed before the final firing step
 - [Weak/ProcessTemplate] AGENTS.md §11's template outline places a regrind between calcination and final firing
 
@@ -432,10 +436,9 @@ with its reason code.
      explainable diagnostics    synthesis/process planning
 ```
 
-gugen depends on `chematic-crystal` for periodic structure types once
-that crate is published (not yet, as of 2026-08-14 — see
-[`docs/integration.md`](docs/integration.md)); until then it builds
-against a minimal trait boundary it owns itself. `mikiwame` is published
+gugen depends on the published `chematic-crystal` 1.0.9 for periodic
+structure types (see [`docs/integration.md`](docs/integration.md)).
+`mikiwame` is published
 and integrated as an optional, off-by-default `mikiwame` feature
 (`cargo build --features mikiwame`) that maps its structural diagnostics
 onto gugen's own warnings/confidence — not yet wired into `Planner::plan`,

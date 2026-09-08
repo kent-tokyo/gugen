@@ -494,10 +494,10 @@ fn fuse_min_rank(
         .filter_map(|id| {
             let mut best: Option<(PrecursorCandidate, usize)> = None;
             for m in maps {
-                if let Some((c, r)) = m.get(&id) {
-                    if best.as_ref().is_none_or(|(_, br)| r < br) {
-                        best = Some((c.clone(), *r));
-                    }
+                if let Some((c, r)) = m.get(&id)
+                    && best.as_ref().is_none_or(|(_, br)| r < br)
+                {
+                    best = Some((c.clone(), *r));
                 }
             }
             best.map(|(c, r)| (c, r as f64))

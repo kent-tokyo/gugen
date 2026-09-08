@@ -77,10 +77,10 @@ fn render_equation(
         if composition == target {
             return target_formula.to_string();
         }
-        if let Some((name, bp)) = byproduct_name.zip(byproduct) {
-            if composition == bp {
-                return name.to_string();
-            }
+        if let Some((name, bp)) = byproduct_name.zip(byproduct)
+            && composition == bp
+        {
+            return name.to_string();
         }
         reactant_formulas
             .iter()

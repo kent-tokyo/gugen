@@ -1,4 +1,8 @@
-# Architecture (Phase 0 design)
+# Architecture (current design)
+
+The original Phase 0 design has been extended through v0.8.1. This file
+describes current module boundaries; detailed phase evidence remains in the
+individual audit documents.
 
 ## Crate shape
 
@@ -116,9 +120,9 @@ fractions, not floating point.
 
 ## Provider isolation
 
-`provider.rs` traits are the only supported extension point for external
-data. Core has zero network access (AGENTS.md §8, §25); `in-memory`, JSON,
-and fixture providers ship in v0.1.
+`provider.rs` traits are the supported extension point for external data.
+Core has zero network access; in-memory, JSON, fixture, and caller-supplied
+snapshot providers are used where implemented.
 
 Refined in Phase 13, once a real precedent existed to refine it against:
 an adapter that only *consumes* pre-fetched, caller-supplied external data

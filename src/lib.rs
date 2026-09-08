@@ -122,23 +122,28 @@
 //! corpus-frequency prior, so this is not yet promised-stable API.
 //! **v0.7.0 is published** (crates.io, tagged `v0.7.0`).
 //!
-//! v0.8.0 is a bug-check-and-refactoring sweep: `SolidThermodynamicEntry`'s
+//! v0.8.1 adds offline competitive-boundary APIs for network ingestion,
+//! composition retrieval, fixed ranking/portfolio selection, and comparative
+//! protocol validation. It also carries the v0.8.0 bug-check-and-refactoring
+//! sweep: `SolidThermodynamicEntry`'s
 //! two numeric fields are now private (closing the same validation-bypass
 //! gap Phase 23A closed for `BalancedReaction`/`ReactionSpecies` --
 //! breaking), `HydroxideToOxideGrammar`'s missing metal-presence guard is
 //! fixed, and `process.rs`'s condition-conflict-resolution code moved to
 //! `condition_precedents.rs` (no public API change).
-//! **v0.8.0 is published** (crates.io, tagged `v0.8.0`). See `CHANGELOG.md`
+//! **v0.8.1 is published** (crates.io, tagged `v0.8.1`). See `CHANGELOG.md`
 //! for the user-facing summary.
 
 #![forbid(unsafe_code)]
 
+mod action_graph;
 mod balance;
 mod candidate_generator;
 #[cfg(feature = "chematic_crystal")]
 mod chematic_crystal_adapter;
 #[cfg(feature = "commercial_catalog")]
 mod commercial_catalog;
+mod comparative;
 mod composition;
 mod condition_precedents;
 mod config;
@@ -157,22 +162,28 @@ mod materials_project_adapter;
 #[cfg(feature = "mikiwame")]
 mod mikiwame_adapter;
 mod multi_step;
+mod pareto;
 mod planner;
+mod portfolio;
 mod precursor;
 mod prior_experiment_evidence;
 mod process;
 mod provenance;
 mod provider;
+mod ranking;
 mod reaction;
+mod reaction_network;
 mod rejection;
 mod report;
 mod route_suitability;
 mod score;
+mod similarity;
 mod target;
 mod thermodynamics;
 #[cfg(feature = "experimental_grammar")]
 mod transformation_grammar;
 
+pub use action_graph::{ActionGraph, ActionGraphError, ActionKind, ActionNode, ChemicalRole};
 pub use balance::{balance, curated_byproducts};
 pub use candidate_generator::{
     CandidateGeneratorEnsemble, CatalogExactGenerator, EnsembleOutput, FrequencyPriorGenerator,
@@ -192,6 +203,11 @@ pub use commercial_catalog::{
     SearchBudgetSummary, UnresolvedCommercialField, assess_commercial_plans,
     assess_commercial_plans_with_policy, assess_commercial_precursors,
     assess_commercial_precursors_with_policy,
+};
+pub use comparative::{
+    AblationSpec, ComparativeAudit, ComparativeError, ComparativeEvaluationManifest,
+    ComparativeEvaluationProtocol, ComparatorSpec, EvaluationCase, EvaluationMetadata,
+    EvaluationSplit, FailureCategory, MeasurementStatus, ResourceConditions, UncertaintySpec,
 };
 pub use composition::{Composition, ELEMENT_SYMBOLS, Element};
 pub use condition_precedents::{ConditionConflict, ConditionPrecedent, ProcessPrecedent};
@@ -224,7 +240,14 @@ pub use materials_project_adapter::MaterialsProjectSnapshotProvider;
 #[cfg(feature = "mikiwame")]
 pub use mikiwame_adapter::{StructuralDiagnosticEffects, structural_effects};
 pub use multi_step::{RouteError, SynthesisRoute, search_two_step_routes};
+pub use pareto::{
+    ObjectiveDirection, ParetoCandidate, ParetoError, ParetoEvaluation, ParetoFrontier,
+};
 pub use planner::{Planner, PlannerBuilder};
+pub use portfolio::{
+    DiversePortfolioSelector, PortfolioAudit, PortfolioCandidate, PortfolioError,
+    PortfolioSelection,
+};
 pub use precursor::{
     AcceptedPrecursorSet, AvailabilityMetadata, InMemoryPrecursorCatalog, PrecursorCandidate,
     PrecursorId, PrecursorSearchOutcome, PrecursorSelection, search_precursor_sets,
@@ -245,8 +268,20 @@ pub use provider::{
     PriorExperimentEvidenceProvider, ProcessEvidenceProvider, RouteSuitabilityProvider,
     ThermodynamicProvider,
 };
+pub use ranking::{
+    CandidateFeatureVector, FixedLinearScorer, RankedCandidate, RankingAbstention, RankingAudit,
+    RankingDecision, RankingError,
+};
 pub use reaction::{
     BalancedReaction, CompetingPhase, ReactionEnergy, ReactionSpecies, ThermodynamicConditions,
+};
+pub use reaction_network::{
+    NETWORK_RECORD_SCHEMA_VERSION, NetworkError, NetworkReactionQualification,
+    NetworkReactionRecord, NetworkSearchBudget, ReactionNetwork,
+};
+#[cfg(feature = "serde")]
+pub use reaction_network::{
+    NetworkLoadMode, NetworkLoadReport, RejectedNetworkRecord, parse_network_records,
 };
 pub use rejection::{RejectedCandidate, RejectionCode};
 pub use report::{
@@ -261,6 +296,10 @@ pub use route_suitability::{
 pub use score::{
     ConfidenceAssessment, PlanAssessment, PlanScoreBreakdown, PlanningAssumption, RankingWeights,
     Score01, ranking_weights_digest, score_plan,
+};
+pub use similarity::{
+    CompositionFingerprint, CompositionSimilarityIndex, SimilarityError, SimilarityMatch,
+    SimilarityMaterial,
 };
 pub use target::{
     PhaseRequirement, PlanningConstraints, TargetMaterialView, TargetSpecification, TargetStructure,

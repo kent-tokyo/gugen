@@ -3,14 +3,14 @@
 ## Status
 
 Verified 2026-08-13; mikiwame re-verified 2026-08-14; chematic-crystal
-re-verified 2026-08-14 (Phase 16, against the real published 0.15.0
+re-verified 2026-09-08 (dependency update, against the real published 1.0.9
 source, not docs.rs summaries alone).
 
-- **chematic-crystal**: published to crates.io as 0.15.0 on 2026-08-14
+- **chematic-crystal**: published to crates.io as 1.0.9 on 2026-09-08
   (`kent-tokyo`). It is a **pure geometry** crate: `Lattice`,
   `PeriodicSite`/`SiteSpecies`/`Occupancy`, `PeriodicStructure`, neighbor/
   displacement/supercell math. Confirmed directly from the vendored
-  source (`~/.cargo/registry/src/**/chematic-crystal-0.15.0/`), not
+  source (`~/.cargo/registry/src/**/chematic-crystal-1.0.9/`), not
   guessed: **no symmetry** (space groups, Wyckoff positions, Niggli
   reduction), **no CIF parser**, **no composition-from-formula
   prediction**, **no polymorph identification**, and no `Composition` or
@@ -128,7 +128,7 @@ mikiwame = ["dep:mikiwame"]
 
 ```toml
 [dependencies]
-chematic-crystal = { version = "0.15.0", default-features = false, optional = true }
+chematic-crystal = { version = "1.0.9", default-features = false, optional = true }
 
 [features]
 mikiwame = ["dep:mikiwame"]
@@ -143,7 +143,7 @@ chematic_crystal = ["dep:chematic-crystal", "mikiwame"]
   `src/lib.rs` needs only `#[cfg(feature = "chematic_crystal")]`.
 - `to_mikiwame_structure(&chematic_crystal::PeriodicStructure) ->
   mikiwame::OwnedStructure` is not a plain field-by-field copy -- two
-  correctness details, both confirmed against the real 0.15.0/0.1.0
+  correctness details, both confirmed against the real 1.0.9/0.1.0
   source before being handled: (1) `chematic_crystal::PeriodicSite` allows
   multiple `SiteSpecies` for the same element at one position (disorder
   modeling) and a `0.0` occupancy is valid, which a naive flat-map would

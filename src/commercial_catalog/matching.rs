@@ -326,8 +326,9 @@ mod tests {
             a in arbitrary_multi_element_composition(),
             b in arbitrary_multi_element_composition(),
         ) {
-            if let (Some(key_a), Some(key_b)) = (canonical_ratio_key(&a), canonical_ratio_key(&b)) {
-                if key_a == key_b {
+            if let (Some(key_a), Some(key_b)) = (canonical_ratio_key(&a), canonical_ratio_key(&b))
+                && key_a == key_b
+            {
                     let elements_a: Vec<Element> = a.elements().collect();
                     let elements_b: Vec<Element> = b.elements().collect();
                     prop_assert_eq!(&elements_a, &elements_b);
@@ -343,7 +344,6 @@ mod tests {
                             a_el.checked_mul(b_first).unwrap()
                         );
                     }
-                }
             }
         }
     }

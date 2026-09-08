@@ -320,18 +320,18 @@ pub fn assess_commercial_precursors_with_policy(
                 .to_string(),
             severity: WarningSeverity::Caution,
         });
-    } else if let Some(max_total_cost) = request.max_total_cost {
-        if combinations.iter().any(|c| {
+    } else if let Some(max_total_cost) = request.max_total_cost
+        && combinations.iter().any(|c| {
             c.total_cost
                 .is_none_or(|cost| cost.currency() != max_total_cost.currency())
-        }) {
-            warnings.push(CommercialWarning {
-                message: "max_total_cost could not be verified for one or more combinations \
-                    whose total cost is unknown or in a different currency"
-                    .to_string(),
-                severity: WarningSeverity::Caution,
-            });
-        }
+        })
+    {
+        warnings.push(CommercialWarning {
+            message: "max_total_cost could not be verified for one or more combinations \
+                whose total cost is unknown or in a different currency"
+                .to_string(),
+            severity: WarningSeverity::Caution,
+        });
     }
 
     Ok(CommercialPlanAssessment {

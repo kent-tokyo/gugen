@@ -4,6 +4,57 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-09-08
+
+### Added
+
+- Updated the optional `chematic-crystal` integration dependency and its
+  direct test dependency `chematic-core` to 1.0.9. The declared MSRV is now
+  Rust 1.88 because the released 1.0.9 crates require it.
+
+- Phase 36 composition-only retrieval slice: deterministic normalized
+  `CompositionFingerprint` and caller-supplied `CompositionSimilarityIndex`
+  with fixed L1-distance top-k results. This is retrieval context only; it
+  does not predict properties, experimental success, or route quality.
+- Phase 37 fixed ranking boundary: caller-supplied named feature vectors and
+  a standalone `FixedLinearScorer` with deterministic ordering and retained
+  scorer provenance. No training, execution labels, personalization, or
+  Planner integration is included.
+- Phase 37 abstention/audit slice: `rank_with_abstention` keeps the complete
+  deterministic ranking while reporting score-margin audit fields and typed
+  abstention reasons for empty input, top ties, and insufficient separation.
+  The margin is not a calibrated probability.
+- Phase 38 portfolio boundary: caller-supplied relevance/diversity features,
+  deterministic greedy marginal-diversity selection, and optional role
+  coverage auditing. It is standalone and does not select reaction routes or
+  connect to `Planner`.
+- Phase 38 Pareto audit boundary: caller-supplied objective directions produce
+  a deterministic non-dominated set and dominated-ID report without choosing
+  a single winner or assigning domain-specific objective meaning.
+- Phase 39 comparative protocol boundary: pinned comparator versions,
+  corpus/license/runtime metadata, grouped development/confirmation splits,
+  and fail-closed leakage auditing. The API remains `ProtocolOnly` and emits
+  no performance or superiority claim.
+- Phase 39 reproducibility metadata boundary: explicit ablation,
+  uncertainty-method, resource-condition, and failure-taxonomy records, with
+  no measured-result field.
+- Phase 39 CLI validation adapter: `validate-comparative` reads a pinned
+  manifest, emits leakage/measurement-readiness audit JSON, and fails closed
+  without executing external comparators.
+- Phase 39 validation hardening: deserialized comparative manifests now
+  recheck nested ablation, uncertainty, resource, and failure-taxonomy
+  invariants before reporting measurement readiness.
+- Phase 39 contract fixture: a license-neutral JSON manifest and round-trip
+  tests now lock the CLI input shape and the no-measured-results boundary.
+- Clippy cleanup: simplified equivalent conditional branches and sorting across
+  existing library, CLI, and exploration-example targets.
+- Phase 34 network-ingestion boundary: `parse_network_records` parses
+  caller-supplied JSONL reaction records in strict or lenient mode, validates
+  schema/provenance/qualification invariants, reports rejected lines, and
+  deterministically collapses exact duplicates. No file I/O, online fetch, or
+  bundled network corpus is added to the core crate. The `validate-network`
+  CLI command provides a local file adapter and JSON audit output.
+
 ### Changed (breaking)
 
 - `TemperatureRange`, `DurationRange`, `PressureRange`, `RampRateRange`
@@ -27,6 +78,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   had one before, found incidentally while making this fix.
 
 ### Documentation
+
+- Added the preliminary Phase 35 patent-risk claim chart and recorded an
+  implementation hold for Planner/report reaction-network integration until
+  jurisdiction-specific review is complete.
 
 - `ConditionConflict` (re-exported at the crate root) now has its own
   rustdoc on docs.rs. Its description had been fused into a doc

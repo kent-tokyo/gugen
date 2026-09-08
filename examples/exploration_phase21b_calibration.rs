@@ -162,11 +162,10 @@ fn main() {
         // and abstains (Ok(None)) for anything not present, so it's safe
         // to hand it every formula this row has thermodynamic data for.
         let mut entries = Vec::new();
-        if let Some(raw_target) = input.thermodynamic_entries.get(&row.target_formula) {
-            if let Some(e) = thermo_entry(raw_target, target.clone(), &row.target_formula, &dataset)
-            {
-                entries.push(e);
-            }
+        if let Some(raw_target) = input.thermodynamic_entries.get(&row.target_formula)
+            && let Some(e) = thermo_entry(raw_target, target.clone(), &row.target_formula, &dataset)
+        {
+            entries.push(e);
         }
         for p in &row.route {
             if let Some(raw_p) = input.thermodynamic_entries.get(&p.formula) {

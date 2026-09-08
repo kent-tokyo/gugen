@@ -1,4 +1,4 @@
-# Scientific Scope (v0.1)
+# Scientific Scope (current)
 
 This restates AGENTS.md §2–§4 as concrete design constraints. AGENTS.md is
 the source of truth; this document exists so scope decisions during
@@ -12,7 +12,7 @@ full spec.
 > plausible candidates — and what is the evidence and uncertainty behind
 > each?
 
-## In scope for v0.1
+## In scope
 
 - Inorganic crystalline bulk materials, explicit target composition,
   optional target structure.
@@ -33,7 +33,7 @@ full spec.
   multi-criteria score.
 - Known/curated precursor candidates only (no literature scraping in core).
 
-## Explicitly out of scope for v0.1 (AGENTS.md §3)
+## Explicitly out of scope
 
 Organic synthesis, retrosynthesis, MOF/COF planning, polymer synthesis,
 thin-film/CVD/PVD/ALD, electrodeposition, high-pressure synthesis,
@@ -47,7 +47,7 @@ mechanochemical route's structure is now in scope (Phase 12) -- same
 "no unsourced numeric conditions" discipline the conventional route's
 firing conditions are already held to.
 
-These are candidate future *route-family plugins*, not v0.1 features. A
+These are candidate future *route-family plugins*, not current core features. A
 design that quietly starts depending on solving one of these (e.g. a ranking
 formula that implicitly needs a yield estimate) is a scope violation even if
 no code named "yield" appears.
@@ -66,7 +66,7 @@ against these before merge:
    every value it supplies traces to a real, hand-verified citation
    (`src/literature_conditions.rs`), and it still leaves a field `None`
    rather than guess when it has no matching record for a given target.
-2. **`RankingScore` ≠ success probability.** v0.1 score is ordinal, for
+2. **`RankingScore` ≠ success probability.** The current score is ordinal, for
    sorting candidates against each other. It is never rendered, documented,
    or reasoned about as "N% likely to succeed."
 3. **Thermodynamic favorability ≠ experimental likelihood.** A reaction can
@@ -77,7 +77,7 @@ against these before merge:
    one input among several, never a stand-in for overall confidence.
 4. **Novelty ≠ feasibility.** An OOD composition/structure is not assumed
    synthesizable just because it's novel, nor assumed unsynthesizable.
-   Novelty may be tracked as auxiliary metadata but does not feed the v0.1
+   Novelty may be tracked as auxiliary metadata but does not feed the current
    planning score.
 
 ## What gugen does not guarantee (AGENTS.md §2)

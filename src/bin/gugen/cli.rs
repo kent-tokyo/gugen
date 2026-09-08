@@ -46,6 +46,18 @@ pub(crate) enum Command {
     /// Check that a target JSON file is well-formed and not self-contradictory,
     /// without running a full search.
     ValidateTarget { path: PathBuf },
+    /// Validate caller-supplied reaction-network JSONL and report import counts.
+    ValidateNetwork {
+        /// Path to one `NetworkReactionRecord` JSON object per non-blank line.
+        path: PathBuf,
+        #[arg(long, value_enum, default_value = "lenient")]
+        mode: NetworkLoadModeArg,
+    },
+    /// Audit a comparative-evaluation manifest without executing any comparator.
+    ValidateComparative {
+        /// Path to a `ComparativeEvaluationManifest` JSON file.
+        path: PathBuf,
+    },
     /// Print build/configuration diagnostics (AGENTS.md §19).
     Doctor,
     /// Plan for every target in a JSON array (a JSON array of
@@ -118,6 +130,12 @@ pub(crate) enum Command {
 pub(crate) enum OutputFormat {
     Json,
     Markdown,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub(crate) enum NetworkLoadModeArg {
+    Strict,
+    Lenient,
 }
 
 #[cfg(feature = "commercial_catalog")]

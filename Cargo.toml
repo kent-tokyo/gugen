@@ -1,8 +1,8 @@
 [package]
 name = "gugen"
-version = "0.8.0"
+version = "0.8.1"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 description = "Explainable materials synthesis and process planning"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/kent-tokyo/gugen"
@@ -51,7 +51,7 @@ exclude = [
 all-features = true
 
 [dependencies]
-chematic-crystal = { version = "0.15.0", default-features = false, optional = true }
+chematic-crystal = { version = "1.0.9", default-features = false, optional = true }
 clap = { version = "4.6.6", features = ["derive"], optional = true }
 csv = { version = "1", optional = true }
 mikiwame = { version = "0.1.0", default-features = false, optional = true }
@@ -67,7 +67,7 @@ thiserror = "2.0.20"
 # structure itself) never names `chematic_core::Element`, only calls
 # `.symbol()` on a value it already has. Not gated by any feature: dev-
 # dependencies never enter the published dependency graph regardless.
-chematic-core = "0.15.0"
+chematic-core = "1.0.9"
 # Property-based tests for commercial_catalog's formula parser and
 # canonical-ratio matching (Phase 22.1).
 proptest = "1"

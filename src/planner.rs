@@ -551,60 +551,60 @@ impl Planner {
                 // Mechanochemical" claim doesn't rely on any one
                 // implementation's internals alone.
                 let mut literature_evidence = None;
-                if template.route_family == RouteFamily::ConventionalSolidState {
-                    if let Some(provider) = &self.literature_evidence_provider {
-                        let precursor_compositions: Vec<_> = accepted
-                            .reaction
-                            .reactants()
-                            .iter()
-                            .map(|s| s.composition.clone())
-                            .collect();
-                        match provider.route_evidence(
-                            composition,
-                            template.route_family,
-                            &precursor_compositions,
-                        ) {
-                            Ok(Some(route_evidence)) => {
-                                let found = &route_evidence.assessment;
-                                // Always disclosed, not just for the
-                                // Conflict/shape-diversity cases -- a clean
-                                // unanimous Agreement is exactly the result
-                                // most likely to be misread as "the corpus
-                                // endorses this temperature" if it were the
-                                // one case left silent (pre-commit advisor
-                                // review finding).
-                                provider_warnings.push(PlanningWarning {
-                                    message: format!(
-                                        "literature evidence for this exact route: {} \
+                if template.route_family == RouteFamily::ConventionalSolidState
+                    && let Some(provider) = &self.literature_evidence_provider
+                {
+                    let precursor_compositions: Vec<_> = accepted
+                        .reaction
+                        .reactants()
+                        .iter()
+                        .map(|s| s.composition.clone())
+                        .collect();
+                    match provider.route_evidence(
+                        composition,
+                        template.route_family,
+                        &precursor_compositions,
+                    ) {
+                        Ok(Some(route_evidence)) => {
+                            let found = &route_evidence.assessment;
+                            // Always disclosed, not just for the
+                            // Conflict/shape-diversity cases -- a clean
+                            // unanimous Agreement is exactly the result
+                            // most likely to be misread as "the corpus
+                            // endorses this temperature" if it were the
+                            // one case left silent (pre-commit advisor
+                            // review finding).
+                            provider_warnings.push(PlanningWarning {
+                                message: format!(
+                                    "literature evidence for this exact route: {} \
                                         independent DOI(s) found{}{} -- reference-only, \
                                         never applied to conditions or score",
-                                        found.independent_doi_count(),
-                                        if found.has_multiple_operation_shapes {
-                                            ", with differing reported step counts across \
+                                    found.independent_doi_count(),
+                                    if found.has_multiple_operation_shapes {
+                                        ", with differing reported step counts across \
                                             DOIs"
-                                        } else {
-                                            ""
-                                        },
-                                        if found.has_any_conflict() {
-                                            ", including a field-level disagreement among \
+                                    } else {
+                                        ""
+                                    },
+                                    if found.has_any_conflict() {
+                                        ", including a field-level disagreement among \
                                             independent DOIs"
-                                        } else {
-                                            ""
-                                        },
-                                    ),
-                                    severity: WarningSeverity::Info,
-                                });
-                                literature_evidence = Some(route_evidence);
-                            }
-                            Ok(None) => {}
-                            Err(err) => provider_warnings.push(PlanningWarning {
-                                message: format!(
-                                    "literature evidence provider failed for this candidate, \
-                                    continuing without it: {err}"
+                                    } else {
+                                        ""
+                                    },
                                 ),
                                 severity: WarningSeverity::Info,
-                            }),
+                            });
+                            literature_evidence = Some(route_evidence);
                         }
+                        Ok(None) => {}
+                        Err(err) => provider_warnings.push(PlanningWarning {
+                            message: format!(
+                                "literature evidence provider failed for this candidate, \
+                                    continuing without it: {err}"
+                            ),
+                            severity: WarningSeverity::Info,
+                        }),
                     }
                 }
 

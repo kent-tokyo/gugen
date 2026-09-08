@@ -14,12 +14,14 @@
 （evidence）・仮定（assumption）・未確定条件（unresolved）を明示したまま、
 機械可読な形で返します。実験の成功を保証するものではありません。
 
-> **ステータス：v0.8.0 公開済み**（バグチェック・リファクタリングの
-> 一巡。破壊的変更を1件含む。詳細はCHANGELOG.md参照）。
+> **ステータス：v0.8.1 公開済み**（競争力拡張の境界API、manifest検証、
+> 候補品質の強化。詳細はCHANGELOG.md参照）。
 > [crates.io](https://crates.io/crates/gugen) /
 > [docs.rs](https://docs.rs/gugen) /
-> [v0.8.0リリース](https://github.com/kent-tokyo/gugen/releases/tag/v0.8.0)。
-> v0.8.0は`SolidThermodynamicEntry`の検証バイパス問題を解消し
+> [v0.8.1リリース](https://github.com/kent-tokyo/gugen/releases/tag/v0.8.1)。
+> v0.8.1ではオフラインのreaction-network取り込み、組成検索、固定式の
+> ranking/portfolio境界、比較protocol検証を追加しました。
+> また`SolidThermodynamicEntry`の検証バイパス問題を解消し
 > （`BalancedReaction`/`ReactionSpecies`と同じ手法でフィールドを非公開化）、
 > experimental機能`HydroxideToOxideGrammar`のガード漏れバグを修正し、
 > `process.rs`の条件競合解決ロジックを独立ファイルへ分離しました
@@ -238,6 +240,8 @@ gugen balance reaction.json
 gugen plan target.json --catalog precursors.json [--output report.json] [--format json|markdown]
 gugen explain report.json --plan plan-001
 gugen validate-target target.json
+gugen validate-network network.jsonl --mode lenient
+gugen validate-comparative manifest.json
 gugen doctor
 gugen batch input.json --catalog precursors.json [--output out.json]
 ```
@@ -330,7 +334,7 @@ assumptions/unresolved一覧とrejected candidatesの節を省略。すべて完
 
 ### Evidence
 
-- [Weak/ProcessTemplate] weigh/mix/grind/form are the fixed opening sequence of the v0.1 conventional solid-state template
+- [Weak/ProcessTemplate] weigh/mix/grind/form are the fixed opening sequence of the conventional solid-state template
 - [Strong/StoichiometricBalance] balanced reaction releases a byproduct beyond the target, indicating a decomposition (calcination) step is needed before the final firing step
 - [Weak/ProcessTemplate] AGENTS.md §11's template outline places a regrind between calcination and final firing
 
@@ -392,9 +396,8 @@ mechanochemicalなplanの再粉砕後annealも同じ条件で付与されてい�
      explainable diagnostics    synthesis/process planning
 ```
 
-gugenは`chematic-crystal`が公開され次第、周期構造の型をそこに依存する予定
-です（2026-08-14時点で未公開。詳細は [`docs/integration.md`](docs/integration.md)）。
-それまでは最小限のtrait境界を独自に持って動作します。`mikiwame`は公開済みで、
+gugenは公開済みの`chematic-crystal` 1.0.9に周期構造の型を依存しています
+（詳細は [`docs/integration.md`](docs/integration.md)）。`mikiwame`も公開済みで、
 optionalな`mikiwame`機能（`cargo build --features mikiwame`、デフォルト無効）
 として構造診断結果をgugen側の警告・confidenceに変換できますが、`Planner::plan`
 には未接続です（gugenの`TargetStructure`がまだ実構造データを持たないため）。

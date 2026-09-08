@@ -1,0 +1,18 @@
+{
+  "fixture_version": "phase38-portfolio-v1",
+  "max_size": 3,
+  "relevance_weight": 1.0,
+  "diversity_weight": 0.5,
+  "required_roles": ["oxide", "phosphate", "sulfate"],
+  "selector_provenance": "local-contract-phase38-v1",
+  "candidates": [
+    {"id": "oxide_primary", "relevance": 1.0, "features": {"x": 0.0, "y": 0.0}, "roles": ["oxide"]},
+    {"id": "oxide_near_duplicate", "relevance": 0.95, "features": {"x": 0.1, "y": 0.0}, "roles": ["oxide"]},
+    {"id": "phosphate_far", "relevance": 0.8, "features": {"x": 1.0, "y": 0.0}, "roles": ["phosphate"]},
+    {"id": "sulfate_far", "relevance": 0.75, "features": {"x": 0.0, "y": 1.0}, "roles": ["sulfate"]},
+    {"id": "oxide_middle", "relevance": 0.7, "features": {"x": 0.2, "y": 0.1}, "roles": ["oxide"]}
+  ],
+  "expected_selected_ids": ["oxide_primary", "phosphate_far", "sulfate_far"],
+  "expected_uncovered_roles": [],
+  "minimum_mean_pairwise_l1": 1.0
+}

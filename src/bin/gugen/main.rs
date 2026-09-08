@@ -1,6 +1,6 @@
 //! CLI for gugen (AGENTS.md §19): `plan`, `balance`, `explain`,
-//! `validate-target`, `doctor`, `batch`, and (with the `commercial_catalog`
-//! feature) `commercial-plan`.
+//! `validate-target`, `validate-network`, `validate-comparative`, `doctor`, `batch`, and (with the
+//! `commercial_catalog` feature) `commercial-plan`.
 //!
 //! This binary is the one place in the crate allowed to read the system
 //! clock (`now_rfc3339`, used for `execution_timestamp`) -- the planning

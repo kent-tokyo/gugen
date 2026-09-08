@@ -1,4 +1,4 @@
-# Evidence Model (Phase 0 design)
+# Evidence Model (current design)
 
 Restates and elaborates AGENTS.md §7. This is the design gugen's implementer
 must hold to when Phase 1 turns `EvidenceKind`/`PlanningEvidence` into real

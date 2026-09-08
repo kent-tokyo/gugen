@@ -1,0 +1,12 @@
+{
+  "fixture_version": "phase36-similarity-v1",
+  "reference_materials": [
+    {"id": "ref_batio3", "group": "reference-perovskite", "composition": {"Ba": 1.0, "Ti": 1.0, "O": 3.0}},
+    {"id": "ref_lifepo4", "group": "reference-phosphate", "composition": {"Li": 1.0, "Fe": 1.0, "P": 1.0, "O": 4.0}},
+    {"id": "distractor_fe2o3", "group": "reference-oxide", "composition": {"Fe": 2.0, "O": 3.0}}
+  ],
+  "holdout_queries": [
+    {"id": "query_batio3", "group": "holdout-perovskite", "composition": {"Ba": 2.0, "Ti": 2.0, "O": 6.0}, "relevant_ids": ["ref_batio3"]},
+    {"id": "query_lifepo4", "group": "holdout-phosphate", "composition": {"Li": 2.0, "Fe": 2.0, "P": 2.0, "O": 8.0}, "relevant_ids": ["ref_lifepo4"]}
+  ]
+}

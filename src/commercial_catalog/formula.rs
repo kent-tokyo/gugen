@@ -117,14 +117,14 @@ impl<'a> FormulaParser<'a> {
                 "expected an uppercase element symbol start, found '{first}'"
             ));
         }
-        if let Some(&(i2, second)) = self.chars.peek() {
-            if second.is_ascii_lowercase() {
-                let end = i2 + second.len_utf8();
-                let candidate = &self.source[start..end];
-                if let Ok(el) = Element::new(candidate) {
-                    self.chars.next();
-                    return Ok(el);
-                }
+        if let Some(&(i2, second)) = self.chars.peek()
+            && second.is_ascii_lowercase()
+        {
+            let end = i2 + second.len_utf8();
+            let candidate = &self.source[start..end];
+            if let Ok(el) = Element::new(candidate) {
+                self.chars.next();
+                return Ok(el);
             }
         }
         let end = start + first.len_utf8();

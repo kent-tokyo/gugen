@@ -87,15 +87,15 @@ checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
 name = "chematic-core"
-version = "0.15.0"
+version = "1.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a78df894cd599ac6fdec74f1428639b17c7b3e0d975d040c89808b6235286b3"
+checksum = "3c4da33c5ba013bd5872ed39343ed94957e0d1940026b4ae51a396dda1bfffbf"
 
 [[package]]
 name = "chematic-crystal"
-version = "0.15.0"
+version = "1.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a8caa5ef3a156e451e0356e44b58ff19383b62adeac51ebc41e90d68b1ab4c3"
+checksum = "9fdbf2203d6f70ba30a6f1d2631caa65e4e5130ada84c07ba15d0d1ff16a7f32"
 dependencies = [
  "chematic-core",
 ]
@@ -214,7 +214,7 @@ dependencies = [
 
 [[package]]
 name = "gugen"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "chematic-core",
  "chematic-crystal",

@@ -1,0 +1,57 @@
+{
+  "protocol": {
+    "protocol_id": "phase39-local-v1",
+    "corpus_id": "local-contract",
+    "corpus_license": "fixture-only",
+    "runtime_conditions": "single-process; no external execution",
+    "comparators": [
+      {
+        "name": "reaction-network",
+        "version": "pinned-local",
+        "source": "fixture"
+      },
+      {
+        "name": "retrieval",
+        "version": "pinned-local",
+        "source": "fixture"
+      }
+    ],
+    "cases": [
+      {
+        "case_id": "dev-1",
+        "group_id": "group-a",
+        "split": "Development"
+      },
+      {
+        "case_id": "confirm-1",
+        "group_id": "group-b",
+        "split": "Confirmation"
+      }
+    ]
+  },
+  "metadata": {
+    "ablations": [
+      {
+        "id": "baseline",
+        "description": "fixed local baseline"
+      }
+    ],
+    "uncertainty": {
+      "method": "bootstrap",
+      "confidence_level": 0.95,
+      "replicates": 10
+    },
+    "resources": {
+      "cpu_model": "local-cpu",
+      "memory_limit_mb": 1024,
+      "time_limit_ms": 1000,
+      "parallelism": 1
+    },
+    "failure_taxonomy": [
+      {
+        "id": "invalid-input",
+        "description": "input rejected"
+      }
+    ]
+  }
+}

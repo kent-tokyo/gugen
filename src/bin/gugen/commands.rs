@@ -1,6 +1,6 @@
 #[cfg(feature = "commercial_catalog")]
 use crate::cli::CommercialOutputFormat;
-use crate::cli::{Cli, Command, OutputFormat};
+use crate::cli::{Cli, Command, NetworkLoadModeArg, OutputFormat};
 use crate::render::{format_composition, render_plan_detail, render_report_markdown};
 #[cfg(feature = "commercial_catalog")]
 use crate::render::{render_commercial_report_csv, render_commercial_report_markdown};
@@ -12,9 +12,9 @@ use gugen::{
     SynthesisPlan, assess_commercial_plans_with_policy,
 };
 use gugen::{
-    Composition, Element, InMemoryPrecursorCatalog, Planner, PlanningConfig, PrecursorCandidate,
-    RankingWeights, RouteFamily, SynthesisPlanningReport, TargetSpecification,
-    ranking_weights_digest,
+    ComparativeEvaluationManifest, Composition, Element, InMemoryPrecursorCatalog, NetworkLoadMode,
+    Planner, PlanningConfig, PrecursorCandidate, RankingWeights, ReactionNetwork, RouteFamily,
+    SynthesisPlanningReport, TargetSpecification, ranking_weights_digest,
 };
 use std::path::Path;
 
@@ -47,6 +47,19 @@ struct BatchEntry {
     error: Option<String>,
 }
 
+#[derive(serde::Serialize)]
+struct NetworkValidationOutput {
+    load: gugen::NetworkLoadReport,
+    executable_reactions: usize,
+}
+
+#[derive(serde::Serialize)]
+struct ComparativeValidationOutput {
+    audit: gugen::ComparativeAudit,
+    measurement_ready: bool,
+    validation_error: Option<String>,
+}
+
 pub(crate) fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     match cli.command {
         Command::Balance { path } => run_balance(&path),
@@ -58,6 +71,8 @@ pub(crate) fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         } => run_plan(&target, &catalog, output.as_deref(), format),
         Command::Explain { report, plan_id } => run_explain(&report, &plan_id),
         Command::ValidateTarget { path } => run_validate_target(&path),
+        Command::ValidateNetwork { path, mode } => run_validate_network(&path, mode.into()),
+        Command::ValidateComparative { path } => run_validate_comparative(&path),
         Command::Doctor => {
             println!("{}", doctor_report());
             Ok(())
@@ -103,6 +118,51 @@ pub(crate) fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             output.as_deref(),
             format,
         ),
+    }
+}
+
+impl From<NetworkLoadModeArg> for NetworkLoadMode {
+    fn from(mode: NetworkLoadModeArg) -> Self {
+        match mode {
+            NetworkLoadModeArg::Strict => NetworkLoadMode::Strict,
+            NetworkLoadModeArg::Lenient => NetworkLoadMode::Lenient,
+        }
+    }
+}
+
+fn run_validate_network(
+    path: &Path,
+    mode: NetworkLoadMode,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let text = std::fs::read_to_string(path)?;
+    let (records, load) = gugen::parse_network_records(&text, mode)?;
+    let network = ReactionNetwork::from_records(&records)?;
+    let output = NetworkValidationOutput {
+        load,
+        executable_reactions: network.reactions().len(),
+    };
+    println!("{}", serde_json::to_string_pretty(&output)?);
+    Ok(())
+}
+
+fn run_validate_comparative(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let text = std::fs::read_to_string(path)?;
+    let manifest: ComparativeEvaluationManifest = serde_json::from_str(&text)?;
+    let audit = manifest.protocol.leakage_audit();
+    let validation_error = manifest
+        .validate_for_measurement()
+        .err()
+        .map(|error| error.to_string());
+    let measurement_ready = validation_error.is_none();
+    let output = ComparativeValidationOutput {
+        audit,
+        measurement_ready,
+        validation_error: validation_error.clone(),
+    };
+    println!("{}", serde_json::to_string_pretty(&output)?);
+    match validation_error {
+        Some(error) => Err(error.into()),
+        None => Ok(()),
     }
 }
 

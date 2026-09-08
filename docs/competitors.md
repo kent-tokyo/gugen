@@ -1,15 +1,19 @@
-# Landscape Survey (Phase 0)
+# Landscape Survey (historical baseline)
 
 Verified 2026-08-13 via crates.io API, GitHub API, and web search. Every
 source below was actually fetched; nothing is cited from memory. Where a
 claim could not be verified, it is marked as such instead of filled in.
+
+This preserves the original Phase 0 comparison. Current implementation
+status and planned competitive work are tracked in
+[`competitive_expansion_roadmap.md`](competitive_expansion_roadmap.md).
 
 ## 1. Name-collision check
 
 | Name | crates.io | GitHub | Verdict |
 |---|---|---|---|
 | `gugen` | 0 matches (`GET /api/v1/crates?q=gugen`) | 26 repos matched `gugen`, none materials/chemistry related (POI-recommendation network, GitHub-profile READMEs, an event called "Gugen2019", "Gugenheim", an Ansible example) | No collision. Proceed with the name as instructed in AGENTS.md §1. |
-| `chematic-crystal` | 0 exact match; `chematic` and 9 sibling crates (`chematic-mol`, `chematic-3d`, `chematic-fp`, …) exist, all organic/molecular cheminformatics (SMILES, SDF/MOL, fingerprints, force fields) by the `kent-tokyo` GitHub org | 0 repos named `chematic-crystal` | Not yet published anywhere. Treated as "not yet available" per AGENTS.md §5 — build against a minimal trait boundary, not a direct dependency. |
+| `chematic-crystal` | 1.0.9 published; `chematic` and sibling crates also exist under the `kent-tokyo` GitHub org | Current integration dependency; see integration doc | gugen pins `chematic-crystal = 1.0.9`; the original unpublished status is historical. |
 | `mikiwame` | 0 matches | 1 unrelated repo (`timatima0314/mikiwame`, no description, no `kent-tokyo` affiliation) | Not yet published by the expected ecosystem owner. Treated as optional/unavailable per AGENTS.md §5. The unrelated same-name GitHub repo is not a collision risk for a crates.io package (crates.io namespace is separate), but is worth re-checking before publish. |
 | `renkin` | Exists: `renkin` v0.23.0, "Ultra-fast retrosynthesis engine for computer-aided synthesis planning (CASP) — pure Rust, WASM-ready, Python bindings via PyO3", `kent-tokyo` org | matches | Confirms AGENTS.md §1's reference point. gugen must not depend on it (AGENTS.md §1) and must not reuse its retrosynthesis algorithms/types (AGENTS.md line 76). |
 

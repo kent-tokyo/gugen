@@ -5,10 +5,10 @@
 //! vectors themselves. Closes the specific gap `mikiwame_adapter.rs` has
 //! named since Phase 6: gugen's own `TargetStructure` is free text, and
 //! building a real structure "depends on chematic-crystal" -- now
-//! published (0.15.0).
+//! published (1.0.9).
 //!
 //! Not a plain field-by-field copy. Two correctness details, both
-//! confirmed against the real 0.15.0/0.1.0 source (not guessed) before
+//! confirmed against the real 1.0.9/0.1.0 source (not guessed) before
 //! being handled here:
 //!
 //! - **Same-element consolidation, within one `PeriodicSite` only.**
